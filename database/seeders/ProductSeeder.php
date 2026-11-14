@@ -134,6 +134,7 @@ class ProductSeeder extends Seeder
 
                 $bom = Bom::query()->firstOrNew(['code' => $bomDefinition['code']]);
                 $bom->fill([
+                    'product_id' => $productVersion->product_id,
                     'product_version_id' => $productVersion->id,
                     'version' => $bomDefinition['version'],
                     'audit_status' => $bomDefinition['audit_status'],

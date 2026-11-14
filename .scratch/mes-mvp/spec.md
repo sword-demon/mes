@@ -232,7 +232,7 @@ Source: `docs/prd.md`（MES MVP PRD V1.0，含第十七章 docker-compose 编排
 
 - **全部由 Laravel 自带 database 产出**：使用 `database/seeders` + `database/factories`，不引入任何外部数据源或第三方造数服务。
 - **Seeder 目录结构**：`DatabaseSeeder` 仅负责按业务依赖顺序调用各模块 Seeder：System → Organization → Product → Process → Production → Quality → Material → Equipment → Traceability。
-- **模块归属**：SystemSeeder（用户/角色/权限/菜单/部门，8 角色约 20 用户）、OrganizationSeeder（1 工厂/2 车间/3 产线/班组/10 员工）、ProductSeeder（3 产品/10 物料/3 BOM 及子项）、ProcessSeeder（8 工序/3 路线及路线工序）、ProductionSeeder（20 订单/30 任务/派工/100 报工/批次/50 SN）、QualitySeeder（检验项目/标准/50 检验记录/不合格品）、MaterialSeeder（仓库/库位/30 物料批次/库存/流水）、EquipmentSeeder（5 设备/状态/历史数据/20 告警）、TraceabilitySeeder（产品物料绑定/生产历史/追溯关系，随生产数据联动生成）。
+- **模块归属**：SystemSeeder（用户/角色/权限/菜单/部门，8 角色约 20 用户）、OrganizationSeeder（1 工厂/2 车间/3 产线/班组/10 员工）、ProductSeeder（3 产品/10 物料/4 BOM 及子项，含同一产品的多版本与未审核版本）、ProcessSeeder（8 工序/3 路线及路线工序）、ProductionSeeder（20 订单/30 任务/派工/100 报工/批次/50 SN）、QualitySeeder（检验项目/标准/50 检验记录/不合格品）、MaterialSeeder（仓库/库位/30 物料批次/库存/流水）、EquipmentSeeder（5 设备/状态/历史数据/20 告警）、TraceabilitySeeder（产品物料绑定/生产历史/追溯关系，随生产数据联动生成）。
 - **随机 vs 确定性**：随机数据走 Factory；确定性基础数据（角色、权限、字典、状态机取值）直接写在 Seeder 中。
 - **幂等**：重复执行不产生重复数据、不因主键冲突报错。
 - **一致性自检（Seeder 执行后校验，不通过即抛异常终止）**：

@@ -3,7 +3,9 @@
 use App\Modules\Bom\Model\Bom;
 use App\Modules\Bom\Model\BomItem;
 use App\Modules\Material\Model\Material;
+use App\Modules\Product\Model\Product;
 use App\Modules\Product\Model\ProductVersion;
+use Illuminate\Database\QueryException;
 
 it('lists boms with their product version and only surfaces approved enabled ones as usable', function () {
     $actor = userWithPermissions(['basic.boms.index']);
@@ -78,6 +80,7 @@ it('creates a draft bom for a product version', function () {
 
     $this->assertDatabaseHas('mes_boms', [
         'code' => 'BOM-P001-01',
+        'product_id' => $version->product_id,
         'product_version_id' => $version->id,
         'audit_status' => 'draft',
     ]);
@@ -111,6 +114,22 @@ it('keeps the bom code unique and the version unique inside a product', function
         'version' => 'V1.0',
     ])->assertUnprocessable()
         ->assertJsonPath('message', '版本号已存在');
+});
+
+it('enforces one bom version per product in the database', function () {
+    $product = Product::factory()->create();
+    $firstVersion = ProductVersion::factory()->create(['product_id' => $product->id, 'version' => 'V1.0']);
+    $secondVersion = ProductVersion::factory()->create(['product_id' => $product->id, 'version' => 'V2.0']);
+
+    Bom::factory()->create([
+        'product_version_id' => $firstVersion->id,
+        'version' => 'V1.0',
+    ]);
+
+    expect(fn () => Bom::factory()->create([
+        'product_version_id' => $secondVersion->id,
+        'version' => 'V1.0',
+    ]))->toThrow(QueryException::class);
 });
 
 it('rejects a bom without a product version', function () {
@@ -205,6 +224,32 @@ it('requires an item before submitting a bom for audit', function () {
     bearer($actor)->postJson("/api/v1/basic-data/boms/{$bom->id}/submit")
         ->assertUnprocessable()
         ->assertJsonPath('message', 'BOM 至少需要一个子项才能提交审核');
+});
+
+it('refuses to submit a bom whose product version is disabled', function () {
+    $actor = userWithPermissions(['basic.boms.submit']);
+    $version = ProductVersion::factory()->create(['status' => false]);
+    $bom = Bom::factory()->create(['product_version_id' => $version->id]);
+    BomItem::factory()->create(['bom_id' => $bom->id]);
+
+    bearer($actor)->postJson("/api/v1/basic-data/boms/{$bom->id}/submit")
+        ->assertUnprocessable()
+        ->assertJsonPath('message', '产品版本已停用，不能提交审核');
+
+    expect($bom->refresh()->audit_status)->toBe(Bom::DRAFT);
+});
+
+it('refuses to approve a bom whose product was disabled after submission', function () {
+    $actor = userWithPermissions(['basic.boms.audit']);
+    $version = ProductVersion::factory()->create();
+    $bom = Bom::factory()->create(['product_version_id' => $version->id, 'audit_status' => Bom::PENDING]);
+    $version->product()->update(['status' => false]);
+
+    bearer($actor)->postJson("/api/v1/basic-data/boms/{$bom->id}/approve")
+        ->assertUnprocessable()
+        ->assertJsonPath('message', '产品已停用，不能审核通过');
+
+    expect($bom->refresh()->audit_status)->toBe(Bom::PENDING);
 });
 
 it('moves a bom from draft to pending and locks its content', function () {

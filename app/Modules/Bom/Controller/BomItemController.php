@@ -2,7 +2,6 @@
 
 namespace App\Modules\Bom\Controller;
 
-use App\Core\Exceptions\ApiException;
 use App\Core\Services\EntityService;
 use App\Http\Controllers\Controller;
 use App\Http\Responses\ApiResponse;
@@ -37,7 +36,7 @@ class BomItemController extends Controller
 
     public function store(StoreBomItemRequest $request, Bom $bom): JsonResponse
     {
-        $this->ensureEditable($bom);
+        $bom->ensureEditable();
 
         return ApiResponse::success(BomItemResource::make(
             $this->entities->create(BomItem::class, array_merge(
@@ -49,7 +48,7 @@ class BomItemController extends Controller
 
     public function update(UpdateBomItemRequest $request, Bom $bom, BomItem $item): JsonResponse
     {
-        $this->ensureEditable($bom);
+        $bom->ensureEditable();
 
         return ApiResponse::success(BomItemResource::make(
             $this->entities->update($item, $request->validated())->load('material'),
@@ -58,17 +57,10 @@ class BomItemController extends Controller
 
     public function destroy(Bom $bom, BomItem $item): JsonResponse
     {
-        $this->ensureEditable($bom);
+        $bom->ensureEditable();
 
         $this->entities->delete($item, []);
 
         return ApiResponse::success();
-    }
-
-    private function ensureEditable(Bom $bom): void
-    {
-        if (! $bom->isEditable()) {
-            throw new ApiException('BOM 已提交审核，不可修改，请新建版本', 403, status: 403);
-        }
     }
 }

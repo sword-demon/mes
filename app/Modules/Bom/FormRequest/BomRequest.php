@@ -58,8 +58,8 @@ abstract class BomRequest extends FormRequest
             }
 
             $taken = Bom::query()
+                ->where('product_id', $productId)
                 ->where('version', (string) $value)
-                ->whereHas('productVersion', fn ($query) => $query->where('product_id', $productId))
                 ->when($bom !== null, fn ($query) => $query->whereKeyNot($bom->id))
                 ->exists();
 

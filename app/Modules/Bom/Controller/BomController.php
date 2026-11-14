@@ -15,11 +15,6 @@ use Illuminate\Http\Request;
 
 class BomController extends Controller
 {
-    /**
-     * Columns a locked BOM may still change; status disables it for new orders.
-     */
-    private const array FIELDS_ALLOWED_WHEN_LOCKED = ['status'];
-
     public function __construct(private readonly EntityService $entities) {}
 
     public function index(Request $request): JsonResponse
@@ -49,9 +44,7 @@ class BomController extends Controller
     {
         $data = $request->validated();
 
-        if (! $bom->isEditable() && array_diff(array_keys($data), self::FIELDS_ALLOWED_WHEN_LOCKED) !== []) {
-            throw new ApiException('BOM 已提交审核，不可修改，请新建版本', 403, status: 403);
-        }
+        $bom->ensureEditable(array_keys($data));
 
         return ApiResponse::success(BomResource::make(
             $this->entities->update($bom, $data)->load('productVersion.product'),
@@ -60,6 +53,8 @@ class BomController extends Controller
 
     public function submit(Bom $bom): JsonResponse
     {
+        $this->ensureActiveProduct($bom, '提交审核');
+
         if ($bom->audit_status !== Bom::DRAFT) {
             throw new ApiException('只有草稿状态的 BOM 才能提交审核', 422);
         }
@@ -76,6 +71,8 @@ class BomController extends Controller
 
     public function approve(Bom $bom): JsonResponse
     {
+        $this->ensureActiveProduct($bom, '审核通过');
+
         if ($bom->audit_status !== Bom::PENDING) {
             throw new ApiException('只有待审核的 BOM 才能审核通过', 422);
         }
@@ -84,5 +81,18 @@ class BomController extends Controller
             $this->entities->update($bom, ['audit_status' => Bom::APPROVED, 'audited_at' => now()])
                 ->load('productVersion.product'),
         ));
+    }
+
+    private function ensureActiveProduct(Bom $bom, string $action): void
+    {
+        $bom->loadMissing('productVersion.product');
+
+        if (! $bom->productVersion->status) {
+            throw new ApiException("产品版本已停用，不能{$action}", 422);
+        }
+
+        if (! $bom->productVersion->product->status) {
+            throw new ApiException("产品已停用，不能{$action}", 422);
+        }
     }
 }

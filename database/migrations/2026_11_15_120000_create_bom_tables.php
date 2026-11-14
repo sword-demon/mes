@@ -14,6 +14,7 @@ return new class extends Migration
         Schema::create('mes_boms', function (Blueprint $table) {
             $table->id()->comment('主键');
             $table->string('code', 64)->unique()->comment('BOM 编码');
+            $table->foreignId('product_id')->comment('产品 ID')->constrained('mes_products')->restrictOnDelete();
             $table->foreignId('product_version_id')->comment('产品版本 ID')->constrained('mes_product_versions')->restrictOnDelete();
             $table->string('version', 32)->comment('BOM 版本号');
             $table->string('audit_status', 16)->default('draft')->comment('审核状态：草稿/待审核/已审核');
@@ -23,7 +24,7 @@ return new class extends Migration
             $table->timestamp('created_at')->nullable()->comment('创建时间');
             $table->timestamp('updated_at')->nullable()->comment('更新时间');
 
-            $table->unique(['product_version_id', 'version']);
+            $table->unique(['product_id', 'version']);
         });
 
         Schema::create('mes_bom_items', function (Blueprint $table) {
