@@ -11,22 +11,40 @@ export function can(user: CurrentUser | null, code: string): boolean {
 }
 
 /**
- * The ancestor chain of `path`, root first. Empty when the path is not a menu.
+ * Whether `path` is `menuPath` itself or sits beneath it as a deeper segment,
+ * so a detail route like `/system/users/12` inherits its list page's grant.
+ *
+ * The `/` boundary keeps `/system` from matching `/systematic`.
+ */
+const isUnder = (menuPath: string, path: string): boolean =>
+    path === menuPath || path.startsWith(`${menuPath}/`);
+
+/**
+ * The ancestor chain of the deepest menu whose path covers `path`, root first.
+ * Empty when no granted menu covers the path.
  */
 export function menuTrail(menus: MenuNode[], path: string): MenuNode[] {
-    for (const node of menus) {
-        if (node.path === path) {
-            return [node];
+    let best: MenuNode[] = [];
+    let bestLength = -1;
+
+    const walk = (nodes: MenuNode[], trail: MenuNode[]): void => {
+        for (const node of nodes) {
+            const next = [...trail, node];
+
+            // The deepest covering menu wins, so a detail route inherits the
+            // most specific list page rather than an outer group.
+            if (node.path && node.path.length > bestLength && isUnder(node.path, path)) {
+                best = next;
+                bestLength = node.path.length;
+            }
+
+            walk(node.children, next);
         }
+    };
 
-        const trail = menuTrail(node.children, path);
+    walk(menus, []);
 
-        if (trail.length > 0) {
-            return [node, ...trail];
-        }
-    }
-
-    return [];
+    return best;
 }
 
 export const findMenu = (menus: MenuNode[], path: string): MenuNode | null =>

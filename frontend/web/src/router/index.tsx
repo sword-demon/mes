@@ -28,7 +28,7 @@ const pages: Record<string, () => ReactNode> = {
  * node for it, which the backend only includes for granted permissions.
  * Anything else redirects to `/403` so the URL matches what is on screen.
  */
-function RequireMenu({ children }: { children: ReactNode }) {
+function MenuPage() {
     const { pathname } = useLocation();
     const user = useAuthStore((state) => state.user);
 
@@ -37,16 +37,15 @@ function RequireMenu({ children }: { children: ReactNode }) {
         return null;
     }
 
-    return findMenu(user.menus, pathname) ? children : <Navigate to="/403" replace />;
-}
+    const menu = findMenu(user.menus, pathname);
 
-function MenuPage() {
-    const { pathname } = useLocation();
-    const user = useAuthStore((state) => state.user);
-    const menu = user ? findMenu(user.menus, pathname) : null;
+    if (!menu) {
+        return <Navigate to="/403" replace />;
+    }
+
     const Page = pages[pathname];
 
-    return Page ? <Page /> : <Placeholder title={menu?.name ?? ''} />;
+    return Page ? <Page /> : <Placeholder title={menu.name} />;
 }
 
 function HomeRedirect() {
@@ -73,14 +72,7 @@ export const router = createBrowserRouter([
         children: [
             { index: true, element: <HomeRedirect /> },
             { path: '403', element: <Forbidden /> },
-            {
-                path: '*',
-                element: (
-                    <RequireMenu>
-                        <MenuPage />
-                    </RequireMenu>
-                ),
-            },
+            { path: '*', element: <MenuPage /> },
         ],
     },
 ]);

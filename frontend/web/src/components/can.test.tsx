@@ -3,26 +3,11 @@ import { createRoot } from 'react-dom/client';
 import { beforeEach, describe, expect, it } from 'vitest';
 import Can from './can';
 import { useAuthStore } from '@/stores/auth';
-import type { CurrentUser } from '@/types/api';
+import { currentUserFixture } from '@/test/fixtures';
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
-const user = (permissions: string[]): CurrentUser => ({
-    id: 1,
-    username: 'admin',
-    name: '管理员',
-    email: 'admin@mes.test',
-    phone: null,
-    department_id: null,
-    position: null,
-    status: true,
-    email_verified_at: null,
-    created_at: '2026-11-15T00:00:00Z',
-    updated_at: '2026-11-15T00:00:00Z',
-    permissions,
-    data_scope: 'all',
-    menus: [],
-});
+const user = (permissions: string[]) => currentUserFixture({ permissions });
 
 const render = () => {
     const container = document.createElement('div');

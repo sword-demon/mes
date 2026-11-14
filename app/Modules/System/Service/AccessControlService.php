@@ -90,7 +90,8 @@ class AccessControlService
     }
 
     /**
-     * Only a super admin may hand out the super admin role.
+     * Granting roles requires the assign-roles permission, and only a super
+     * admin may hand out the super admin role.
      *
      * @param  array<int, int>  $roleIds
      *
@@ -98,7 +99,17 @@ class AccessControlService
      */
     public function ensureCanGrantRoles(User $actor, array $roleIds): void
     {
-        if ($roleIds === [] || $this->isSuperAdmin($actor)) {
+        if ($roleIds === []) {
+            return;
+        }
+
+        // The create payload carries `role_ids`, so the create permission alone
+        // must not be enough to hand out roles.
+        if (! $this->allows($actor, 'system.users.assign-roles')) {
+            throw new ApiException('没有分配角色的权限', 403, status: 403);
+        }
+
+        if ($this->isSuperAdmin($actor)) {
             return;
         }
 

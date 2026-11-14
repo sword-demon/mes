@@ -1,23 +1,14 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { useAuthStore } from './auth';
-import type { CurrentUser } from '@/types/api';
+import { currentUserFixture } from '@/test/fixtures';
 
-const user: CurrentUser = {
-    id: 1,
+const user = currentUserFixture({
     username: 'zhang',
     name: '张工',
     email: 'zhang@example.com',
-    phone: null,
-    department_id: null,
-    position: null,
-    status: true,
-    email_verified_at: null,
-    created_at: '2026-11-15T00:00:00Z',
-    updated_at: '2026-11-15T00:00:00Z',
     permissions: ['menu.dashboard'],
     data_scope: 'line',
-    menus: [],
-};
+});
 
 describe('auth store', () => {
     beforeEach(() => {
@@ -51,6 +42,29 @@ describe('auth store', () => {
 
         const stored = JSON.parse(localStorage.getItem('mes.auth') ?? '{}');
 
-        expect(stored.state).toMatchObject({ token: 'token-9', user });
+        expect(stored.state).toMatchObject({ token: 'token-9' });
+    });
+
+    it('does not persist the user, so a reload never renders stale grants', () => {
+        useAuthStore.getState().signIn('token-9', user);
+
+        const stored = JSON.parse(localStorage.getItem('mes.auth') ?? '{}');
+
+        expect(stored.state.user ?? null).toBeNull();
+    });
+
+    it('drops a user stored by the previous persist version', async () => {
+        localStorage.setItem(
+            'mes.auth',
+            JSON.stringify({
+                state: { token: 'legacy-token', user },
+                version: 0,
+            }),
+        );
+
+        await useAuthStore.persist.rehydrate();
+
+        expect(useAuthStore.getState().token).toBe('legacy-token');
+        expect(useAuthStore.getState().user).toBeNull();
     });
 });

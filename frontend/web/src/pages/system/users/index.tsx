@@ -28,7 +28,7 @@ import type { User } from '@/types/api';
 import { ApiRequestError } from '@/utils/api-error';
 import { can } from '@/utils/permission';
 
-type Editing = User | 'new' | null;
+type Editing = { mode: 'create' } | { mode: 'edit'; user: User } | null;
 
 export default function Users() {
     const { message } = App.useApp();
@@ -49,11 +49,13 @@ export default function Users() {
     const roles = useQuery({
         queryKey: ['system', 'roles'],
         queryFn: listRoles,
-        enabled: editing !== null,
+        // Only the role field consumes this list, so skip the request when the
+        // field is hidden rather than firing one the API rejects with 403.
+        enabled: editing !== null && can(currentUser, 'button.system.users.assign-roles'),
     });
 
     const close = () => setEditing(null);
-    const failed = (error: unknown) =>
+    const showError = (error: unknown) =>
         message.error(error instanceof ApiRequestError ? error.message : '操作失败');
 
     const save = useMutation({
@@ -62,17 +64,17 @@ export default function Users() {
                 throw new Error('未选择用户');
             }
 
-            if (editing === 'new') {
+            if (editing.mode === 'create') {
                 return createUser(values);
             }
 
             const { password, role_ids, ...rest } = values;
-            const saved = await updateUser(editing.id, rest);
+            const saved = await updateUser(editing.user.id, rest);
 
             // The role field is hidden without the permission, so skip the
             // follow-up call rather than firing a request the API rejects.
             return role_ids && can(currentUser, 'button.system.users.assign-roles')
-                ? assignUserRoles(editing.id, role_ids)
+                ? assignUserRoles(editing.user.id, role_ids)
                 : saved;
         },
         onSuccess: () => {
@@ -80,7 +82,7 @@ export default function Users() {
             message.success('已保存');
             close();
         },
-        onError: failed,
+        onError: showError,
     });
 
     const reset = useMutation({
@@ -90,7 +92,7 @@ export default function Users() {
             message.success('密码已重置');
             setResetting(null);
         },
-        onError: failed,
+        onError: showError,
     });
 
     function openPasswordReset(user: User) {
@@ -99,14 +101,14 @@ export default function Users() {
     }
 
     const formValues =
-        editing && editing !== 'new'
+        editing?.mode === 'edit'
             ? {
-                  name: editing.name,
-                  email: editing.email,
-                  username: editing.username,
-                  phone: editing.phone,
-                  status: editing.status,
-                  role_ids: editing.roles?.map((role) => role.id) ?? [],
+                  name: editing.user.name,
+                  email: editing.user.email,
+                  username: editing.user.username,
+                  phone: editing.user.phone,
+                  status: editing.user.status,
+                  role_ids: editing.user.roles?.map((role) => role.id) ?? [],
               }
             : { status: true, role_ids: [] as number[] };
 
@@ -132,7 +134,7 @@ export default function Users() {
                         className="w-64"
                     />
                     <Can code="button.system.users.create">
-                        <Button type="primary" onClick={() => setEditing('new')}>
+                        <Button type="primary" onClick={() => setEditing({ mode: 'create' })}>
                             新增用户
                         </Button>
                     </Can>
@@ -173,7 +175,7 @@ export default function Users() {
                         render: (_, user) => (
                             <Space>
                                 <Can code="button.system.users.update">
-                                    <Button type="link" onClick={() => setEditing(user)}>
+                                    <Button type="link" onClick={() => setEditing({ mode: 'edit', user })}>
                                         编辑
                                     </Button>
                                 </Can>
@@ -189,13 +191,13 @@ export default function Users() {
             />
             <Modal
                 open={editing !== null}
-                title={editing === 'new' ? '新增用户' : '编辑用户'}
+                title={editing?.mode === 'create' ? '新增用户' : '编辑用户'}
                 confirmLoading={save.isPending}
                 onCancel={close}
                 onOk={() => form.submit()}
             >
                 <Form
-                    key={editing === 'new' ? 'new' : editing?.id}
+                    key={editing?.mode === 'create' ? 'create' : editing?.user.id}
                     form={form}
                     layout="vertical"
                     initialValues={formValues}
@@ -217,7 +219,7 @@ export default function Users() {
                     <Form.Item name="phone" label="手机号">
                         <Input />
                     </Form.Item>
-                    {editing === 'new' && (
+                    {editing?.mode === 'create' && (
                         <Form.Item
                             name="password"
                             label="初始密码"

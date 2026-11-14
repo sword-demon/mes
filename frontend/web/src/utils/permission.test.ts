@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { can, findMenu, firstMenuPath, menuTrail } from './permission';
-import type { CurrentUser, MenuNode } from '@/types/api';
+import { currentUserFixture } from '@/test/fixtures';
+import type { MenuNode } from '@/types/api';
 
 const menu = (
     id: number,
@@ -24,25 +25,11 @@ const menus: MenuNode[] = [
         menu(3, '生产趋势', '/dashboard/trend'),
     ]),
     menu(4, '生产管理', null, [menu(5, '生产订单', '/production/orders')]),
-    menu(6, '系统管理', '/system'),
+    menu(6, '系统管理', null, [menu(7, '用户管理', '/system/users')]),
 ];
 
-const user = (permissions: string[]): CurrentUser => ({
-    id: 1,
-    username: 'admin',
-    name: '管理员',
-    email: 'admin@mes.test',
-    phone: null,
-    department_id: null,
-    position: null,
-    status: true,
-    email_verified_at: null,
-    created_at: '2026-11-15T00:00:00Z',
-    updated_at: '2026-11-15T00:00:00Z',
-    permissions,
-    data_scope: 'all',
-    menus,
-});
+const user = (permissions: string[]) =>
+    currentUserFixture({ permissions, menus });
 
 describe('can', () => {
     it('allows a granted permission code', () => {
@@ -73,6 +60,16 @@ describe('findMenu', () => {
 
     it('does not match a group node by its own missing path', () => {
         expect(findMenu(menus, '')).toBeNull();
+    });
+
+    it('matches a detail route nested under a granted page', () => {
+        expect(findMenu(menus, '/system/users/12')?.name).toBe('用户管理');
+        expect(findMenu(menus, '/production/orders/42')?.name).toBe('生产订单');
+    });
+
+    it('only matches on a path segment boundary', () => {
+        expect(findMenu(menus, '/systematic')).toBeNull();
+        expect(findMenu(menus, '/system/users-archive')).toBeNull();
     });
 });
 
