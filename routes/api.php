@@ -8,6 +8,9 @@ use App\Modules\Organization\Controller\FactoryController;
 use App\Modules\Organization\Controller\ProductionLineController;
 use App\Modules\Organization\Controller\TeamController;
 use App\Modules\Organization\Controller\WorkshopController;
+use App\Modules\Process\Controller\ProcessController;
+use App\Modules\Process\Controller\ProcessRouteController;
+use App\Modules\Process\Controller\RouteOperationController;
 use App\Modules\Product\Controller\ProductController;
 use App\Modules\Product\Controller\ProductVersionController;
 use App\Modules\System\Controller\AccessTokenController;
@@ -145,6 +148,13 @@ Route::middleware(['auth:sanctum', 'active'])->group(function (): void {
         Route::post('/boms/{bom}/approve', [BomController::class, 'approve'])
             ->middleware('permission:basic.boms.audit')->name('boms.approve');
 
+        Route::get('/processes', [ProcessController::class, 'index'])
+            ->middleware('permission:basic.processes.index')->name('processes.index');
+        Route::post('/processes', [ProcessController::class, 'store'])
+            ->middleware('permission:basic.processes.create')->name('processes.store');
+        Route::put('/processes/{process}', [ProcessController::class, 'update'])
+            ->middleware('permission:basic.processes.update')->name('processes.update');
+
         // A version is always reached through its product, so a mismatched
         // pair never resolves.
         Route::scopeBindings()->group(function (): void {
@@ -166,6 +176,31 @@ Route::middleware(['auth:sanctum', 'active'])->group(function (): void {
                 ->middleware('permission:basic.boms.update')->name('boms.items.update');
             Route::delete('/boms/{bom}/items/{item}', [BomItemController::class, 'destroy'])
                 ->middleware('permission:basic.boms.update')->name('boms.items.destroy');
+        });
+    });
+
+    Route::prefix('process')->name('api.process.')->group(function (): void {
+        Route::get('/routes', [ProcessRouteController::class, 'index'])
+            ->middleware('permission:process.routes.index')->name('routes.index');
+        Route::post('/routes', [ProcessRouteController::class, 'store'])
+            ->middleware('permission:process.routes.create')->name('routes.store');
+        Route::put('/routes/{route}', [ProcessRouteController::class, 'update'])
+            ->middleware('permission:process.routes.update')->name('routes.update');
+        Route::post('/routes/{route}/submit', [ProcessRouteController::class, 'submit'])
+            ->middleware('permission:process.routes.submit')->name('routes.submit');
+        Route::post('/routes/{route}/approve', [ProcessRouteController::class, 'approve'])
+            ->middleware('permission:process.routes.audit')->name('routes.approve');
+
+        // Operations are reached through their route, so a mismatched pair never resolves.
+        Route::scopeBindings()->group(function (): void {
+            Route::get('/routes/{route}/operations', [RouteOperationController::class, 'index'])
+                ->middleware('permission:process.routes.index')->name('routes.operations.index');
+            Route::post('/routes/{route}/operations', [RouteOperationController::class, 'store'])
+                ->middleware('permission:process.routes.create')->name('routes.operations.store');
+            Route::put('/routes/{route}/operations/{operation}', [RouteOperationController::class, 'update'])
+                ->middleware('permission:process.routes.update')->name('routes.operations.update');
+            Route::delete('/routes/{route}/operations/{operation}', [RouteOperationController::class, 'destroy'])
+                ->middleware('permission:process.routes.update')->name('routes.operations.destroy');
         });
     });
 });

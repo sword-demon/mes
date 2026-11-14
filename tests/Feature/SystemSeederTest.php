@@ -80,6 +80,26 @@ test('the workshop director is scoped to its own production line', function () {
         ->assertJsonPath('data.data_scope', 'line');
 });
 
+test('the process engineer can read and edit processes and routes', function () {
+    $this->seed(SystemSeeder::class);
+
+    $engineer = User::query()->where('email', 'process@mes.test')->firstOrFail();
+    $permissions = collect($this->withToken($engineer->createToken('web')->plainTextToken)
+        ->getJson('/api/v1/me')
+        ->assertOk()
+        ->json('data.permissions'))->all();
+
+    expect($permissions)
+        ->toContain('basic.processes.index')
+        ->toContain('basic.processes.create')
+        ->toContain('basic.processes.update')
+        ->toContain('process.routes.index')
+        ->toContain('process.routes.create')
+        ->toContain('process.routes.update')
+        ->toContain('process.routes.submit')
+        ->not->toContain('process.routes.audit');
+});
+
 test('the seeder refuses to run outside local and testing without SEED_PASSWORD', function () {
     config(['app.seed_password' => null]);
     app()->detectEnvironment(fn () => 'production');
