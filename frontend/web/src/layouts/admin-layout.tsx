@@ -84,8 +84,10 @@ export default function AdminLayout() {
         navigate('/login', { replace: true });
     }
 
+    // antd ships an unlayered `.ant-layout { min-height: 0 }`, which outranks
+    // Tailwind's utilities layer, so the viewport height is set inline.
     return (
-        <Layout className="min-h-screen">
+        <Layout style={{ minHeight: '100vh' }}>
             <Sider theme="dark" width={208}>
                 <div className="px-4 py-5 text-lg font-semibold text-white">
                     MES 管理系统
