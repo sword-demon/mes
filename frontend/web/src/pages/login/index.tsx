@@ -14,8 +14,11 @@ export default function Login() {
     const { mutate, isPending, error } = useMutation({
         mutationFn: login,
         onSuccess: (result) => {
-            signIn(result.token, result.user);
-            queryClient.setQueryData(['me'], result.user);
+            // The login response has no permissions or menus, and a cached
+            // `/me` would belong to the previous account, so drop it and let
+            // the layout fetch the new user's grants.
+            queryClient.removeQueries({ queryKey: ['me'] });
+            signIn(result.token, null);
             navigate('/', { replace: true });
         },
     });

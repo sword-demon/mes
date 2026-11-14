@@ -61,8 +61,11 @@ async function unwrap<T>(
 }
 
 export const api = {
-    get: <T>(url: string) => unwrap(http.get<ApiEnvelope<T>>(url)),
+    get: <T>(url: string, params?: Record<string, unknown>) =>
+        unwrap(http.get<ApiEnvelope<T>>(url, { params })),
     post: <T>(url: string, body?: unknown) =>
         unwrap(http.post<ApiEnvelope<T>>(url, body)),
+    put: <T>(url: string, body?: unknown) =>
+        unwrap(http.put<ApiEnvelope<T>>(url, body)),
     delete: <T>(url: string) => unwrap(http.delete<ApiEnvelope<T>>(url)),
 };

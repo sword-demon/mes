@@ -1,13 +1,13 @@
 import { api } from './client';
-import type { LoginPayload, LoginResult, User } from '@/types/api';
+import type { CurrentUser, LoginPayload, LoginResult } from '@/types/api';
 import { ApiRequestError } from '@/utils/api-error';
 
 export function login(payload: LoginPayload): Promise<LoginResult> {
     return api.post<LoginResult>('/auth/tokens', payload);
 }
 
-export function fetchMe(): Promise<User> {
-    return api.get<User>('/me');
+export function fetchMe(): Promise<CurrentUser> {
+    return api.get<CurrentUser>('/me');
 }
 
 export function logout(): Promise<void> {

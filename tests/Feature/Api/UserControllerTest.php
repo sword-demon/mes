@@ -36,7 +36,7 @@ it('filters the user list by keyword', function () {
 });
 
 it('creates a user with roles and stores a hashed password', function () {
-    $admin = userWithPermissions(['system.users.create']);
+    $admin = userWithPermissions(['system.users.create', 'system.users.assign-roles']);
     $role = Role::factory()->create();
 
     bearer($admin)->postJson('/api/v1/system/users', [
@@ -87,6 +87,32 @@ it('returns 422 when creating a user with an unknown role', function () {
 
     expect($response->json('data.errors')['role_ids.0'][0])
         ->toBe('The selected role_ids.0 is invalid.');
+});
+
+it('returns 403 when creating a user with roles without the assign-roles permission', function () {
+    $admin = userWithPermissions(['system.users.create']);
+    $role = Role::factory()->create();
+
+    bearer($admin)->postJson('/api/v1/system/users', [
+        'name' => '越权授权',
+        'email' => 'escalate@mes.test',
+        'password' => 'secret-password',
+        'role_ids' => [$role->id],
+    ])->assertForbidden()
+        ->assertJsonPath('code', 403);
+
+    expect(User::query()->where('email', 'escalate@mes.test')->exists())->toBeFalse();
+});
+
+it('creates a user without roles when the assign-roles permission is missing', function () {
+    $admin = userWithPermissions(['system.users.create']);
+
+    bearer($admin)->postJson('/api/v1/system/users', [
+        'name' => '无角色',
+        'email' => 'noroles@mes.test',
+        'password' => 'secret-password',
+    ])->assertOk()
+        ->assertJsonCount(0, 'data.roles');
 });
 
 it('returns 403 when disabling the current account', function () {

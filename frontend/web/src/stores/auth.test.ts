@@ -1,14 +1,22 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { useAuthStore } from './auth';
-import type { User } from '@/types/api';
+import type { CurrentUser } from '@/types/api';
 
-const user: User = {
+const user: CurrentUser = {
     id: 1,
+    username: 'zhang',
     name: '张工',
     email: 'zhang@example.com',
+    phone: null,
+    department_id: null,
+    position: null,
+    status: true,
     email_verified_at: null,
     created_at: '2026-11-15T00:00:00Z',
     updated_at: '2026-11-15T00:00:00Z',
+    permissions: ['menu.dashboard'],
+    data_scope: 'line',
+    menus: [],
 };
 
 describe('auth store', () => {
@@ -36,5 +44,13 @@ describe('auth store', () => {
         useAuthStore.getState().clearAuth();
 
         expect(useAuthStore.getState()).toMatchObject({ token: null, user: null });
+    });
+
+    it('persists the token so a page reload stays signed in', () => {
+        useAuthStore.getState().signIn('token-9', user);
+
+        const stored = JSON.parse(localStorage.getItem('mes.auth') ?? '{}');
+
+        expect(stored.state).toMatchObject({ token: 'token-9', user });
     });
 });

@@ -1,12 +1,12 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import type { User } from '@/types/api';
+import type { CurrentUser } from '@/types/api';
 
 type AuthState = {
     token: string | null;
-    user: User | null;
-    signIn: (token: string, user: User | null) => void;
-    setUser: (user: User) => void;
+    user: CurrentUser | null;
+    signIn: (token: string, user: CurrentUser | null) => void;
+    setUser: (user: CurrentUser) => void;
     clearAuth: () => void;
 };
 

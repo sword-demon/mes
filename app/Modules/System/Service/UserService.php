@@ -36,6 +36,12 @@ class UserService
      */
     public function create(User $actor, array $data, array $roleIds): User
     {
+        // `role_ids` rides along on the create payload, so the create permission
+        // alone must not be enough to hand out roles.
+        if ($roleIds !== [] && ! $this->access->allows($actor, 'system.users.assign-roles')) {
+            throw new ApiException('没有分配角色的权限', 403, status: 403);
+        }
+
         $this->access->ensureCanGrantRoles($actor, $roleIds);
 
         $user = User::query()->create($data);
