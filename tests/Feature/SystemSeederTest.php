@@ -26,8 +26,8 @@ test('the system seeder is idempotent and covers roles, users, permissions and m
         ->and(Permission::query()->count())->toBe($counts['permissions'])
         ->and(Menu::query()->count())->toBe($counts['menus'])
         ->and(Department::query()->count())->toBe($counts['departments'])
-        ->and($counts['roles'])->toBe(8)
-        ->and($counts['users'])->toBe(20)
+        ->and($counts['roles'])->toBe(9)
+        ->and($counts['users'])->toBe(21)
         ->and($counts['departments'])->toBe(7);
 
     expect(Permission::query()->distinct()->pluck('type')->sort()->values()->all())

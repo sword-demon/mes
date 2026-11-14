@@ -33,8 +33,8 @@ abstract class MaterialRequest extends FormRequest
             'type' => [...$presence, 'required', 'string', Rule::in(Material::TYPES)],
             'specification' => ['nullable', 'string', 'max:255'],
             'unit' => [...$presence, 'required', 'string', 'max:16'],
-            'min_stock' => ['sometimes', 'numeric', 'min:0'],
-            'safety_stock' => ['sometimes', 'numeric', 'min:0'],
+            'min_stock' => ['sometimes', 'numeric', 'min:0', 'max:999999999.999', 'decimal:0,3'],
+            'safety_stock' => ['sometimes', 'numeric', 'min:0', 'max:999999999.999', 'decimal:0,3'],
             'batch_managed' => ['sometimes', 'boolean'],
             'status' => ['sometimes', 'boolean'],
         ];

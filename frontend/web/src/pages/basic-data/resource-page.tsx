@@ -122,13 +122,8 @@ export default function ResourcePage<T extends Entity, P extends object>({
     });
 
     const destroy = useMutation({
-        mutationFn: async (record: T) => {
-            if (!remove) {
-                throw new Error('未提供删除接口');
-            }
-
-            await remove(record.id);
-        },
+        // The delete action is rendered only when `remove` is supplied.
+        mutationFn: (record: T) => remove!(record.id),
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: [resource] });
             message.success('已删除');
