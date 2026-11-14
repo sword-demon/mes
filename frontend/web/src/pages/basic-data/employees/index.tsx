@@ -49,7 +49,18 @@ export default function Employees() {
             create={createEmployee}
             update={updateEmployee}
             remove={deleteEmployee}
-            filters={[{ name: 'team_id', label: '所属班组', type: 'select', options: teamOptions, loading: teams.isLoading }]}
+            filters={[
+                ...(canPickDepartment
+                    ? [{
+                          name: 'department_id',
+                          label: '所属部门',
+                          type: 'select' as const,
+                          options: departmentOptions,
+                          loading: departments.isLoading,
+                      }]
+                    : []),
+                { name: 'team_id', label: '所属班组', type: 'select', options: teamOptions, loading: teams.isLoading },
+            ]}
             columns={[
                 { title: '工号', dataIndex: 'employee_no', width: 130 },
                 { title: '姓名', dataIndex: 'name', width: 110 },

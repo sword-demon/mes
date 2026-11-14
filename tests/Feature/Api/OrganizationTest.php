@@ -207,6 +207,19 @@ it('finds an employee by employee number through the keyword filter', function (
         ->assertJsonPath('data.items.0.employee_no', 'EMP777');
 });
 
+it('filters employees by department', function () {
+    $actor = userWithPermissions(['basic.employees.index']);
+    $production = Department::factory()->create(['code' => 'production']);
+    $quality = Department::factory()->create(['code' => 'quality']);
+    Employee::factory()->create(['employee_no' => 'EMP101', 'department_id' => $production->id]);
+    Employee::factory()->create(['employee_no' => 'EMP102', 'department_id' => $quality->id]);
+
+    bearer($actor)->getJson("/api/v1/basic-data/employees?department_id={$quality->id}")
+        ->assertOk()
+        ->assertJsonCount(1, 'data.items')
+        ->assertJsonPath('data.items.0.employee_no', 'EMP102');
+});
+
 it('serializes an employee with no department or team as null relations', function () {
     $actor = userWithPermissions(['basic.employees.index']);
     Employee::factory()->create(['employee_no' => 'EMP000', 'department_id' => null, 'team_id' => null]);

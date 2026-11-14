@@ -23,6 +23,7 @@ class OrganizationService
      * @param  array<string, mixed>  $filters
      * @param  array<int, string>  $searchColumns
      * @param  array<int, string>  $enabledRelations
+     * @param  array<int, string>  $filterColumns  request keys filtered as exact column matches
      * @return LengthAwarePaginator<int, TModel>
      */
     public function paginate(
@@ -31,6 +32,7 @@ class OrganizationService
         array $filters,
         array $searchColumns = ['code', 'name'],
         array $enabledRelations = [],
+        array $filterColumns = ['factory_id', 'workshop_id', 'team_id', 'department_id'],
     ): LengthAwarePaginator {
         // An unparsable `status` is ignored rather than silently read as false.
         $status = array_key_exists('status', $filters)
@@ -39,9 +41,11 @@ class OrganizationService
 
         return $model::query()
             ->with($with)
-            ->when($filters['factory_id'] ?? null, fn ($query, $id) => $query->where('factory_id', $id))
-            ->when($filters['workshop_id'] ?? null, fn ($query, $id) => $query->where('workshop_id', $id))
-            ->when($filters['team_id'] ?? null, fn ($query, $id) => $query->where('team_id', $id))
+            ->when($filterColumns, function ($query) use ($filters, $filterColumns): void {
+                foreach ($filterColumns as $column) {
+                    $query->when($filters[$column] ?? null, fn ($inner, $value) => $inner->where($column, $value));
+                }
+            })
             ->when($status !== null, fn ($query) => $query->where('status', $status))
             ->when($status === true, function ($query) use ($enabledRelations): void {
                 foreach ($enabledRelations as $relation) {
