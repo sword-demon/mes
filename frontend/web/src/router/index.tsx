@@ -6,6 +6,7 @@ import AdminLayout from '@/layouts/admin-layout';
 import Employees from '@/pages/basic-data/employees';
 import Factories from '@/pages/basic-data/factories';
 import ProductionLines from '@/pages/basic-data/production-lines';
+import Products from '@/pages/basic-data/products';
 import Teams from '@/pages/basic-data/teams';
 import Workshops from '@/pages/basic-data/workshops';
 import Login from '@/pages/login';
@@ -30,6 +31,7 @@ const pages: Record<string, () => ReactNode> = {
     '/basic-data/lines': ProductionLines,
     '/basic-data/teams': Teams,
     '/basic-data/employees': Employees,
+    '/basic-data/products': Products,
     '/system/users': Users,
 };
 

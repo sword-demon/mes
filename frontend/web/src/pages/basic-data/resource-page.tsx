@@ -27,7 +27,7 @@ export type ResourceField = {
     label: string;
     type?: 'text' | 'number' | 'switch' | 'select';
     required?: boolean;
-    options?: { label: string; value: number }[];
+    options?: { label: string; value: number | string }[];
     loading?: boolean;
 };
 
@@ -60,6 +60,8 @@ type Props<T extends Entity, P extends object> = {
     fields: ResourceField[];
     /** Parent selects rendered as toolbar filters; their values become query params. */
     filters?: ResourceField[];
+    /** Extra row actions, rendered before the standard edit/disable/delete. */
+    extraActions?: (record: T) => ReactNode;
 };
 
 export default function ResourcePage<T extends Entity, P extends object>({
@@ -72,12 +74,13 @@ export default function ResourcePage<T extends Entity, P extends object>({
     columns,
     fields,
     filters = [],
+    extraActions,
 }: Props<T, P>) {
     const { message } = App.useApp();
     const queryClient = useQueryClient();
     const [keyword, setKeyword] = useState('');
     const [page, setPage] = useState(1);
-    const [filterValues, setFilterValues] = useState<Record<string, number | undefined>>({});
+    const [filterValues, setFilterValues] = useState<Record<string, number | string | undefined>>({});
     const [editing, setEditing] = useState<{ mode: 'create' } | { mode: 'edit'; record: T } | null>(null);
     const [form] = Form.useForm();
 
@@ -168,7 +171,7 @@ export default function ResourcePage<T extends Entity, P extends object>({
                             className="w-40"
                             options={filter.options}
                             loading={filter.loading}
-                            onChange={(value?: number) => {
+                            onChange={(value?: number | string) => {
                                 setFilterValues((current) => ({ ...current, [filter.name]: value }));
                                 setPage(1);
                             }}
@@ -216,6 +219,7 @@ export default function ResourcePage<T extends Entity, P extends object>({
                         width: 140,
                         render: (_, record) => (
                             <Space>
+                                {extraActions?.(record)}
                                 <Can code={`button.${resource}.update`}>
                                     <Button type="link" onClick={() => setEditing({ mode: 'edit', record })}>
                                         编辑

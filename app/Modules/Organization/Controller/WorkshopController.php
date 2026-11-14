@@ -2,24 +2,24 @@
 
 namespace App\Modules\Organization\Controller;
 
+use App\Core\Services\EntityService;
 use App\Http\Controllers\Controller;
 use App\Http\Responses\ApiResponse;
 use App\Modules\Organization\FormRequest\StoreWorkshopRequest;
 use App\Modules\Organization\FormRequest\UpdateWorkshopRequest;
 use App\Modules\Organization\Model\Workshop;
 use App\Modules\Organization\Resource\WorkshopResource;
-use App\Modules\Organization\Service\OrganizationService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
 class WorkshopController extends Controller
 {
-    public function __construct(private readonly OrganizationService $organization) {}
+    public function __construct(private readonly EntityService $entities) {}
 
     public function index(Request $request): JsonResponse
     {
         return ApiResponse::paginated(
-            $this->organization->paginate(
+            $this->entities->paginate(
                 Workshop::class,
                 ['parentFactory'],
                 $request->only(['factory_id', 'status', 'keyword', 'per_page']),
@@ -33,20 +33,20 @@ class WorkshopController extends Controller
     public function store(StoreWorkshopRequest $request): JsonResponse
     {
         return ApiResponse::success(WorkshopResource::make(
-            $this->organization->create(Workshop::class, $request->validated())->load('parentFactory'),
+            $this->entities->create(Workshop::class, $request->validated())->load('parentFactory'),
         ));
     }
 
     public function update(UpdateWorkshopRequest $request, Workshop $workshop): JsonResponse
     {
         return ApiResponse::success(WorkshopResource::make(
-            $this->organization->update($workshop, $request->validated())->load('parentFactory'),
+            $this->entities->update($workshop, $request->validated())->load('parentFactory'),
         ));
     }
 
     public function destroy(Workshop $workshop): JsonResponse
     {
-        $this->organization->delete($workshop, [
+        $this->entities->delete($workshop, [
             'productionLines' => '车间下还有产线，只能停用',
             'teams' => '车间下还有班组，只能停用',
         ]);

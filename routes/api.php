@@ -5,6 +5,8 @@ use App\Modules\Organization\Controller\FactoryController;
 use App\Modules\Organization\Controller\ProductionLineController;
 use App\Modules\Organization\Controller\TeamController;
 use App\Modules\Organization\Controller\WorkshopController;
+use App\Modules\Product\Controller\ProductController;
+use App\Modules\Product\Controller\ProductVersionController;
 use App\Modules\System\Controller\AccessTokenController;
 use App\Modules\System\Controller\DepartmentController;
 use App\Modules\System\Controller\MeController;
@@ -112,5 +114,25 @@ Route::middleware(['auth:sanctum', 'active'])->group(function (): void {
             ->middleware('permission:basic.employees.update')->name('employees.update');
         Route::delete('/employees/{employee}', [EmployeeController::class, 'destroy'])
             ->middleware('permission:basic.employees.delete')->name('employees.destroy');
+
+        Route::get('/products', [ProductController::class, 'index'])
+            ->middleware('permission:basic.products.index')->name('products.index');
+        Route::post('/products', [ProductController::class, 'store'])
+            ->middleware('permission:basic.products.create')->name('products.store');
+        Route::put('/products/{product}', [ProductController::class, 'update'])
+            ->middleware('permission:basic.products.update')->name('products.update');
+        Route::delete('/products/{product}', [ProductController::class, 'destroy'])
+            ->middleware('permission:basic.products.delete')->name('products.destroy');
+
+        // A version is always reached through its product, so a mismatched
+        // pair never resolves.
+        Route::scopeBindings()->group(function (): void {
+            Route::get('/products/{product}/versions', [ProductVersionController::class, 'index'])
+                ->middleware('permission:basic.products.index')->name('products.versions.index');
+            Route::post('/products/{product}/versions', [ProductVersionController::class, 'store'])
+                ->middleware('permission:basic.products.create')->name('products.versions.store');
+            Route::put('/products/{product}/versions/{version}', [ProductVersionController::class, 'update'])
+                ->middleware('permission:basic.products.update')->name('products.versions.update');
+        });
     });
 });

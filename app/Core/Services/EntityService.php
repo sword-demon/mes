@@ -1,15 +1,15 @@
 <?php
 
-namespace App\Modules\Organization\Service;
+namespace App\Core\Services;
 
 use App\Core\Exceptions\ApiException;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Pagination\LengthAwarePaginator;
 
-class OrganizationService
+class EntityService
 {
     /**
-     * List an organization entity ordered by id.
+     * List an entity ordered by id.
      *
      * Filters are only applied when present, so the same method serves both the
      * management tables and the dropdowns that pass `status=1`. A dropdown for
