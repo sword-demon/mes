@@ -37,4 +37,13 @@ class FactoryController extends Controller
             tap($factory)->update($request->validated()),
         ));
     }
+
+    public function destroy(Factory $factory): JsonResponse
+    {
+        $this->organization->delete($factory, [
+            'workshops' => '工厂下还有车间，只能停用',
+        ]);
+
+        return ApiResponse::success();
+    }
 }

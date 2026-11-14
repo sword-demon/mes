@@ -43,4 +43,14 @@ class WorkshopController extends Controller
             tap($workshop)->update($request->validated())->load('parentFactory'),
         ));
     }
+
+    public function destroy(Workshop $workshop): JsonResponse
+    {
+        $this->organization->delete($workshop, [
+            'productionLines' => '车间下还有产线，只能停用',
+            'teams' => '车间下还有班组，只能停用',
+        ]);
+
+        return ApiResponse::success();
+    }
 }

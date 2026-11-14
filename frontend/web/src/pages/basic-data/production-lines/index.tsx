@@ -1,5 +1,11 @@
 import { useQuery } from '@tanstack/react-query';
-import { createProductionLine, listProductionLines, listWorkshops, updateProductionLine } from '@/api/basic-data';
+import {
+    createProductionLine,
+    deleteProductionLine,
+    listProductionLines,
+    listWorkshops,
+    updateProductionLine,
+} from '@/api/basic-data';
 import type { ProductionLine, ProductionLinePayload } from '@/api/basic-data';
 import ResourcePage from '../resource-page';
 
@@ -21,6 +27,7 @@ export default function ProductionLines() {
             list={listProductionLines}
             create={createProductionLine}
             update={updateProductionLine}
+            remove={deleteProductionLine}
             filters={[{ name: 'workshop_id', label: '所属车间', type: 'select', options, loading: workshops.isLoading }]}
             columns={[
                 { title: '编码', dataIndex: 'code', width: 140 },

@@ -125,6 +125,10 @@ export function updateFactory(id: number, payload: Partial<FactoryPayload>) {
     return api.put<Factory>(`/basic-data/factories/${id}`, payload);
 }
 
+export function deleteFactory(id: number) {
+    return api.delete<void>(`/basic-data/factories/${id}`);
+}
+
 export function listWorkshops(params: BasicDataParams = {}) {
     return api.get<Paginated<Workshop>>('/basic-data/workshops', params);
 }
@@ -135,6 +139,10 @@ export function createWorkshop(payload: WorkshopPayload) {
 
 export function updateWorkshop(id: number, payload: Partial<WorkshopPayload>) {
     return api.put<Workshop>(`/basic-data/workshops/${id}`, payload);
+}
+
+export function deleteWorkshop(id: number) {
+    return api.delete<void>(`/basic-data/workshops/${id}`);
 }
 
 export function listProductionLines(params: BasicDataParams = {}) {
@@ -149,6 +157,10 @@ export function updateProductionLine(id: number, payload: Partial<ProductionLine
     return api.put<ProductionLine>(`/basic-data/production-lines/${id}`, payload);
 }
 
+export function deleteProductionLine(id: number) {
+    return api.delete<void>(`/basic-data/production-lines/${id}`);
+}
+
 export function listTeams(params: BasicDataParams = {}) {
     return api.get<Paginated<Team>>('/basic-data/teams', params);
 }
@@ -161,6 +173,10 @@ export function updateTeam(id: number, payload: Partial<TeamPayload>) {
     return api.put<Team>(`/basic-data/teams/${id}`, payload);
 }
 
+export function deleteTeam(id: number) {
+    return api.delete<void>(`/basic-data/teams/${id}`);
+}
+
 export function listEmployees(params: BasicDataParams = {}) {
     return api.get<Paginated<Employee>>('/basic-data/employees', params);
 }
@@ -171,4 +187,8 @@ export function createEmployee(payload: EmployeePayload) {
 
 export function updateEmployee(id: number, payload: Partial<EmployeePayload>) {
     return api.put<Employee>(`/basic-data/employees/${id}`, payload);
+}
+
+export function deleteEmployee(id: number) {
+    return api.delete<void>(`/basic-data/employees/${id}`);
 }

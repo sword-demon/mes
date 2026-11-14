@@ -74,6 +74,8 @@ Route::middleware(['auth:sanctum', 'active'])->group(function (): void {
             ->middleware('permission:basic.factories.create')->name('factories.store');
         Route::put('/factories/{factory}', [FactoryController::class, 'update'])
             ->middleware('permission:basic.factories.update')->name('factories.update');
+        Route::delete('/factories/{factory}', [FactoryController::class, 'destroy'])
+            ->middleware('permission:basic.factories.delete')->name('factories.destroy');
 
         Route::get('/workshops', [WorkshopController::class, 'index'])
             ->middleware('permission:basic.workshops.index')->name('workshops.index');
@@ -81,6 +83,8 @@ Route::middleware(['auth:sanctum', 'active'])->group(function (): void {
             ->middleware('permission:basic.workshops.create')->name('workshops.store');
         Route::put('/workshops/{workshop}', [WorkshopController::class, 'update'])
             ->middleware('permission:basic.workshops.update')->name('workshops.update');
+        Route::delete('/workshops/{workshop}', [WorkshopController::class, 'destroy'])
+            ->middleware('permission:basic.workshops.delete')->name('workshops.destroy');
 
         Route::get('/production-lines', [ProductionLineController::class, 'index'])
             ->middleware('permission:basic.lines.index')->name('production-lines.index');
@@ -88,6 +92,8 @@ Route::middleware(['auth:sanctum', 'active'])->group(function (): void {
             ->middleware('permission:basic.lines.create')->name('production-lines.store');
         Route::put('/production-lines/{production_line}', [ProductionLineController::class, 'update'])
             ->middleware('permission:basic.lines.update')->name('production-lines.update');
+        Route::delete('/production-lines/{production_line}', [ProductionLineController::class, 'destroy'])
+            ->middleware('permission:basic.lines.delete')->name('production-lines.destroy');
 
         Route::get('/teams', [TeamController::class, 'index'])
             ->middleware('permission:basic.teams.index')->name('teams.index');
@@ -95,6 +101,8 @@ Route::middleware(['auth:sanctum', 'active'])->group(function (): void {
             ->middleware('permission:basic.teams.create')->name('teams.store');
         Route::put('/teams/{team}', [TeamController::class, 'update'])
             ->middleware('permission:basic.teams.update')->name('teams.update');
+        Route::delete('/teams/{team}', [TeamController::class, 'destroy'])
+            ->middleware('permission:basic.teams.delete')->name('teams.destroy');
 
         Route::get('/employees', [EmployeeController::class, 'index'])
             ->middleware('permission:basic.employees.index')->name('employees.index');
@@ -102,5 +110,7 @@ Route::middleware(['auth:sanctum', 'active'])->group(function (): void {
             ->middleware('permission:basic.employees.create')->name('employees.store');
         Route::put('/employees/{employee}', [EmployeeController::class, 'update'])
             ->middleware('permission:basic.employees.update')->name('employees.update');
+        Route::delete('/employees/{employee}', [EmployeeController::class, 'destroy'])
+            ->middleware('permission:basic.employees.delete')->name('employees.destroy');
     });
 });

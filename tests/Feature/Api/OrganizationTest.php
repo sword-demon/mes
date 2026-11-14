@@ -236,12 +236,53 @@ it('caps the page size so a dropdown request cannot dump the table', function ()
         ->assertJsonPath('data.meta.per_page', 100);
 });
 
-it('offers no physical delete for organization data', function () {
-    $actor = userWithPermissions(['basic.factories.update', 'basic.factories.index']);
+it('deletes a factory that has no workshops yet', function () {
+    $actor = userWithPermissions(['basic.factories.delete']);
+    $factory = Factory::factory()->create();
+
+    bearer($actor)->deleteJson("/api/v1/basic-data/factories/{$factory->id}")->assertOk();
+
+    expect(Factory::query()->whereKey($factory->id)->exists())->toBeFalse();
+});
+
+it('refuses to delete a factory that still owns workshops', function () {
+    $actor = userWithPermissions(['basic.factories.delete']);
+    $factory = Factory::factory()->create();
+    Workshop::factory()->create(['factory_id' => $factory->id]);
+
+    bearer($actor)->deleteJson("/api/v1/basic-data/factories/{$factory->id}")
+        ->assertForbidden()
+        ->assertJsonPath('message', '工厂下还有车间，只能停用');
+
+    expect(Factory::query()->whereKey($factory->id)->exists())->toBeTrue();
+});
+
+it('refuses to delete a workshop, line or team that still has children', function () {
+    $actor = userWithPermissions([
+        'basic.workshops.delete', 'basic.lines.delete', 'basic.teams.delete',
+    ]);
+    $workshop = Workshop::factory()->create();
+    $line = ProductionLine::factory()->create(['workshop_id' => $workshop->id]);
+    $team = Team::factory()->create(['workshop_id' => $workshop->id]);
+    Employee::factory()->create(['team_id' => $team->id]);
+
+    bearer($actor)->deleteJson("/api/v1/basic-data/workshops/{$workshop->id}")
+        ->assertForbidden()->assertJsonPath('message', '车间下还有产线，只能停用');
+
+    bearer($actor)->deleteJson("/api/v1/basic-data/teams/{$team->id}")
+        ->assertForbidden()->assertJsonPath('message', '班组下还有员工，只能停用');
+
+    // An empty line is the one case that may be removed outright.
+    bearer($actor)->deleteJson("/api/v1/basic-data/production-lines/{$line->id}")->assertOk();
+    expect(ProductionLine::query()->whereKey($line->id)->exists())->toBeFalse();
+});
+
+it('requires the delete permission to remove organization data', function () {
+    $actor = userWithPermissions(['basic.factories.update']);
     $factory = Factory::factory()->create();
 
     bearer($actor)->deleteJson("/api/v1/basic-data/factories/{$factory->id}")
-        ->assertStatus(405);
+        ->assertForbidden();
 
     expect(Factory::query()->whereKey($factory->id)->exists())->toBeTrue();
 });

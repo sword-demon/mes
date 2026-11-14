@@ -42,4 +42,12 @@ class EmployeeController extends Controller
             tap($employee)->update($request->validated())->load(['department', 'team']),
         ));
     }
+
+    public function destroy(Employee $employee): JsonResponse
+    {
+        // shortcut: 业务表尚未引用员工，接入派工后需补引用校验
+        $this->organization->delete($employee, []);
+
+        return ApiResponse::success();
+    }
 }

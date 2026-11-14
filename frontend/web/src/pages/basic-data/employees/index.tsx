@@ -1,5 +1,11 @@
 import { useQuery } from '@tanstack/react-query';
-import { createEmployee, listEmployees, listTeams, updateEmployee } from '@/api/basic-data';
+import {
+    createEmployee,
+    deleteEmployee,
+    listEmployees,
+    listTeams,
+    updateEmployee,
+} from '@/api/basic-data';
 import type { Employee, EmployeePayload } from '@/api/basic-data';
 import { listDepartments } from '@/api/system';
 import { useAuthStore } from '@/stores/auth';
@@ -42,6 +48,7 @@ export default function Employees() {
             list={listEmployees}
             create={createEmployee}
             update={updateEmployee}
+            remove={deleteEmployee}
             filters={[{ name: 'team_id', label: '所属班组', type: 'select', options: teamOptions, loading: teams.isLoading }]}
             columns={[
                 { title: '工号', dataIndex: 'employee_no', width: 130 },

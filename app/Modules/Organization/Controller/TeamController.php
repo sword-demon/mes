@@ -43,4 +43,13 @@ class TeamController extends Controller
             tap($team)->update($request->validated())->load('workshop'),
         ));
     }
+
+    public function destroy(Team $team): JsonResponse
+    {
+        $this->organization->delete($team, [
+            'employees' => '班组下还有员工，只能停用',
+        ]);
+
+        return ApiResponse::success();
+    }
 }

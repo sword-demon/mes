@@ -1,4 +1,4 @@
-import { createFactory, listFactories, updateFactory } from '@/api/basic-data';
+import { createFactory, deleteFactory, listFactories, updateFactory } from '@/api/basic-data';
 import type { Factory, FactoryPayload } from '@/api/basic-data';
 import ResourcePage from '../resource-page';
 
@@ -10,6 +10,7 @@ export default function Factories() {
             list={listFactories}
             create={createFactory}
             update={updateFactory}
+            remove={deleteFactory}
             columns={[
                 { title: '编码', dataIndex: 'code', width: 140 },
                 { title: '名称', dataIndex: 'name' },

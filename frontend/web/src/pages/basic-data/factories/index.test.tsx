@@ -106,6 +106,35 @@ describe('工厂管理页', () => {
         expect(document.body.textContent).toContain('FAC01');
         expect(document.body.textContent).not.toContain('新增');
         expect(document.body.textContent).not.toContain('停用');
+        expect(document.body.textContent).not.toContain('删除');
+    });
+
+    it('shows delete only with the delete permission and sends a DELETE', async () => {
+        useAuthStore.setState({
+            token: 'token',
+            user: currentUserFixture({
+                permissions: ['basic.factories.index', 'button.basic.factories.delete'],
+            }),
+        });
+
+        await renderPage();
+
+        expect(document.body.textContent).toContain('删除');
+        expect(document.body.textContent).not.toContain('停用');
+
+        await act(async () => {
+            document.body.querySelector<HTMLButtonElement>('button.ant-btn-dangerous')?.click();
+            await new Promise((resolve) => setTimeout(resolve, 0));
+        });
+
+        await act(async () => {
+            document.body.querySelector<HTMLButtonElement>('.ant-popconfirm-buttons .ant-btn-primary')?.click();
+            await new Promise((resolve) => setTimeout(resolve, 0));
+        });
+
+        const del = calls.find((call) => call.method === 'delete');
+
+        expect(del?.url).toBe('/basic-data/factories/7');
     });
 
     it('disables a factory through a PUT that only flips status', async () => {

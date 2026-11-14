@@ -1,5 +1,11 @@
 import { useQuery } from '@tanstack/react-query';
-import { createWorkshop, listFactories, listWorkshops, updateWorkshop } from '@/api/basic-data';
+import {
+    createWorkshop,
+    deleteWorkshop,
+    listFactories,
+    listWorkshops,
+    updateWorkshop,
+} from '@/api/basic-data';
 import type { Workshop, WorkshopPayload } from '@/api/basic-data';
 import ResourcePage from '../resource-page';
 
@@ -22,6 +28,7 @@ export default function Workshops() {
             list={listWorkshops}
             create={createWorkshop}
             update={updateWorkshop}
+            remove={deleteWorkshop}
             filters={[{ name: 'factory_id', label: '所属工厂', type: 'select', options, loading: factories.isLoading }]}
             columns={[
                 { title: '编码', dataIndex: 'code', width: 140 },

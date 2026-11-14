@@ -43,4 +43,12 @@ class ProductionLineController extends Controller
             tap($productionLine)->update($request->validated())->load('workshop'),
         ));
     }
+
+    public function destroy(ProductionLine $productionLine): JsonResponse
+    {
+        // shortcut: 业务表尚未引用产线，接入生产任务后需补引用校验
+        $this->organization->delete($productionLine, []);
+
+        return ApiResponse::success();
+    }
 }

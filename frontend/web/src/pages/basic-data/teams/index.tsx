@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { createTeam, listTeams, listWorkshops, updateTeam } from '@/api/basic-data';
+import { createTeam, deleteTeam, listTeams, listWorkshops, updateTeam } from '@/api/basic-data';
 import type { Team, TeamPayload } from '@/api/basic-data';
 import ResourcePage from '../resource-page';
 
@@ -21,6 +21,7 @@ export default function Teams() {
             list={listTeams}
             create={createTeam}
             update={updateTeam}
+            remove={deleteTeam}
             filters={[{ name: 'workshop_id', label: '所属车间', type: 'select', options, loading: workshops.isLoading }]}
             columns={[
                 { title: '编码', dataIndex: 'code', width: 140 },

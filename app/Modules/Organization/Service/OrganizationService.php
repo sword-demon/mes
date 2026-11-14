@@ -2,6 +2,7 @@
 
 namespace App\Modules\Organization\Service;
 
+use App\Core\Exceptions\ApiException;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Pagination\LengthAwarePaginator;
 
@@ -56,5 +57,26 @@ class OrganizationService
             })
             ->orderBy('id')
             ->paginate(max(1, min((int) ($filters['per_page'] ?? 15), 100)));
+    }
+
+    /**
+     * Delete a record only while nothing else points at it.
+     *
+     * A record that already carries business data must be disabled instead, so
+     * historical documents never lose the row they reference.
+     *
+     * @param  array<string, string>  $references  relation name => error message
+     *
+     * @throws ApiException
+     */
+    public function delete(Model $entity, array $references): void
+    {
+        foreach ($references as $relation => $message) {
+            if ($entity->{$relation}()->exists()) {
+                throw new ApiException($message, 403, status: 403);
+            }
+        }
+
+        $entity->delete();
     }
 }
