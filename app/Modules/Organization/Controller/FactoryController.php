@@ -27,14 +27,14 @@ class FactoryController extends Controller
     public function store(StoreFactoryRequest $request): JsonResponse
     {
         return ApiResponse::success(FactoryResource::make(
-            Factory::query()->create($request->validated()),
+            $this->organization->create(Factory::class, $request->validated()),
         ));
     }
 
     public function update(UpdateFactoryRequest $request, Factory $factory): JsonResponse
     {
         return ApiResponse::success(FactoryResource::make(
-            tap($factory)->update($request->validated()),
+            $this->organization->update($factory, $request->validated()),
         ));
     }
 

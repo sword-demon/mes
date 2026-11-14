@@ -24,6 +24,8 @@ class EmployeeController extends Controller
                 ['department', 'team'],
                 $request->only(['department_id', 'team_id', 'status', 'keyword', 'per_page']),
                 ['employee_no', 'name'],
+                enabledRelations: ['team'],
+                filterColumns: ['department_id', 'team_id'],
             ),
             EmployeeResource::class,
         );
@@ -32,14 +34,14 @@ class EmployeeController extends Controller
     public function store(StoreEmployeeRequest $request): JsonResponse
     {
         return ApiResponse::success(EmployeeResource::make(
-            Employee::query()->create($request->validated())->load(['department', 'team']),
+            $this->organization->create(Employee::class, $request->validated())->load(['department', 'team']),
         ));
     }
 
     public function update(UpdateEmployeeRequest $request, Employee $employee): JsonResponse
     {
         return ApiResponse::success(EmployeeResource::make(
-            tap($employee)->update($request->validated())->load(['department', 'team']),
+            $this->organization->update($employee, $request->validated())->load(['department', 'team']),
         ));
     }
 

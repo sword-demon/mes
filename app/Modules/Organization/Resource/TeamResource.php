@@ -3,6 +3,7 @@
 namespace App\Modules\Organization\Resource;
 
 use App\Modules\Organization\Model\Team;
+use App\Modules\Organization\Resource\Concerns\ProjectsNamedRef;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 
@@ -11,6 +12,8 @@ use Illuminate\Http\Resources\Json\JsonResource;
  */
 class TeamResource extends JsonResource
 {
+    use ProjectsNamedRef;
+
     /**
      * @return array<string, mixed>
      */
@@ -23,11 +26,7 @@ class TeamResource extends JsonResource
             'name' => $this->name,
             'leader' => $this->leader,
             'status' => $this->status,
-            'workshop' => $this->whenLoaded('workshop', fn () => [
-                'id' => $this->workshop->id,
-                'code' => $this->workshop->code,
-                'name' => $this->workshop->name,
-            ]),
+            'workshop' => $this->whenLoaded('workshop', fn () => $this->namedRef($this->workshop)),
             'created_at' => $this->created_at,
             'updated_at' => $this->updated_at,
         ];

@@ -3,6 +3,7 @@
 namespace App\Modules\Organization\Resource;
 
 use App\Modules\Organization\Model\ProductionLine;
+use App\Modules\Organization\Resource\Concerns\ProjectsNamedRef;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 
@@ -11,6 +12,8 @@ use Illuminate\Http\Resources\Json\JsonResource;
  */
 class ProductionLineResource extends JsonResource
 {
+    use ProjectsNamedRef;
+
     /**
      * @return array<string, mixed>
      */
@@ -24,11 +27,7 @@ class ProductionLineResource extends JsonResource
             'capacity' => $this->capacity,
             'manager' => $this->manager,
             'status' => $this->status,
-            'workshop' => $this->whenLoaded('workshop', fn () => [
-                'id' => $this->workshop->id,
-                'code' => $this->workshop->code,
-                'name' => $this->workshop->name,
-            ]),
+            'workshop' => $this->whenLoaded('workshop', fn () => $this->namedRef($this->workshop)),
             'created_at' => $this->created_at,
             'updated_at' => $this->updated_at,
         ];

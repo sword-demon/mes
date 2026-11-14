@@ -3,6 +3,7 @@
 namespace App\Modules\Organization\Resource;
 
 use App\Modules\Organization\Model\Employee;
+use App\Modules\Organization\Resource\Concerns\ProjectsNamedRef;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 
@@ -11,6 +12,8 @@ use Illuminate\Http\Resources\Json\JsonResource;
  */
 class EmployeeResource extends JsonResource
 {
+    use ProjectsNamedRef;
+
     /**
      * @return array<string, mixed>
      */
@@ -26,16 +29,8 @@ class EmployeeResource extends JsonResource
             'skill_level' => $this->skill_level,
             'phone' => $this->phone,
             'status' => $this->status,
-            'department' => $this->whenLoaded('department', fn () => $this->department === null ? null : [
-                'id' => $this->department->id,
-                'code' => $this->department->code,
-                'name' => $this->department->name,
-            ]),
-            'team' => $this->whenLoaded('team', fn () => $this->team === null ? null : [
-                'id' => $this->team->id,
-                'code' => $this->team->code,
-                'name' => $this->team->name,
-            ]),
+            'department' => $this->whenLoaded('department', fn () => $this->namedRef($this->department)),
+            'team' => $this->whenLoaded('team', fn () => $this->namedRef($this->team)),
             'created_at' => $this->created_at,
             'updated_at' => $this->updated_at,
         ];

@@ -156,6 +156,52 @@ it('hides children of a disabled parent from the enabled dropdown', function () 
         ->assertJsonCount(0, 'data.items');
 });
 
+it('refuses to attach an employee to a disabled team', function () {
+    $actor = userWithPermissions(['basic.employees.create']);
+    $team = Team::factory()->create(['status' => false]);
+
+    bearer($actor)->postJson('/api/v1/basic-data/employees', [
+        'employee_no' => 'EMP900', 'name' => '停用班组员工', 'team_id' => $team->id,
+    ])->assertUnprocessable()
+        ->assertJsonPath('message', '所属班组不存在或已停用');
+
+    expect(Employee::query()->where('employee_no', 'EMP900')->exists())->toBeFalse();
+});
+
+it('keeps employees of a disabled team out of the enabled list', function () {
+    $actor = userWithPermissions(['basic.employees.index']);
+    $activeTeam = Team::factory()->create();
+    $closedTeam = Team::factory()->create(['status' => false]);
+    Employee::factory()->create(['employee_no' => 'EMP910', 'team_id' => $activeTeam->id]);
+    Employee::factory()->create(['employee_no' => 'EMP911', 'team_id' => $closedTeam->id]);
+    // A team is optional, so an employee without one stays selectable.
+    Employee::factory()->create(['employee_no' => 'EMP912', 'team_id' => null]);
+
+    $codes = collect(
+        bearer($actor)->getJson('/api/v1/basic-data/employees?status=1&per_page=100')
+            ->assertOk()
+            ->json('data.items'),
+    )->pluck('employee_no');
+
+    expect($codes)->toContain('EMP910')
+        ->and($codes)->toContain('EMP912')
+        ->and($codes)->not->toContain('EMP911');
+});
+
+it('hides a line or team whose workshop is active but whose factory is disabled', function () {
+    $actor = userWithPermissions(['basic.lines.index', 'basic.teams.index']);
+    $closedFactory = Factory::factory()->create(['status' => false]);
+    $workshop = Workshop::factory()->create(['factory_id' => $closedFactory->id]);
+    ProductionLine::factory()->create(['workshop_id' => $workshop->id, 'code' => 'PL31']);
+    Team::factory()->create(['workshop_id' => $workshop->id, 'code' => 'TEAM31']);
+
+    bearer($actor)->getJson('/api/v1/basic-data/production-lines?status=1')
+        ->assertOk()->assertJsonCount(0, 'data.items');
+
+    bearer($actor)->getJson('/api/v1/basic-data/teams?status=1')
+        ->assertOk()->assertJsonCount(0, 'data.items');
+});
+
 it('updates a production line through its route binding', function () {
     $actor = userWithPermissions(['basic.lines.update']);
     $line = ProductionLine::factory()->create(['capacity' => 60]);

@@ -23,8 +23,8 @@ class WorkshopController extends Controller
                 Workshop::class,
                 ['parentFactory'],
                 $request->only(['factory_id', 'status', 'keyword', 'per_page']),
-                ['code', 'name'],
-                ['parentFactory'],
+                enabledRelations: ['parentFactory'],
+                filterColumns: ['factory_id'],
             ),
             WorkshopResource::class,
         );
@@ -33,14 +33,14 @@ class WorkshopController extends Controller
     public function store(StoreWorkshopRequest $request): JsonResponse
     {
         return ApiResponse::success(WorkshopResource::make(
-            Workshop::query()->create($request->validated())->load('parentFactory'),
+            $this->organization->create(Workshop::class, $request->validated())->load('parentFactory'),
         ));
     }
 
     public function update(UpdateWorkshopRequest $request, Workshop $workshop): JsonResponse
     {
         return ApiResponse::success(WorkshopResource::make(
-            tap($workshop)->update($request->validated())->load('parentFactory'),
+            $this->organization->update($workshop, $request->validated())->load('parentFactory'),
         ));
     }
 

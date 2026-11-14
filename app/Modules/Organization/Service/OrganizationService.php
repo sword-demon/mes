@@ -13,8 +13,9 @@ class OrganizationService
      *
      * Filters are only applied when present, so the same method serves both the
      * management tables and the dropdowns that pass `status=1`. A dropdown for
-     * enabled rows also requires the parents in `$enabledRelations` to be
-     * enabled, so a disabled factory never feeds a new line or team.
+     * enabled rows also hides rows whose parent in `$enabledRelations` is
+     * disabled, so a disabled factory never feeds a new line or team. A row
+     * with no parent (an employee without a team) stays visible.
      *
      * @template TModel of Model
      *
@@ -32,24 +33,26 @@ class OrganizationService
         array $filters,
         array $searchColumns = ['code', 'name'],
         array $enabledRelations = [],
-        array $filterColumns = ['factory_id', 'workshop_id', 'team_id', 'department_id'],
+        array $filterColumns = [],
     ): LengthAwarePaginator {
         // An unparsable `status` is ignored rather than silently read as false.
         $status = array_key_exists('status', $filters)
             ? filter_var($filters['status'], FILTER_VALIDATE_BOOLEAN, FILTER_NULL_ON_FAILURE)
             : null;
 
-        return $model::query()
-            ->with($with)
-            ->when($filterColumns, function ($query) use ($filters, $filterColumns): void {
-                foreach ($filterColumns as $column) {
-                    $query->when($filters[$column] ?? null, fn ($inner, $value) => $inner->where($column, $value));
-                }
-            })
+        $query = $model::query()->with($with);
+
+        foreach ($filterColumns as $column) {
+            $query->when($filters[$column] ?? null, fn ($inner, $value) => $inner->where($column, $value));
+        }
+
+        return $query
             ->when($status !== null, fn ($query) => $query->where('status', $status))
             ->when($status === true, function ($query) use ($enabledRelations): void {
                 foreach ($enabledRelations as $relation) {
-                    $query->whereHas($relation, fn ($inner) => $inner->where('status', true));
+                    // Only a disabled parent disqualifies the row; a missing one
+                    // (an employee without a team) must stay selectable.
+                    $query->whereDoesntHave($relation, fn ($inner) => $inner->where('status', false));
                 }
             })
             ->when($filters['keyword'] ?? null, function ($query, string $keyword) use ($searchColumns): void {
@@ -61,6 +64,28 @@ class OrganizationService
             })
             ->orderBy('id')
             ->paginate(max(1, min((int) ($filters['per_page'] ?? 15), 100)));
+    }
+
+    /**
+     * @template TModel of Model
+     *
+     * @param  class-string<TModel>  $model
+     * @param  array<string, mixed>  $data
+     * @return TModel
+     */
+    public function create(string $model, array $data): Model
+    {
+        return $model::query()->create($data);
+    }
+
+    /**
+     * @param  array<string, mixed>  $data
+     */
+    public function update(Model $entity, array $data): Model
+    {
+        $entity->update($data);
+
+        return $entity;
     }
 
     /**

@@ -3,6 +3,7 @@
 namespace App\Modules\System\Service;
 
 use App\Core\Exceptions\ApiException;
+use App\Modules\Organization\Model\Employee;
 use App\Modules\System\Model\Department;
 use Illuminate\Support\Collection;
 
@@ -42,6 +43,12 @@ class DepartmentService
 
         if ($department->users()->exists()) {
             throw new ApiException('部门下还有用户，不能删除', 403, status: 403);
+        }
+
+        // Employees carry a department and the foreign key nulls it out, so a
+        // delete here would silently strip their org assignment.
+        if (Employee::query()->where('department_id', $department->id)->exists()) {
+            throw new ApiException('部门下还有员工，不能删除', 403, status: 403);
         }
 
         $department->delete();

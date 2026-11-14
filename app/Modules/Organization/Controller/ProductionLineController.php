@@ -23,8 +23,8 @@ class ProductionLineController extends Controller
                 ProductionLine::class,
                 ['workshop'],
                 $request->only(['workshop_id', 'status', 'keyword', 'per_page']),
-                ['code', 'name'],
-                ['workshop', 'workshop.parentFactory'],
+                enabledRelations: ['workshop', 'workshop.parentFactory'],
+                filterColumns: ['workshop_id'],
             ),
             ProductionLineResource::class,
         );
@@ -33,14 +33,14 @@ class ProductionLineController extends Controller
     public function store(StoreProductionLineRequest $request): JsonResponse
     {
         return ApiResponse::success(ProductionLineResource::make(
-            ProductionLine::query()->create($request->validated())->load('workshop'),
+            $this->organization->create(ProductionLine::class, $request->validated())->load('workshop'),
         ));
     }
 
     public function update(UpdateProductionLineRequest $request, ProductionLine $productionLine): JsonResponse
     {
         return ApiResponse::success(ProductionLineResource::make(
-            tap($productionLine)->update($request->validated())->load('workshop'),
+            $this->organization->update($productionLine, $request->validated())->load('workshop'),
         ));
     }
 

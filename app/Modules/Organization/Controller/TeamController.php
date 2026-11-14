@@ -23,8 +23,8 @@ class TeamController extends Controller
                 Team::class,
                 ['workshop'],
                 $request->only(['workshop_id', 'status', 'keyword', 'per_page']),
-                ['code', 'name'],
-                ['workshop', 'workshop.parentFactory'],
+                enabledRelations: ['workshop', 'workshop.parentFactory'],
+                filterColumns: ['workshop_id'],
             ),
             TeamResource::class,
         );
@@ -33,14 +33,14 @@ class TeamController extends Controller
     public function store(StoreTeamRequest $request): JsonResponse
     {
         return ApiResponse::success(TeamResource::make(
-            Team::query()->create($request->validated())->load('workshop'),
+            $this->organization->create(Team::class, $request->validated())->load('workshop'),
         ));
     }
 
     public function update(UpdateTeamRequest $request, Team $team): JsonResponse
     {
         return ApiResponse::success(TeamResource::make(
-            tap($team)->update($request->validated())->load('workshop'),
+            $this->organization->update($team, $request->validated())->load('workshop'),
         ));
     }
 

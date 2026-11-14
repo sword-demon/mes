@@ -9,6 +9,7 @@ export type BasicDataParams = {
     factory_id?: number;
     workshop_id?: number;
     team_id?: number;
+    department_id?: number;
 };
 
 export type NamedRef = { id: number; code: string; name: string };

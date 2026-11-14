@@ -3,6 +3,7 @@
 namespace App\Modules\Organization\Resource;
 
 use App\Modules\Organization\Model\Workshop;
+use App\Modules\Organization\Resource\Concerns\ProjectsNamedRef;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 
@@ -11,6 +12,8 @@ use Illuminate\Http\Resources\Json\JsonResource;
  */
 class WorkshopResource extends JsonResource
 {
+    use ProjectsNamedRef;
+
     /**
      * @return array<string, mixed>
      */
@@ -23,11 +26,7 @@ class WorkshopResource extends JsonResource
             'name' => $this->name,
             'manager' => $this->manager,
             'status' => $this->status,
-            'factory' => $this->whenLoaded('parentFactory', fn () => [
-                'id' => $this->parentFactory->id,
-                'code' => $this->parentFactory->code,
-                'name' => $this->parentFactory->name,
-            ]),
+            'factory' => $this->whenLoaded('parentFactory', fn () => $this->namedRef($this->parentFactory)),
             'created_at' => $this->created_at,
             'updated_at' => $this->updated_at,
         ];

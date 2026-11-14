@@ -1,5 +1,6 @@
 <?php
 
+use App\Modules\Organization\Model\Employee;
 use App\Modules\System\Model\Department;
 use App\Modules\System\Model\User;
 
@@ -79,4 +80,15 @@ it('returns 403 when deleting a department that still has children', function ()
 
     bearer($actor)->deleteJson("/api/v1/system/departments/{$parent->id}")
         ->assertForbidden()->assertJsonPath('code', 403);
+});
+
+it('returns 403 when deleting a department that still has employees', function () {
+    $actor = userWithPermissions(['system.departments.delete']);
+    $department = Department::factory()->create();
+    Employee::factory()->create(['department_id' => $department->id, 'team_id' => null]);
+
+    bearer($actor)->deleteJson("/api/v1/system/departments/{$department->id}")
+        ->assertForbidden()->assertJsonPath('message', '部门下还有员工，不能删除');
+
+    expect(Department::query()->whereKey($department->id)->exists())->toBeTrue();
 });
