@@ -2,6 +2,31 @@
 
 use App\Modules\System\Model\User;
 
+test('persisted user token types can authenticate and be revoked', function (string $modelType) {
+    $user = User::factory()->create();
+    $issued = $user->createToken('web');
+    $issued->accessToken->forceFill(['tokenable_type' => $modelType])->save();
+
+    $this->withToken($issued->plainTextToken)
+        ->getJson('/api/v1/me')
+        ->assertOk()
+        ->assertJsonPath('data.id', $user->id);
+
+    app('auth')->forgetGuards();
+
+    $this->withToken($issued->plainTextToken)
+        ->deleteJson('/api/v1/auth/tokens')
+        ->assertOk();
+
+    $this->assertDatabaseMissing('personal_access_tokens', ['id' => $issued->accessToken->id]);
+
+    app('auth')->forgetGuards();
+
+    $this->withToken($issued->plainTextToken)
+        ->getJson('/api/v1/me')
+        ->assertUnauthorized();
+})->with(['legacy' => 'App\\Models\\User', 'modular' => User::class]);
+
 test('me requires authentication', function () {
     $this->getJson('/api/v1/me')
         ->assertUnauthorized()
@@ -29,6 +54,7 @@ test('a user can obtain a bearer token', function () {
         ]);
 
     expect($user->tokens()->count())->toBe(1);
+    expect($user->tokens()->first()->tokenable_type)->toBe(User::class);
 });
 
 test('invalid credentials are rejected', function () {

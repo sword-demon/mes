@@ -2,8 +2,10 @@
 
 namespace App\Providers;
 
+use App\Modules\System\Model\User;
 use Carbon\CarbonImmutable;
 use Illuminate\Cache\RateLimiting\Limit;
+use Illuminate\Database\Eloquent\Relations\Relation;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Date;
 use Illuminate\Support\Facades\DB;
@@ -27,6 +29,11 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
+        Relation::morphMap([
+            User::class => User::class,
+            'App\\Models\\User' => User::class,
+        ]);
+
         $this->configureDefaults();
         $this->configureRateLimiting();
     }

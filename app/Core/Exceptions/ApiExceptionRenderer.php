@@ -39,6 +39,7 @@ final class ApiExceptionRenderer
             default => Response::$statusTexts[500],
         };
 
-        return ApiResponse::error($status, $message, null, $status);
+        return ApiResponse::error($status, $message, null, $status)
+            ->withHeaders($e instanceof HttpExceptionInterface ? $e->getHeaders() : []);
     }
 }

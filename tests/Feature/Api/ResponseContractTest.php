@@ -31,6 +31,7 @@ test('unknown api routes render json instead of an html error page', function ()
 });
 
 test('throttled api requests keep the envelope', function () {
+    $this->freezeTime();
     $user = User::factory()->create();
 
     foreach (range(1, 5) as $ignored) {
@@ -39,8 +40,18 @@ test('throttled api requests keep the envelope', function () {
 
     $this->postJson('/api/v1/auth/tokens', ['email' => $user->email, 'password' => 'wrong'])
         ->assertStatus(429)
+        ->assertHeader('Retry-After', '60')
+        ->assertHeader('X-RateLimit-Limit', '5')
+        ->assertHeader('X-RateLimit-Remaining', '0')
         ->assertJsonPath('code', 429)
         ->assertJsonStructure(['code', 'message', 'data', 'timestamp']);
+});
+
+test('method not allowed responses preserve allowed methods', function () {
+    $this->postJson('/api/v1/me')
+        ->assertStatus(405)
+        ->assertHeader('Allow', 'GET, HEAD')
+        ->assertJsonPath('code', 405);
 });
 
 test('queue, cache and mqtt read their connection settings from env', function () {
