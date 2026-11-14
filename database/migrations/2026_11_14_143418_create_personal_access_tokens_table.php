@@ -12,14 +12,18 @@ return new class extends Migration
     public function up(): void
     {
         Schema::create('personal_access_tokens', function (Blueprint $table) {
-            $table->id();
-            $table->morphs('tokenable');
-            $table->text('name');
-            $table->string('token', 64)->unique();
-            $table->text('abilities')->nullable();
-            $table->timestamp('last_used_at')->nullable();
-            $table->timestamp('expires_at')->nullable()->index();
-            $table->timestamps();
+            $table->id()->comment('主键');
+            $table->string('tokenable_type')->comment('令牌主体类型');
+            $table->unsignedBigInteger('tokenable_id')->comment('令牌主体 ID');
+            $table->text('name')->comment('令牌名称');
+            $table->string('token', 64)->unique()->comment('令牌哈希');
+            $table->text('abilities')->nullable()->comment('权限范围');
+            $table->timestamp('last_used_at')->nullable()->comment('最后使用时间');
+            $table->timestamp('expires_at')->nullable()->index()->comment('过期时间');
+            $table->timestamp('created_at')->nullable()->comment('创建时间');
+            $table->timestamp('updated_at')->nullable()->comment('更新时间');
+
+            $table->index(['tokenable_type', 'tokenable_id']);
         });
     }
 

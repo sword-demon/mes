@@ -14,8 +14,8 @@ return new class extends Migration
         Schema::rename('users', 'sys_users');
 
         Schema::table('sys_users', function (Blueprint $table) {
-            $table->string('phone', 32)->nullable()->after('email');
-            $table->boolean('status')->default(true)->after('password');
+            $table->string('phone', 32)->nullable()->after('email')->comment('手机号');
+            $table->boolean('status')->default(true)->after('password')->comment('状态');
         });
     }
 
