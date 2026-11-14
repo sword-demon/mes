@@ -18,6 +18,7 @@ class DatabaseSeeder extends Seeder
             SystemSeeder::class,
             OrganizationSeeder::class,
             ProductSeeder::class,
+            MaterialSeeder::class,
         ]);
     }
 }

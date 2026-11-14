@@ -1,5 +1,6 @@
 <?php
 
+use App\Modules\Material\Controller\MaterialController;
 use App\Modules\Organization\Controller\EmployeeController;
 use App\Modules\Organization\Controller\FactoryController;
 use App\Modules\Organization\Controller\ProductionLineController;
@@ -123,6 +124,13 @@ Route::middleware(['auth:sanctum', 'active'])->group(function (): void {
             ->middleware('permission:basic.products.update')->name('products.update');
         Route::delete('/products/{product}', [ProductController::class, 'destroy'])
             ->middleware('permission:basic.products.delete')->name('products.destroy');
+
+        Route::get('/materials', [MaterialController::class, 'index'])
+            ->middleware('permission:basic.materials.index')->name('materials.index');
+        Route::post('/materials', [MaterialController::class, 'store'])
+            ->middleware('permission:basic.materials.create')->name('materials.store');
+        Route::put('/materials/{material}', [MaterialController::class, 'update'])
+            ->middleware('permission:basic.materials.update')->name('materials.update');
 
         // A version is always reached through its product, so a mismatched
         // pair never resolves.

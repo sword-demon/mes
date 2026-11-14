@@ -55,7 +55,8 @@ type Props<T extends Entity, P extends object> = {
     list: (params: BasicDataParams) => Promise<Paginated<T>>;
     create: (payload: P) => Promise<T>;
     update: (id: number, payload: Partial<P> | { status: boolean }) => Promise<T>;
-    remove: (id: number) => Promise<void>;
+    /** Omit for master data that is disabled rather than deleted. */
+    remove?: (id: number) => Promise<void>;
     columns: ColumnsType<T>;
     fields: ResourceField[];
     /** Parent selects rendered as toolbar filters; their values become query params. */
@@ -121,7 +122,8 @@ export default function ResourcePage<T extends Entity, P extends object>({
     });
 
     const destroy = useMutation({
-        mutationFn: (record: T) => remove(record.id),
+        // The delete action is rendered only when `remove` is supplied.
+        mutationFn: (record: T) => remove!(record.id),
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: [resource] });
             message.success('已删除');
@@ -239,18 +241,20 @@ export default function ResourcePage<T extends Entity, P extends object>({
                                         </Popconfirm>
                                     </Can>
                                 )}
-                                <Can code={`button.${resource}.delete`}>
-                                    <Popconfirm
-                                        title="仅未被引用的记录可以删除，否则请停用"
-                                        okText="删除"
-                                        cancelText="取消"
-                                        onConfirm={() => destroy.mutate(record)}
-                                    >
-                                        <Button type="link" danger>
-                                            删除
-                                        </Button>
-                                    </Popconfirm>
-                                </Can>
+                                {remove && (
+                                    <Can code={`button.${resource}.delete`}>
+                                        <Popconfirm
+                                            title="仅未被引用的记录可以删除，否则请停用"
+                                            okText="删除"
+                                            cancelText="取消"
+                                            onConfirm={() => destroy.mutate(record)}
+                                        >
+                                            <Button type="link" danger>
+                                                删除
+                                            </Button>
+                                        </Popconfirm>
+                                    </Can>
+                                )}
                             </Space>
                         ),
                     },

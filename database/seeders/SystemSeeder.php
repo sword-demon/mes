@@ -107,6 +107,9 @@ class SystemSeeder extends Seeder
         'basic.products.create' => '新增产品',
         'basic.products.update' => '编辑产品',
         'basic.products.delete' => '删除产品',
+        'basic.materials.index' => '物料列表',
+        'basic.materials.create' => '新增物料',
+        'basic.materials.update' => '编辑物料',
         'system.users.index' => '用户列表',
         'system.users.create' => '新增用户',
         'system.users.update' => '编辑用户',
@@ -157,6 +160,7 @@ class SystemSeeder extends Seeder
         'super_admin' => ['name' => '超级管理员', 'menus' => ['*'], 'api' => true, 'scope' => 'all'],
         'factory_admin' => ['name' => '工厂管理员', 'menus' => ['*'], 'api' => true, 'scope' => 'factory'],
         'production_manager' => ['name' => '生产经理', 'menus' => ['dashboard', 'basic', 'process', 'production', 'execution', 'quality', 'traceability'], 'scope' => 'factory'],
+        'process_engineer' => ['name' => '工艺工程师', 'menus' => ['dashboard', 'basic', 'process'], 'api' => ['basic.materials.create', 'basic.materials.update'], 'scope' => 'factory'],
         'workshop_director' => ['name' => '车间主任', 'menus' => ['dashboard', 'production', 'execution', 'quality'], 'scope' => 'line'],
         'production_operator' => ['name' => '生产操作员', 'menus' => ['dashboard', 'production', 'execution'], 'scope' => 'line'],
         'quality_inspector' => ['name' => '质检员', 'menus' => ['dashboard', 'quality', 'traceability'], 'scope' => 'line'],
@@ -286,18 +290,27 @@ class SystemSeeder extends Seeder
                 ? array_merge(...array_values($menuPermissions))
                 : array_merge(...array_map(fn (string $root) => $menuPermissions[$root] ?? [], $definition['menus']));
 
-            if ($definition['api'] ?? false) {
-                foreach (array_keys(self::API_PERMISSIONS) as $apiCode) {
-                    $codes[] = $apiCode;
-                    $codes[] = "button.{$apiCode}";
-                }
-            } elseif (in_array('basic', $definition['menus'], true)) {
+            $api = $definition['api'] ?? false;
+
+            if (in_array('basic', $definition['menus'], true)) {
                 // These roles see the basic-data menus, so they need the read
-                // permissions behind them; writes stay with the factory admin.
+                // permissions behind them; writes are granted per role below.
                 foreach (array_keys(self::API_PERMISSIONS) as $apiCode) {
                     if (str_starts_with($apiCode, 'basic.') && str_ends_with($apiCode, '.index')) {
                         $codes[] = $apiCode;
                     }
+                }
+            }
+
+            if ($api === true) {
+                foreach (array_keys(self::API_PERMISSIONS) as $apiCode) {
+                    $codes[] = $apiCode;
+                    $codes[] = "button.{$apiCode}";
+                }
+            } elseif (is_array($api)) {
+                foreach ($api as $apiCode) {
+                    $codes[] = $apiCode;
+                    $codes[] = "button.{$apiCode}";
                 }
             }
 
@@ -318,6 +331,7 @@ class SystemSeeder extends Seeder
             ['超级管理员', 'admin@mes.test', 'super_admin', 'root', '系统管理员'],
             ['工厂管理员', 'factory@mes.test', 'factory_admin', 'root', '厂长'],
             ['生产经理', 'production@mes.test', 'production_manager', 'production', '生产经理'],
+            ['工艺工程师', 'process@mes.test', 'process_engineer', 'production', '工艺工程师'],
             ['车间主任', 'workshop@mes.test', 'workshop_director', 'workshop-a', '车间主任'],
         ];
 
