@@ -1,5 +1,5 @@
 import { api } from './client';
-import type { Paginated, Role, User } from '@/types/api';
+import type { DepartmentNode, Paginated, Role, User } from '@/types/api';
 
 export type UserPayload = {
     username?: string | null;
@@ -35,4 +35,8 @@ export function resetUserPassword(id: number, password: string) {
 
 export function assignUserRoles(id: number, roleIds: number[]) {
     return api.put<User>(`/system/users/${id}/roles`, { role_ids: roleIds });
+}
+
+export function listDepartments() {
+    return api.get<DepartmentNode[]>('/system/departments');
 }

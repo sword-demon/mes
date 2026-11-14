@@ -49,6 +49,15 @@ export type MenuNode = {
     children: MenuNode[];
 };
 
+export type DepartmentNode = {
+    id: number;
+    parent_id: number | null;
+    code: string;
+    name: string;
+    sort: number;
+    children: DepartmentNode[];
+};
+
 export type CurrentUser = User & {
     permissions: string[];
     data_scope: 'all' | 'factory' | 'line' | 'none';

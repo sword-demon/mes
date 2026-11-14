@@ -1,0 +1,174 @@
+import { api } from './client';
+import type { Paginated } from '@/types/api';
+
+export type BasicDataParams = {
+    page?: number;
+    keyword?: string;
+    status?: boolean;
+    per_page?: number;
+    factory_id?: number;
+    workshop_id?: number;
+    team_id?: number;
+};
+
+export type NamedRef = { id: number; code: string; name: string };
+
+export type Factory = {
+    id: number;
+    code: string;
+    name: string;
+    address: string | null;
+    contact: string | null;
+    phone: string | null;
+    status: boolean;
+};
+
+export type Workshop = {
+    id: number;
+    factory_id: number;
+    code: string;
+    name: string;
+    manager: string | null;
+    status: boolean;
+    factory?: NamedRef;
+};
+
+export type ProductionLine = {
+    id: number;
+    workshop_id: number;
+    code: string;
+    name: string;
+    capacity: number;
+    manager: string | null;
+    status: boolean;
+    workshop?: NamedRef;
+};
+
+export type Team = {
+    id: number;
+    workshop_id: number;
+    code: string;
+    name: string;
+    leader: string | null;
+    status: boolean;
+    workshop?: NamedRef;
+};
+
+export type Employee = {
+    id: number;
+    employee_no: string;
+    name: string;
+    department_id: number | null;
+    team_id: number | null;
+    position: string | null;
+    skill_level: string | null;
+    phone: string | null;
+    status: boolean;
+    department?: NamedRef;
+    team?: NamedRef;
+};
+
+export type FactoryPayload = {
+    code: string;
+    name: string;
+    address?: string | null;
+    contact?: string | null;
+    phone?: string | null;
+    status?: boolean;
+};
+
+export type WorkshopPayload = {
+    factory_id: number;
+    code: string;
+    name: string;
+    manager?: string | null;
+    status?: boolean;
+};
+
+export type ProductionLinePayload = {
+    workshop_id: number;
+    code: string;
+    name: string;
+    capacity?: number;
+    manager?: string | null;
+    status?: boolean;
+};
+
+export type TeamPayload = {
+    workshop_id: number;
+    code: string;
+    name: string;
+    leader?: string | null;
+    status?: boolean;
+};
+
+export type EmployeePayload = {
+    employee_no: string;
+    name: string;
+    department_id?: number | null;
+    team_id?: number | null;
+    position?: string | null;
+    skill_level?: string | null;
+    phone?: string | null;
+    status?: boolean;
+};
+
+export function listFactories(params: BasicDataParams = {}) {
+    return api.get<Paginated<Factory>>('/basic-data/factories', params);
+}
+
+export function createFactory(payload: FactoryPayload) {
+    return api.post<Factory>('/basic-data/factories', payload);
+}
+
+export function updateFactory(id: number, payload: Partial<FactoryPayload>) {
+    return api.put<Factory>(`/basic-data/factories/${id}`, payload);
+}
+
+export function listWorkshops(params: BasicDataParams = {}) {
+    return api.get<Paginated<Workshop>>('/basic-data/workshops', params);
+}
+
+export function createWorkshop(payload: WorkshopPayload) {
+    return api.post<Workshop>('/basic-data/workshops', payload);
+}
+
+export function updateWorkshop(id: number, payload: Partial<WorkshopPayload>) {
+    return api.put<Workshop>(`/basic-data/workshops/${id}`, payload);
+}
+
+export function listProductionLines(params: BasicDataParams = {}) {
+    return api.get<Paginated<ProductionLine>>('/basic-data/production-lines', params);
+}
+
+export function createProductionLine(payload: ProductionLinePayload) {
+    return api.post<ProductionLine>('/basic-data/production-lines', payload);
+}
+
+export function updateProductionLine(id: number, payload: Partial<ProductionLinePayload>) {
+    return api.put<ProductionLine>(`/basic-data/production-lines/${id}`, payload);
+}
+
+export function listTeams(params: BasicDataParams = {}) {
+    return api.get<Paginated<Team>>('/basic-data/teams', params);
+}
+
+export function createTeam(payload: TeamPayload) {
+    return api.post<Team>('/basic-data/teams', payload);
+}
+
+export function updateTeam(id: number, payload: Partial<TeamPayload>) {
+    return api.put<Team>(`/basic-data/teams/${id}`, payload);
+}
+
+export function listEmployees(params: BasicDataParams = {}) {
+    return api.get<Paginated<Employee>>('/basic-data/employees', params);
+}
+
+export function createEmployee(payload: EmployeePayload) {
+    return api.post<Employee>('/basic-data/employees', payload);
+}
+
+export function updateEmployee(id: number, payload: Partial<EmployeePayload>) {
+    return api.put<Employee>(`/basic-data/employees/${id}`, payload);
+}

@@ -26,6 +26,7 @@ class SystemSeeder extends Seeder
             ['slug' => 'basic.factories', 'name' => '工厂管理', 'path' => '/basic-data/factories'],
             ['slug' => 'basic.workshops', 'name' => '车间管理', 'path' => '/basic-data/workshops'],
             ['slug' => 'basic.lines', 'name' => '产线管理', 'path' => '/basic-data/lines'],
+            ['slug' => 'basic.teams', 'name' => '班组管理', 'path' => '/basic-data/teams'],
             ['slug' => 'basic.employees', 'name' => '人员管理', 'path' => '/basic-data/employees'],
             ['slug' => 'basic.products', 'name' => '产品管理', 'path' => '/basic-data/products'],
             ['slug' => 'basic.materials', 'name' => '物料管理', 'path' => '/basic-data/materials'],
@@ -82,6 +83,21 @@ class SystemSeeder extends Seeder
      * API permissions keyed by permission code.
      */
     private const API_PERMISSIONS = [
+        'basic.factories.index' => '工厂列表',
+        'basic.factories.create' => '新增工厂',
+        'basic.factories.update' => '编辑工厂',
+        'basic.workshops.index' => '车间列表',
+        'basic.workshops.create' => '新增车间',
+        'basic.workshops.update' => '编辑车间',
+        'basic.lines.index' => '产线列表',
+        'basic.lines.create' => '新增产线',
+        'basic.lines.update' => '编辑产线',
+        'basic.teams.index' => '班组列表',
+        'basic.teams.create' => '新增班组',
+        'basic.teams.update' => '编辑班组',
+        'basic.employees.index' => '员工列表',
+        'basic.employees.create' => '新增员工',
+        'basic.employees.update' => '编辑员工',
         'system.users.index' => '用户列表',
         'system.users.create' => '新增用户',
         'system.users.update' => '编辑用户',
@@ -265,6 +281,14 @@ class SystemSeeder extends Seeder
                 foreach (array_keys(self::API_PERMISSIONS) as $apiCode) {
                     $codes[] = $apiCode;
                     $codes[] = "button.{$apiCode}";
+                }
+            } elseif (in_array('basic', $definition['menus'], true)) {
+                // These roles see the basic-data menus, so they need the read
+                // permissions behind them; writes stay with the factory admin.
+                foreach (array_keys(self::API_PERMISSIONS) as $apiCode) {
+                    if (str_starts_with($apiCode, 'basic.') && str_ends_with($apiCode, '.index')) {
+                        $codes[] = $apiCode;
+                    }
                 }
             }
 

@@ -3,6 +3,11 @@ import { createBrowserRouter, Navigate, useLocation } from 'react-router';
 import Dashboard from '@/pages/dashboard';
 import Forbidden from '@/pages/forbidden';
 import AdminLayout from '@/layouts/admin-layout';
+import Employees from '@/pages/basic-data/employees';
+import Factories from '@/pages/basic-data/factories';
+import ProductionLines from '@/pages/basic-data/production-lines';
+import Teams from '@/pages/basic-data/teams';
+import Workshops from '@/pages/basic-data/workshops';
 import Login from '@/pages/login';
 import Placeholder from '@/pages/placeholder';
 import Users from '@/pages/system/users';
@@ -20,6 +25,11 @@ function RequireAuth({ children }: { children: ReactNode }) {
  */
 const pages: Record<string, () => ReactNode> = {
     '/dashboard/overview': Dashboard,
+    '/basic-data/factories': Factories,
+    '/basic-data/workshops': Workshops,
+    '/basic-data/lines': ProductionLines,
+    '/basic-data/teams': Teams,
+    '/basic-data/employees': Employees,
     '/system/users': Users,
 };
 

@@ -1,5 +1,10 @@
 <?php
 
+use App\Modules\Organization\Controller\EmployeeController;
+use App\Modules\Organization\Controller\FactoryController;
+use App\Modules\Organization\Controller\ProductionLineController;
+use App\Modules\Organization\Controller\TeamController;
+use App\Modules\Organization\Controller\WorkshopController;
 use App\Modules\System\Controller\AccessTokenController;
 use App\Modules\System\Controller\DepartmentController;
 use App\Modules\System\Controller\MeController;
@@ -60,5 +65,42 @@ Route::middleware(['auth:sanctum', 'active'])->group(function (): void {
             ->middleware('permission:system.departments.update')->name('departments.update');
         Route::delete('/departments/{department}', [DepartmentController::class, 'destroy'])
             ->middleware('permission:system.departments.delete')->name('departments.destroy');
+    });
+
+    Route::prefix('basic-data')->name('api.basic-data.')->group(function (): void {
+        Route::get('/factories', [FactoryController::class, 'index'])
+            ->middleware('permission:basic.factories.index')->name('factories.index');
+        Route::post('/factories', [FactoryController::class, 'store'])
+            ->middleware('permission:basic.factories.create')->name('factories.store');
+        Route::put('/factories/{factory}', [FactoryController::class, 'update'])
+            ->middleware('permission:basic.factories.update')->name('factories.update');
+
+        Route::get('/workshops', [WorkshopController::class, 'index'])
+            ->middleware('permission:basic.workshops.index')->name('workshops.index');
+        Route::post('/workshops', [WorkshopController::class, 'store'])
+            ->middleware('permission:basic.workshops.create')->name('workshops.store');
+        Route::put('/workshops/{workshop}', [WorkshopController::class, 'update'])
+            ->middleware('permission:basic.workshops.update')->name('workshops.update');
+
+        Route::get('/production-lines', [ProductionLineController::class, 'index'])
+            ->middleware('permission:basic.lines.index')->name('production-lines.index');
+        Route::post('/production-lines', [ProductionLineController::class, 'store'])
+            ->middleware('permission:basic.lines.create')->name('production-lines.store');
+        Route::put('/production-lines/{production_line}', [ProductionLineController::class, 'update'])
+            ->middleware('permission:basic.lines.update')->name('production-lines.update');
+
+        Route::get('/teams', [TeamController::class, 'index'])
+            ->middleware('permission:basic.teams.index')->name('teams.index');
+        Route::post('/teams', [TeamController::class, 'store'])
+            ->middleware('permission:basic.teams.create')->name('teams.store');
+        Route::put('/teams/{team}', [TeamController::class, 'update'])
+            ->middleware('permission:basic.teams.update')->name('teams.update');
+
+        Route::get('/employees', [EmployeeController::class, 'index'])
+            ->middleware('permission:basic.employees.index')->name('employees.index');
+        Route::post('/employees', [EmployeeController::class, 'store'])
+            ->middleware('permission:basic.employees.create')->name('employees.store');
+        Route::put('/employees/{employee}', [EmployeeController::class, 'update'])
+            ->middleware('permission:basic.employees.update')->name('employees.update');
     });
 });
