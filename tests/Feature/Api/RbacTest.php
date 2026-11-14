@@ -166,6 +166,16 @@ test('duplicate user emails are rejected', function () {
         ->assertJsonPath('code', 422);
 });
 
+test('an administrator cannot disable their own account', function () {
+    $admin = userWithPermissions(['system.users.update']);
+
+    bearer($admin)->putJson("/api/v1/system/users/{$admin->id}", ['status' => false])
+        ->assertForbidden()
+        ->assertJsonPath('code', 403);
+
+    expect($admin->fresh()->status)->toBeTrue();
+});
+
 test('an administrator can edit, disable, reset a password and reassign roles', function () {
     $admin = userWithPermissions([
         'system.users.update',
@@ -175,6 +185,7 @@ test('an administrator can edit, disable, reset a password and reassign roles', 
     $user = User::factory()->create();
     $first = Role::factory()->create();
     $second = Role::factory()->create();
+    $user->createToken('old-device');
 
     bearer($admin)->putJson("/api/v1/system/users/{$user->id}", [
         'name' => '李四',
@@ -194,6 +205,8 @@ test('an administrator can edit, disable, reset a password and reassign roles', 
     ])->assertOk()->assertJsonCount(2, 'data.roles');
 
     expect(Hash::check('brand-new-password', $user->fresh()->password))->toBeTrue();
+
+    expect($user->tokens()->count())->toBe(0);
 });
 
 test('an administrator can list and filter users', function () {
@@ -236,6 +249,55 @@ test('a role in use cannot be deleted', function () {
         ->assertJsonPath('code', 403);
 
     expect(Role::query()->whereKey($role->id)->exists())->toBeTrue();
+});
+
+test('the super admin role cannot be disabled or deleted', function () {
+    $admin = userWithPermissions(['system.roles.update', 'system.roles.delete']);
+    $superAdmin = Role::factory()->create(['code' => Role::SUPER_ADMIN]);
+
+    bearer($admin)->putJson("/api/v1/system/roles/{$superAdmin->id}", ['status' => false])
+        ->assertForbidden()
+        ->assertJsonPath('code', 403);
+
+    bearer($admin)->deleteJson("/api/v1/system/roles/{$superAdmin->id}")
+        ->assertForbidden()
+        ->assertJsonPath('code', 403);
+
+    bearer($admin)->putJson("/api/v1/system/roles/{$superAdmin->id}", ['code' => 'renamed'])
+        ->assertForbidden()
+        ->assertJsonPath('code', 403);
+
+    expect($superAdmin->fresh())
+        ->status->toBeTrue()
+        ->code->toBe(Role::SUPER_ADMIN);
+});
+
+test('an administrator can list roles, rename a role, toggle it off and change its permissions', function () {
+    $admin = userWithPermissions(['system.roles.index', 'system.roles.update']);
+    $role = Role::factory()->create(['name' => '旧名称']);
+    $keep = Permission::factory()->create(['code' => 'system.users.index', 'type' => 'api']);
+    $drop = Permission::factory()->create(['code' => 'system.users.create', 'type' => 'api']);
+    $role->permissions()->attach([$keep->id, $drop->id]);
+
+    bearer($admin)->getJson('/api/v1/system/roles')
+        ->assertOk()
+        ->assertJsonPath('data.meta.total', 2);
+
+    bearer($admin)->putJson("/api/v1/system/roles/{$role->id}", [
+        'name' => '新名称',
+        'status' => false,
+        'permission_ids' => [$keep->id],
+    ])->assertOk()
+        ->assertJsonPath('data.name', '新名称')
+        ->assertJsonPath('data.status', false)
+        ->assertJsonCount(1, 'data.permissions')
+        ->assertJsonPath('data.permissions.0.code', 'system.users.index');
+
+    $fresh = $role->fresh();
+
+    expect($fresh->name)->toBe('新名称')
+        ->and($fresh->status)->toBeFalse()
+        ->and($fresh->permissions()->pluck('code')->all())->toBe(['system.users.index']);
 });
 
 test('permission list covers all five permission types', function () {

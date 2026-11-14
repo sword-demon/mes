@@ -38,6 +38,16 @@ class RoleService
      */
     public function update(Role $role, array $data, ?array $permissionIds): Role
     {
+        if ($role->code === Role::SUPER_ADMIN) {
+            if (array_key_exists('status', $data) && $data['status'] === false) {
+                throw new ApiException('超级管理员角色不允许停用', 403, status: 403);
+            }
+
+            if (array_key_exists('code', $data) && $data['code'] !== Role::SUPER_ADMIN) {
+                throw new ApiException('超级管理员角色编码不允许修改', 403, status: 403);
+            }
+        }
+
         $role->update($data);
 
         if ($permissionIds !== null) {

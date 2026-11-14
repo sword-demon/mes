@@ -2,6 +2,7 @@
 
 namespace App\Modules\System\Service;
 
+use App\Core\Exceptions\ApiException;
 use App\Modules\System\Model\User;
 use Illuminate\Pagination\LengthAwarePaginator;
 
@@ -44,6 +45,10 @@ class UserService
      */
     public function update(User $user, array $data): User
     {
+        if (array_key_exists('status', $data) && $data['status'] === false && $user->is(auth()->user())) {
+            throw new ApiException('不能停用当前登录账号', 403, status: 403);
+        }
+
         $user->update($data);
 
         return $user->load('roles');
