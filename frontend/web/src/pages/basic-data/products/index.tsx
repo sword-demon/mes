@@ -5,13 +5,14 @@ import {
     createProduct,
     deleteProduct,
     listProducts,
+    PRODUCT_CATEGORIES,
     updateProduct,
 } from '@/api/products';
 import type { Product, ProductPayload } from '@/api/products';
 import ResourcePage from '../resource-page';
 import ProductVersionsDrawer from './versions-drawer';
 
-const categories = ['成品', '半成品', '部件'];
+const categoryOptions = PRODUCT_CATEGORIES.map((category) => ({ label: category, value: category }));
 
 export default function Products() {
     const [versionProduct, setVersionProduct] = useState<Product | null>(null);
@@ -30,7 +31,7 @@ export default function Products() {
                         name: 'category',
                         label: '分类',
                         type: 'select',
-                        options: categories.map((category) => ({ label: category, value: category })),
+                        options: categoryOptions,
                     },
                 ]}
                 columns={[
@@ -51,7 +52,7 @@ export default function Products() {
                         label: '分类',
                         type: 'select',
                         required: true,
-                        options: categories.map((category) => ({ label: category, value: category })),
+                        options: categoryOptions,
                     },
                     { name: 'unit', label: '单位', required: true },
                     { name: 'status', label: '启用', type: 'switch' },

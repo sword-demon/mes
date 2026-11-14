@@ -20,7 +20,7 @@ class ProductFactory extends EloquentFactory
             'name' => fake()->unique()->words(2, true),
             'model' => strtoupper(fake()->bothify('??-###')),
             'specification' => fake()->sentence(3),
-            'category' => fake()->randomElement(['成品', '半成品', '部件']),
+            'category' => fake()->randomElement(Product::CATEGORIES),
             'unit' => '台',
             'status' => true,
         ];

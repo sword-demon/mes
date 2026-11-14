@@ -9,6 +9,7 @@ import type { Product, ProductVersion } from '@/api/products';
 import { http } from '@/api/client';
 import { useAuthStore } from '@/stores/auth';
 import { currentUserFixture } from '@/test/fixtures';
+import type { Paginated } from '@/types/api';
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -29,10 +30,7 @@ globalThis.ResizeObserver ??= class {
     disconnect() {}
 };
 
-const products: {
-    items: Product[];
-    meta: { current_page: number; per_page: number; total: number; last_page: number };
-} = {
+const products: Paginated<Product> = {
     items: [
         {
             id: 7,
@@ -48,10 +46,7 @@ const products: {
     meta: { current_page: 1, per_page: 15, total: 1, last_page: 1 },
 };
 
-const versions: {
-    items: ProductVersion[];
-    meta: { current_page: number; per_page: number; total: number; last_page: number };
-} = {
+const versions: Paginated<ProductVersion> = {
     items: [
         {
             id: 11,

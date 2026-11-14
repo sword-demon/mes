@@ -2,7 +2,11 @@ import { api } from './client';
 import type { BasicDataParams } from './basic-data';
 import type { Paginated } from '@/types/api';
 
-export type ProductParams = BasicDataParams & { category?: string };
+export const PRODUCT_CATEGORIES = ['成品', '半成品', '部件'] as const;
+
+export type ProductCategory = (typeof PRODUCT_CATEGORIES)[number];
+
+export type ProductParams = BasicDataParams & { category?: ProductCategory };
 
 export type Product = {
     id: number;
@@ -10,7 +14,7 @@ export type Product = {
     name: string;
     model: string | null;
     specification: string | null;
-    category: string;
+    category: ProductCategory;
     unit: string;
     status: boolean;
 };
@@ -30,7 +34,7 @@ export type ProductPayload = {
     name: string;
     model?: string | null;
     specification?: string | null;
-    category: string;
+    category: ProductCategory;
     unit: string;
     status?: boolean;
 };
@@ -58,6 +62,7 @@ export function deleteProduct(id: number) {
 }
 
 export function listProductVersions(productId: number) {
+    // shortcut: one page of 100 covers a product's versions today; add paging when it does not.
     return api.get<Paginated<ProductVersion>>(`/basic-data/products/${productId}/versions`, { per_page: 100 });
 }
 
