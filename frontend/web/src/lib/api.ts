@@ -4,7 +4,14 @@ const baseUrl = import.meta.env.VITE_API_URL ?? '/api/v1';
 
 type ApiError = {
     message: string;
-    errors?: Record<string, string[]>;
+    data?: { errors?: Record<string, string[]> };
+};
+
+type ApiEnvelope<T> = {
+    code: number;
+    message: string;
+    data: T;
+    timestamp: number;
 };
 
 async function request<T>(
@@ -52,7 +59,9 @@ async function request<T>(
         return undefined as T;
     }
 
-    return (await response.json()) as T;
+    const payload = (await response.json()) as ApiEnvelope<T>;
+
+    return payload.data;
 }
 
 export class ApiRequestError extends Error {

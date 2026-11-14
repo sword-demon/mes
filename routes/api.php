@@ -1,7 +1,7 @@
 <?php
 
-use App\Http\Controllers\Api\V1\Auth\AccessTokenController;
-use App\Http\Controllers\Api\V1\MeController;
+use App\Modules\System\Controller\AccessTokenController;
+use App\Modules\System\Controller\MeController;
 use Illuminate\Support\Facades\Route;
 
 Route::post('/auth/tokens', [AccessTokenController::class, 'store'])
