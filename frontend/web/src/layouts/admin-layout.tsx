@@ -11,9 +11,15 @@ export default function AdminLayout() {
     const navigate = useNavigate();
     const user = useAuthStore((state) => state.user);
     const setUser = useAuthStore((state) => state.setUser);
-    const clear = useAuthStore((state) => state.clear);
+    const clearAuth = useAuthStore((state) => state.clearAuth);
 
-    const { data } = useQuery({ queryKey: ['me'], queryFn: fetchMe });
+    const { data } = useQuery({
+        queryKey: ['me'],
+        queryFn: fetchMe,
+        // Login seeds this cache, so the request only re-runs on a cold start
+        // where it doubles as the token validation that triggers 401 handling.
+        staleTime: 30_000,
+    });
 
     useEffect(() => {
         if (data) {
@@ -23,7 +29,7 @@ export default function AdminLayout() {
 
     async function handleLogout() {
         await logout().catch(() => undefined);
-        clear();
+        clearAuth();
         navigate('/login', { replace: true });
     }
 

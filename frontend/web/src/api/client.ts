@@ -6,7 +6,7 @@ import { ApiRequestError } from '@/utils/api-error';
 
 type ErrorEnvelope = Partial<ApiEnvelope<{ errors?: Record<string, string[]> }>>;
 
-const http = axios.create({
+export const http = axios.create({
     baseURL: import.meta.env.VITE_API_URL ?? '/api/v1',
     headers: { Accept: 'application/json' },
 });
@@ -30,11 +30,9 @@ http.interceptors.response.use(undefined, (error: unknown) => {
     const payload = error.response?.data as ErrorEnvelope | undefined;
 
     if (status === 401) {
-        useAuthStore.getState().clear();
-
-        if (window.location.pathname !== '/login') {
-            window.location.assign('/login');
-        }
+        // Clearing the token makes RequireAuth render its redirect, so the
+        // request layer does not need to know about routing.
+        useAuthStore.getState().clearAuth();
     }
 
     const message =
@@ -42,7 +40,7 @@ http.interceptors.response.use(undefined, (error: unknown) => {
         (status === 0 ? '无法连接服务器，请检查网络后重试' : '请求失败');
 
     return Promise.reject(
-        new ApiRequestError(message, status, payload?.data?.errors),
+        new ApiRequestError(message, status, payload?.code ?? status, payload?.data?.errors),
     );
 });
 
@@ -52,7 +50,11 @@ async function unwrap<T>(
     const response = await request;
 
     if (response.data.code !== 200) {
-        throw new ApiRequestError(response.data.message, response.data.code);
+        throw new ApiRequestError(
+            response.data.message,
+            response.status,
+            response.data.code,
+        );
     }
 
     return response.data.data;

@@ -1,20 +1,21 @@
-import { useMutation } from '@tanstack/react-query';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Alert, Button, Card, Form, Input, Typography } from 'antd';
 import { Navigate, useNavigate } from 'react-router';
-import { login } from '@/api/auth';
+import { login, loginErrorMessage } from '@/api/auth';
 import { useAuthStore } from '@/stores/auth';
 import type { LoginPayload } from '@/types/api';
-import { ApiRequestError } from '@/utils/api-error';
 
 export default function Login() {
     const navigate = useNavigate();
+    const queryClient = useQueryClient();
     const token = useAuthStore((state) => state.token);
-    const setToken = useAuthStore((state) => state.setToken);
+    const signIn = useAuthStore((state) => state.signIn);
 
     const { mutate, isPending, error } = useMutation({
         mutationFn: login,
         onSuccess: (result) => {
-            setToken(result.token);
+            signIn(result.token, result.user);
+            queryClient.setQueryData(['me'], result.user);
             navigate('/', { replace: true });
         },
     });
@@ -27,10 +28,7 @@ export default function Login() {
         mutate({ ...values, device_name: 'web' });
     }
 
-    const errorMessage =
-        error instanceof ApiRequestError && error.status === 422
-            ? '邮箱或密码错误'
-            : error?.message;
+    const errorMessage = error ? loginErrorMessage(error) : undefined;
 
     return (
         <main className="flex min-h-screen items-center justify-center bg-neutral-100">
@@ -42,7 +40,7 @@ export default function Login() {
                     <Alert
                         type="error"
                         showIcon
-                        message={errorMessage}
+                        title={errorMessage}
                         className="mb-4"
                     />
                 )}

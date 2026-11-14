@@ -5,9 +5,9 @@ import type { User } from '@/types/api';
 type AuthState = {
     token: string | null;
     user: User | null;
-    setToken: (token: string) => void;
+    signIn: (token: string, user: User | null) => void;
     setUser: (user: User) => void;
-    clear: () => void;
+    clearAuth: () => void;
 };
 
 export const useAuthStore = create<AuthState>()(
@@ -15,9 +15,9 @@ export const useAuthStore = create<AuthState>()(
         (set) => ({
             token: null,
             user: null,
-            setToken: (token) => set({ token, user: null }),
+            signIn: (token, user) => set({ token, user }),
             setUser: (user) => set({ user }),
-            clear: () => set({ token: null, user: null }),
+            clearAuth: () => set({ token: null, user: null }),
         }),
         { name: 'mes.auth' },
     ),
