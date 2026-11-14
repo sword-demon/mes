@@ -50,9 +50,16 @@ MySQL、Redis、EMQX 均使用命名卷（`mes_mysql-data`、`mes_redis-data`、
 
 把 `.env.docker.example` 中方案 A 的变量合并进根目录 `.env`，然后 `php artisan config:clear`。
 
-方案 B（复用宿主机已有 MySQL）只需把 `DB_PORT` 改为 `13306`，其余不变。
+方案 B（复用宿主机已有 MySQL）只把 `DB_PORT` 改为 `13306`，其余不变，并跳过内置 MySQL：
+
+```bash
+docker compose --env-file .env -f docker/docker-compose.yml up -d redis emqx simulator
+```
+
+宿主机 MySQL 需预先创建 `mes` 库与 `mes` 账号，字符集 `utf8mb4`。
 
 `--env-file .env` 让 compose 与 Laravel 读取同一份变量，`DB_DATABASE` / `DB_USERNAME` / `DB_PASSWORD` 只在一处维护。
+该参数不能省略：compose 只自动读取自身所在目录（`docker/`）的 `.env`，不会读仓库根目录的 `.env`。
 
 ## 设备模拟器
 

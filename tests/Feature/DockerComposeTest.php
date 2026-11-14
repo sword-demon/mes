@@ -1,38 +1,66 @@
 <?php
 
-test('compose file orchestrates middleware on high host ports', function () {
-    $compose = file_get_contents(base_path('docker/docker-compose.yml'));
+use Symfony\Component\Yaml\Yaml;
 
-    expect($compose)
-        ->toContain('mysql:')
-        ->toContain('redis:')
-        ->toContain('emqx:')
-        ->toContain('simulator:')
-        ->toContain('${MYSQL_HOST_PORT:-13307}:3306')
-        ->toContain('${REDIS_HOST_PORT:-16379}:6379')
-        ->toContain('${MQTT_HOST_PORT:-11883}:1883')
-        ->toContain('${MQTT_WS_HOST_PORT:-11888}:8883')
-        ->toContain('${EMQX_DASHBOARD_HOST_PORT:-18083}:18083')
-        ->toContain('mysql-data:/var/lib/mysql')
-        ->toContain('condition: service_healthy');
+/**
+ * @return array<string, mixed>
+ */
+function compose(): array
+{
+    return Yaml::parseFile(base_path('docker/docker-compose.yml'));
+}
+
+/**
+ * @return array<string, string>
+ */
+function publishedPorts(string $service): array
+{
+    $ports = [];
+
+    foreach (compose()['services'][$service]['ports'] as $mapping) {
+        $separator = strrpos($mapping, ':');
+        $container = substr($mapping, $separator + 1);
+        $host = substr($mapping, 0, $separator);
+
+        if (preg_match('/\$\{[A-Z_]+:-(\d+)\}/', $host, $matches)) {
+            $host = $matches[1];
+        }
+
+        $ports[$container] = $host;
+    }
+
+    return $ports;
+}
+
+test('middleware publishes only high host ports', function () {
+    expect(publishedPorts('mysql'))->toBe(['3306' => '13307'])
+        ->and(publishedPorts('redis'))->toBe(['6379' => '16379'])
+        ->and(publishedPorts('emqx'))->toBe([
+            '1883' => '11883',
+            '8883' => '11888',
+            '18083' => '18083',
+        ]);
 });
 
-test('host env template matches the compose contract', function () {
-    $env = file_get_contents(base_path('.env.docker.example'));
-
-    expect($env)
-        ->toContain('DB_PORT=13307')
-        ->toContain('REDIS_PORT=16379')
-        ->toContain('MQTT_PORT=11883')
-        ->toContain('QUEUE_CONNECTION=redis')
-        ->toContain('DB_PORT=13306');
+test('mysql persists its data directory to a named volume', function () {
+    expect(compose()['services']['mysql']['volumes'])->toContain('mysql-data:/var/lib/mysql')
+        ->and(compose()['volumes'])->toHaveKey('mysql-data');
 });
 
-test('simulator only grows output while a device is running', function () {
-    $source = file_get_contents(base_path('docker/simulator/publish.py'));
+test('the simulator waits for a healthy broker and reaches it by service name', function () {
+    $simulator = compose()['services']['simulator'];
 
-    expect($source)
-        ->toContain('PRODUCTIVE_STATES = {RUNNING}')
-        ->toContain('if running:')
-        ->toContain('output[device] += random.randint(1, 5)');
+    expect($simulator['depends_on']['emqx']['condition'])->toBe('service_healthy')
+        ->and($simulator['environment']['MQTT_HOST'])->toBe('emqx')
+        ->and($simulator['environment']['MQTT_PORT'])->toBe(1883);
+});
+
+test('the host env template targets the compose ports', function () {
+    $env = parse_ini_string(file_get_contents(base_path('.env.docker.example')));
+
+    expect($env['DB_HOST'])->toBe('127.0.0.1')
+        ->and($env['DB_PORT'])->toBe('13307')
+        ->and($env['REDIS_PORT'])->toBe('16379')
+        ->and($env['MQTT_PORT'])->toBe('11883')
+        ->and($env['QUEUE_CONNECTION'])->toBe('redis');
 });

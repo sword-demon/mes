@@ -1,6 +1,6 @@
 import { type FormEvent, useState } from 'react';
 import { useNavigate } from 'react-router';
-import { api } from '@/lib/api';
+import { api, ApiRequestError } from '@/lib/api';
 import { setToken } from '@/lib/auth';
 
 export default function Login() {
@@ -22,8 +22,14 @@ export default function Login() {
 
             setToken(response.token);
             navigate('/');
-        } catch {
-            setError('邮箱或密码错误');
+        } catch (caught) {
+            setError(
+                caught instanceof ApiRequestError && caught.status === 422
+                    ? '邮箱或密码错误'
+                    : caught instanceof Error
+                      ? caught.message
+                      : '登录失败',
+            );
         }
     }
 

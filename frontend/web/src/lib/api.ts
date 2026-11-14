@@ -26,11 +26,17 @@ async function request<T>(
         headers.Authorization = `Bearer ${token}`;
     }
 
-    const response = await fetch(`${baseUrl}${path}`, {
-        method,
-        headers,
-        body: body === undefined ? undefined : JSON.stringify(body),
-    });
+    let response: Response;
+
+    try {
+        response = await fetch(`${baseUrl}${path}`, {
+            method,
+            headers,
+            body: body === undefined ? undefined : JSON.stringify(body),
+        });
+    } catch {
+        throw new ApiRequestError('无法连接服务器，请检查网络后重试', 0);
+    }
 
     if (response.status === 401) {
         clearToken();
@@ -39,7 +45,7 @@ async function request<T>(
     if (!response.ok) {
         const payload = (await response.json().catch(() => null)) as ApiError | null;
 
-        throw new Error(payload?.message ?? '请求失败');
+        throw new ApiRequestError(payload?.message ?? '请求失败', response.status);
     }
 
     if (response.status === 204) {
@@ -47,6 +53,15 @@ async function request<T>(
     }
 
     return (await response.json()) as T;
+}
+
+export class ApiRequestError extends Error {
+    constructor(
+        message: string,
+        public readonly status: number,
+    ) {
+        super(message);
+    }
 }
 
 export const api = {

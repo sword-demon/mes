@@ -43,6 +43,18 @@ ALARM_MESSAGES = {
     "over_temperature": "温度超限",
     "over_speed": "转速超限",
     "over_pressure": "压力超限",
+    "device_fault": "设备故障",
+}
+
+# 量程与告警阈值集中在一处，避免生成区间和判定条件各自漂移。
+TEMPERATURE_RANGE = (35.0, 70.0)
+SPEED_RANGE = (800, 1500)
+PRESSURE_RANGE = (0.4, 0.9)
+
+THRESHOLDS = {
+    "over_temperature": 68.0,
+    "over_speed": 1450,
+    "over_pressure": 0.85,
 }
 
 stop = False
@@ -93,6 +105,20 @@ def main():
     states = {device: RUNNING for device in DEVICES}
     output = {device: 0 for device in DEVICES}
 
+    # 先发一次初始状态，消费者才有基线，不必等第一次状态跃迁。
+    for device in DEVICES:
+        client.publish(
+            topic(device, "status"),
+            json.dumps(
+                {
+                    "device_code": device,
+                    "timestamp": now(),
+                    "status": states[device],
+                },
+                ensure_ascii=False,
+            ),
+        )
+
     while not stop:
         for device in DEVICES:
             previous = states[device]
@@ -111,9 +137,9 @@ def main():
                 )
 
             running = current in PRODUCTIVE_STATES
-            temperature = round(random.uniform(35.0, 70.0), 1) if running else round(random.uniform(20.0, 40.0), 1)
-            speed = random.randint(800, 1500) if running else 0
-            pressure = round(random.uniform(0.4, 0.9), 2) if running else 0.0
+            temperature = round(random.uniform(*TEMPERATURE_RANGE), 1) if running else round(random.uniform(20.0, 40.0), 1)
+            speed = random.randint(*SPEED_RANGE) if running else 0
+            pressure = round(random.uniform(*PRESSURE_RANGE), 2) if running else 0.0
 
             if running:
                 output[device] += random.randint(1, 5)
@@ -136,14 +162,14 @@ def main():
 
             alarm = None
 
-            if temperature > 68:
+            if temperature > THRESHOLDS["over_temperature"]:
                 alarm = "over_temperature"
-            elif speed > 1450:
+            elif speed > THRESHOLDS["over_speed"]:
                 alarm = "over_speed"
-            elif pressure > 0.85:
+            elif pressure > THRESHOLDS["over_pressure"]:
                 alarm = "over_pressure"
             elif current == FAULT:
-                alarm = "over_temperature"
+                alarm = "device_fault"
 
             if alarm:
                 client.publish(
