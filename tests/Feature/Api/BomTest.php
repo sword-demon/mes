@@ -5,10 +5,11 @@ use App\Modules\Bom\Model\BomItem;
 use App\Modules\Material\Model\Material;
 use App\Modules\Product\Model\ProductVersion;
 
-it('lists boms with their product version and filters by audit status', function () {
+it('lists boms with their product version and only surfaces approved enabled ones as usable', function () {
     $actor = userWithPermissions(['basic.boms.index']);
     $approvedVersion = ProductVersion::factory()->create();
     $draftVersion = ProductVersion::factory()->create();
+    $disabledVersion = ProductVersion::factory()->create();
 
     Bom::factory()->create([
         'product_version_id' => $approvedVersion->id,
@@ -20,8 +21,17 @@ it('lists boms with their product version and filters by audit status', function
         'version' => 'V1.0',
         'audit_status' => Bom::DRAFT,
     ]);
+    Bom::factory()->create([
+        'product_version_id' => $disabledVersion->id,
+        'version' => 'V1.0',
+        'audit_status' => Bom::APPROVED,
+        'status' => false,
+    ]);
 
-    bearer($actor)->getJson('/api/v1/basic-data/boms?'.http_build_query(['audit_status' => 'approved']))
+    bearer($actor)->getJson('/api/v1/basic-data/boms?'.http_build_query([
+        'audit_status' => 'approved',
+        'status' => '1',
+    ]))
         ->assertOk()
         ->assertJsonCount(1, 'data.items')
         ->assertJsonPath('data.items.0.audit_status', 'approved')
@@ -73,7 +83,7 @@ it('creates a draft bom for a product version', function () {
     ]);
 });
 
-it('keeps the bom code unique and the version unique inside a product version', function () {
+it('keeps the bom code unique and the version unique inside a product', function () {
     $actor = userWithPermissions(['basic.boms.create']);
     $version = ProductVersion::factory()->create();
     $otherVersion = ProductVersion::factory()->create();

@@ -42,6 +42,7 @@ test('the product seeder covers three categories, statuses, boms and is idempote
         ->toBe(2)
         ->and(Bom::query()->where('audit_status', Bom::APPROVED)->count())->toBe(2)
         ->and(Bom::query()->where('audit_status', Bom::DRAFT)->count())->toBe(2)
+        ->and(Bom::query()->with('productVersion')->get()->pluck('productVersion.product_id')->unique()->count())->toBe(3)
         ->and(Bom::query()->distinct()->count('product_version_id'))->toBe(4)
         ->and(Bom::query()->where('audit_status', Bom::APPROVED)->whereNull('audited_at')->count())->toBe(0);
 });
