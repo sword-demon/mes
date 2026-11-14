@@ -4,10 +4,7 @@ import { useAuthStore } from '@/stores/auth';
 import type { ApiEnvelope } from '@/types/api';
 import { ApiRequestError } from '@/utils/api-error';
 
-type ErrorPayload = {
-    message?: string;
-    data?: { errors?: Record<string, string[]> };
-};
+type ErrorEnvelope = Partial<ApiEnvelope<{ errors?: Record<string, string[]> }>>;
 
 const http = axios.create({
     baseURL: import.meta.env.VITE_API_URL ?? '/api/v1',
@@ -30,7 +27,7 @@ http.interceptors.response.use(undefined, (error: unknown) => {
     }
 
     const status = error.response?.status ?? 0;
-    const payload = error.response?.data as ErrorPayload | undefined;
+    const payload = error.response?.data as ErrorEnvelope | undefined;
 
     if (status === 401) {
         useAuthStore.getState().clear();
@@ -53,6 +50,10 @@ async function unwrap<T>(
     request: Promise<AxiosResponse<ApiEnvelope<T>>>,
 ): Promise<T> {
     const response = await request;
+
+    if (response.data.code !== 200) {
+        throw new ApiRequestError(response.data.message, response.data.code);
+    }
 
     return response.data.data;
 }
