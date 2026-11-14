@@ -1,9 +1,11 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { App as AntdApp } from 'antd';
+import { App as AntdApp, ConfigProvider } from 'antd';
+import zhCN from 'antd/locale/zh_CN';
 import { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import Products from './index';
+import type { Product, ProductVersion } from '@/api/products';
 import { http } from '@/api/client';
 import { useAuthStore } from '@/stores/auth';
 import { currentUserFixture } from '@/test/fixtures';
@@ -27,7 +29,10 @@ globalThis.ResizeObserver ??= class {
     disconnect() {}
 };
 
-const products = {
+const products: {
+    items: Product[];
+    meta: { current_page: number; per_page: number; total: number; last_page: number };
+} = {
     items: [
         {
             id: 7,
@@ -43,7 +48,10 @@ const products = {
     meta: { current_page: 1, per_page: 15, total: 1, last_page: 1 },
 };
 
-const versions = {
+const versions: {
+    items: ProductVersion[];
+    meta: { current_page: number; per_page: number; total: number; last_page: number };
+} = {
     items: [
         {
             id: 11,
@@ -67,6 +75,14 @@ const versions = {
     meta: { current_page: 1, per_page: 100, total: 2, last_page: 1 },
 };
 
+let versionItems: typeof versions.items = [];
+
+async function flush() {
+    await act(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 20));
+    });
+}
+
 async function renderPage() {
     const container = document.createElement('div');
     document.body.append(container);
@@ -76,9 +92,11 @@ async function renderPage() {
     await act(async () => {
         createRoot(container).render(
             <QueryClientProvider client={queryClient}>
-                <AntdApp>
-                    <Products />
-                </AntdApp>
+                <ConfigProvider locale={zhCN}>
+                    <AntdApp>
+                        <Products />
+                    </AntdApp>
+                </ConfigProvider>
             </QueryClientProvider>,
         );
     });
@@ -117,8 +135,25 @@ async function clickRadio(label: string) {
     });
 }
 
+async function clickButton(label: string) {
+    const normalize = (text: string | null) => text?.replace(/\s/g, '') ?? '';
+    const button = [...document.querySelectorAll('button')].find(
+        (candidate) => normalize(candidate.textContent) === label,
+    );
+
+    expect(button).toBeDefined();
+
+    await act(async () => {
+        button!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+}
+
 describe('产品管理页', () => {
     beforeEach(() => {
+        versionItems = versions.items.map((version) => ({ ...version }));
+
         useAuthStore.setState({
             token: 'token',
             user: currentUserFixture({
@@ -131,7 +166,34 @@ describe('产品管理页', () => {
         });
 
         http.defaults.adapter = async (config) => {
-            const data = (config.url ?? '').includes('/versions') ? versions : products;
+            const url = config.url ?? '';
+            let data: typeof products | typeof versions = products;
+
+            if (url.includes('/versions')) {
+                if (config.method === 'post') {
+                    const body = JSON.parse(String(config.data)) as {
+                        version: string;
+                        remark?: string;
+                        status?: boolean;
+                    };
+                    const created = {
+                        id: 99,
+                        product_id: 7,
+                        version: body.version,
+                        remark: body.remark ?? null,
+                        status: body.status ?? true,
+                        created_at: '2026-11-15T00:00:00Z',
+                        updated_at: '2026-11-15T00:00:00Z',
+                    };
+                    versionItems = [...versionItems, created];
+                    data = { ...versions, items: [created] };
+                } else {
+                    data = {
+                        items: versionItems,
+                        meta: { ...versions.meta, total: versionItems.length },
+                    };
+                }
+            }
 
             return {
                 data: { code: 200, message: 'success', data, timestamp: 0 },
@@ -161,16 +223,56 @@ describe('产品管理页', () => {
         expect(document.body.textContent).toContain('增加远程通信');
     });
 
-    it('hides version editing without the update permission', async () => {
+    it('hides the version entry without the update permission', async () => {
         useAuthStore.setState({
             token: 'token',
             user: currentUserFixture({ permissions: ['basic.products.index'] }),
         });
 
         await renderPage();
-        await clickByText('button', '版本');
 
+        expect(document.body.textContent).not.toContain('版本');
         expect(document.body.textContent).not.toContain('新增版本');
         expect(document.body.textContent).not.toContain('编辑当前版本');
+    });
+
+    it('clears the previous version values when switching from editing to creating', async () => {
+        await renderPage();
+        await clickButton('版本');
+        await clickButton('新增版本');
+
+        expect((document.querySelector('input#version') as HTMLInputElement).value).toBe('');
+
+        await clickButton('取消');
+        await clickButton('编辑当前版本');
+
+        expect((document.querySelector('input#version') as HTMLInputElement).value).toBe('V1.0');
+
+        await clickButton('取消');
+        await clickButton('新增版本');
+
+        expect((document.querySelector('input#version') as HTMLInputElement).value).toBe('');
+    });
+
+    it('selects the version it just created', async () => {
+        await renderPage();
+        await clickButton('版本');
+        await clickButton('新增版本');
+
+        const input = document.querySelector('input#version') as HTMLInputElement;
+
+        await act(async () => {
+            const setValue = Object.getOwnPropertyDescriptor(
+                HTMLInputElement.prototype,
+                'value',
+            )!.set!;
+            setValue.call(input, 'V3.0');
+            input.dispatchEvent(new Event('input', { bubbles: true }));
+        });
+
+        await clickButton('确定');
+        await flush();
+
+        expect(document.body.textContent).toContain('V3.0');
     });
 });

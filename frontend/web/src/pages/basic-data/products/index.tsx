@@ -1,5 +1,6 @@
 import { Button } from 'antd';
 import { useState } from 'react';
+import Can from '@/components/can';
 import {
     createProduct,
     deleteProduct,
@@ -56,9 +57,11 @@ export default function Products() {
                     { name: 'status', label: '启用', type: 'switch' },
                 ]}
                 extraActions={(record) => (
-                    <Button type="link" onClick={() => setVersionProduct(record)}>
-                        版本
-                    </Button>
+                    <Can code="button.basic.products.update">
+                        <Button type="link" onClick={() => setVersionProduct(record)}>
+                            版本
+                        </Button>
+                    </Can>
                 )}
             />
             <ProductVersionsDrawer

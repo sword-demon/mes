@@ -24,7 +24,55 @@ import {
 import type { Product, ProductVersion, ProductVersionPayload } from '@/api/products';
 import { ApiRequestError } from '@/utils/api-error';
 
-type Editing = { mode: 'create' } | { mode: 'edit'; record: ProductVersion } | null;
+type Editing = { mode: 'create' } | { mode: 'edit'; record: ProductVersion };
+
+/**
+ * Mounted only while editing, so every open starts from a fresh form store.
+ */
+function VersionFormModal({
+    editing,
+    saving,
+    onSave,
+    onClose,
+}: {
+    editing: Editing;
+    saving: boolean;
+    onSave: (values: ProductVersionPayload) => void;
+    onClose: () => void;
+}) {
+    const [form] = Form.useForm();
+
+    return (
+        <Modal
+            open
+            title={editing.mode === 'create' ? '新增版本' : '编辑版本'}
+            confirmLoading={saving}
+            onCancel={onClose}
+            onOk={() => form.submit()}
+        >
+            <Form
+                form={form}
+                layout="vertical"
+                initialValues={editing.mode === 'edit' ? editing.record : { status: true }}
+                onFinish={onSave}
+            >
+                <Form.Item
+                    name="version"
+                    label="版本号"
+                    rules={[{ required: true, message: '请填写版本号' }]}
+                >
+                    <Input placeholder="如 V1.0" />
+                </Form.Item>
+                <Form.Item name="remark" label="备注">
+                    <Input.TextArea rows={3} />
+                </Form.Item>
+                <Form.Item name="status" label="启用" valuePropName="checked">
+                    <Switch />
+                </Form.Item>
+            </Form>
+        </Modal>
+    );
+}
 
 export default function ProductVersionsDrawer({
     product,
@@ -36,8 +84,7 @@ export default function ProductVersionsDrawer({
     const { message } = App.useApp();
     const queryClient = useQueryClient();
     const [activeId, setActiveId] = useState<number | null>(null);
-    const [editing, setEditing] = useState<Editing>(null);
-    const [form] = Form.useForm();
+    const [editing, setEditing] = useState<Editing | null>(null);
 
     const queryKey = ['basic.products', product?.id, 'versions'];
     const query = useQuery({
@@ -59,8 +106,12 @@ export default function ProductVersionsDrawer({
                 ? createProductVersion(product.id, values)
                 : updateProductVersion(product.id, editing.record.id, values);
         },
-        onSuccess: () => {
+        onSuccess: (saved) => {
             queryClient.invalidateQueries({ queryKey });
+            // Creation should land on the new version, not the oldest one.
+            if (editing?.mode === 'create') {
+                setActiveId(saved.id);
+            }
             message.success('已保存');
             setEditing(null);
         },
@@ -128,35 +179,15 @@ export default function ProductVersionsDrawer({
                 </Space>
             )}
 
-            <Modal
-                open={editing !== null}
-                title={editing?.mode === 'create' ? '新增版本' : '编辑版本'}
-                confirmLoading={save.isPending}
-                onCancel={closeEditing}
-                onOk={() => form.submit()}
-                destroyOnHidden
-            >
-                <Form
-                    form={form}
-                    layout="vertical"
-                    initialValues={editing?.mode === 'edit' ? editing.record : { status: true }}
-                    onFinish={(values) => save.mutate(values)}
-                >
-                    <Form.Item
-                        name="version"
-                        label="版本号"
-                        rules={[{ required: true, message: '请填写版本号' }]}
-                    >
-                        <Input placeholder="如 V1.0" />
-                    </Form.Item>
-                    <Form.Item name="remark" label="备注">
-                        <Input.TextArea rows={3} />
-                    </Form.Item>
-                    <Form.Item name="status" label="启用" valuePropName="checked">
-                        <Switch />
-                    </Form.Item>
-                </Form>
-            </Modal>
+            {editing && (
+                <VersionFormModal
+                    key={editing.mode === 'create' ? 'create' : editing.record.id}
+                    editing={editing}
+                    saving={save.isPending}
+                    onSave={(values) => save.mutate(values)}
+                    onClose={closeEditing}
+                />
+            )}
         </Drawer>
     );
 }

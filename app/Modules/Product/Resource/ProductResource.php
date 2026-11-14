@@ -25,7 +25,6 @@ class ProductResource extends JsonResource
             'category' => $this->category,
             'unit' => $this->unit,
             'status' => $this->status,
-            'versions' => ProductVersionResource::collection($this->whenLoaded('versions')),
             'created_at' => $this->created_at,
             'updated_at' => $this->updated_at,
         ];
