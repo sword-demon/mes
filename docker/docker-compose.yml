@@ -1,0 +1,81 @@
+name: mes
+
+services:
+  mysql:
+    image: mysql:8.4
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:${MYSQL_HOST_PORT:-13307}:3306"
+    environment:
+      MYSQL_DATABASE: ${DB_DATABASE:-mes}
+      MYSQL_USER: ${DB_USERNAME:-mes}
+      MYSQL_PASSWORD: ${DB_PASSWORD:-mes_secret}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-root_secret}
+    volumes:
+      - mysql-data:/var/lib/mysql
+      - ./mysql/my.cnf:/etc/mysql/conf.d/my.cnf:ro
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -uroot -p\"$$MYSQL_ROOT_PASSWORD\" --silent"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 20s
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    ports:
+      - "127.0.0.1:${REDIS_HOST_PORT:-16379}:6379"
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  emqx:
+    image: emqx/emqx:5.8
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:${MQTT_HOST_PORT:-11883}:1883"
+      - "127.0.0.1:${MQTT_WS_HOST_PORT:-11888}:8883"
+      - "127.0.0.1:${EMQX_DASHBOARD_HOST_PORT:-18083}:18083"
+    environment:
+      EMQX_DASHBOARD__DEFAULT_PASSWORD: ${EMQX_DASHBOARD_PASSWORD:-mes_secret}
+      # 8883 在容器内留给 WebSocket，关闭镜像默认的 MQTT over TLS 监听。
+      EMQX_LISTENERS__SSL__DEFAULT__ENABLE: "false"
+      EMQX_LISTENERS__WS__DEFAULT__BIND: "0.0.0.0:8883"
+      EMQX_LISTENERS__WS__DEFAULT__WEBSOCKET__MQTT_PATH: "/mqtt"
+      EMQX_LOG__CONSOLE__LEVEL: warning
+    volumes:
+      - emqx-data:/opt/emqx/data
+      - emqx-log:/opt/emqx/log
+    healthcheck:
+      test: ["CMD-SHELL", "emqx ctl status >/dev/null 2>&1"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 20s
+
+  simulator:
+    build: ./simulator
+    restart: unless-stopped
+    depends_on:
+      emqx:
+        condition: service_healthy
+    environment:
+      MQTT_HOST: emqx
+      MQTT_PORT: 1883
+      MQTT_FACTORY: ${MQTT_FACTORY:-F001}
+      MQTT_DEVICES: ${MQTT_DEVICES:-DEV-001,DEV-002,DEV-003,DEV-004,DEV-005}
+      MQTT_INTERVAL: ${MQTT_INTERVAL:-5}
+      MQTT_USERNAME: ${MQTT_USERNAME:-}
+      MQTT_PASSWORD: ${MQTT_PASSWORD:-}
+
+volumes:
+  mysql-data:
+  redis-data:
+  emqx-data:
+  emqx-log:
