@@ -1,5 +1,6 @@
 <?php
 
+use Symfony\Component\Process\Process;
 use Symfony\Component\Yaml\Yaml;
 
 /**
@@ -63,4 +64,30 @@ test('the host env template targets the compose ports', function () {
         ->and($env['REDIS_PORT'])->toBe('16379')
         ->and($env['MQTT_PORT'])->toBe('11883')
         ->and($env['QUEUE_CONNECTION'])->toBe('redis');
+});
+
+test('compose shares custom application ports and keeps listeners local', function () {
+    $process = new Process([
+        'docker', 'compose', '--env-file', '/dev/null',
+        '-f', base_path('docker/docker-compose.yml'), 'config', '--format', 'json',
+    ], base_path(), [
+        'DB_PORT' => '23307',
+        'REDIS_PORT' => '26379',
+        'MQTT_PORT' => '21883',
+        'MYSQL_HOST_PORT' => false,
+        'REDIS_HOST_PORT' => false,
+        'MQTT_HOST_PORT' => false,
+    ]);
+    $process->mustRun();
+    $services = json_decode($process->getOutput(), true, flags: JSON_THROW_ON_ERROR)['services'];
+
+    foreach (['mysql' => '23307', 'redis' => '26379', 'emqx' => '21883'] as $service => $port) {
+        expect($services[$service]['ports'][0]['published'])->toBe($port);
+    }
+
+    foreach (['mysql', 'redis', 'emqx'] as $service) {
+        foreach ($services[$service]['ports'] as $mapping) {
+            expect($mapping['host_ip'])->toBe('127.0.0.1');
+        }
+    }
 });

@@ -81,6 +81,18 @@ def topic(device, kind):
     return f"mes/{FACTORY}/{device}/{kind}"
 
 
+def publish(client, destination, payload):
+    message = client.publish(destination, payload, qos=1)
+
+    if message.rc != mqtt.MQTT_ERR_SUCCESS:
+        raise RuntimeError(f"MQTT publish failed: {message.rc}")
+
+    message.wait_for_publish(timeout=5)
+
+    if not message.is_published():
+        raise RuntimeError("MQTT acknowledgement timed out")
+
+
 def main():
     if not DEVICES:
         raise SystemExit("MQTT_DEVICES is empty")
@@ -93,21 +105,48 @@ def main():
     if USERNAME:
         client.username_pw_set(USERNAME, PASSWORD or None)
 
-    while not stop:
-        try:
-            client.connect(HOST, PORT, keepalive=30)
-            break
-        except OSError:
-            time.sleep(2)
+    connected = False
+
+    def on_connect(client, userdata, flags, reason_code, properties):
+        nonlocal connected
+
+        if reason_code.is_failure:
+            raise RuntimeError("MQTT connection rejected")
+
+        connected = True
+
+    client.on_connect = on_connect
+    client.connect(HOST, PORT, keepalive=30)
+    deadline = time.monotonic() + 5
+
+    while not connected:
+        if stop:
+            client.disconnect()
+            return
+
+        if time.monotonic() >= deadline:
+            raise RuntimeError("MQTT connection acknowledgement timed out")
+
+        if client.loop(timeout=1) != mqtt.MQTT_ERR_SUCCESS:
+            raise RuntimeError("MQTT connection failed")
 
     client.loop_start()
 
+    try:
+        simulate(client)
+    finally:
+        client.disconnect()
+        client.loop_stop()
+
+
+def simulate(client):
     states = {device: RUNNING for device in DEVICES}
     output = {device: 0 for device in DEVICES}
 
     # 先发一次初始状态，消费者才有基线，不必等第一次状态跃迁。
     for device in DEVICES:
-        client.publish(
+        publish(
+            client,
             topic(device, "status"),
             json.dumps(
                 {
@@ -128,7 +167,8 @@ def main():
             timestamp = now()
 
             if current != previous:
-                client.publish(
+                publish(
+                    client,
                     topic(device, "status"),
                     json.dumps(
                         {"device_code": device, "timestamp": timestamp, "status": current},
@@ -144,7 +184,8 @@ def main():
             if running:
                 output[device] += random.randint(1, 5)
 
-            client.publish(
+            publish(
+                client,
                 topic(device, "data"),
                 json.dumps(
                     {
@@ -172,7 +213,8 @@ def main():
                 alarm = "device_fault"
 
             if alarm:
-                client.publish(
+                publish(
+                    client,
                     topic(device, "alarm"),
                     json.dumps(
                         {
@@ -187,9 +229,6 @@ def main():
                 )
 
         time.sleep(INTERVAL)
-
-    client.loop_stop()
-    client.disconnect()
 
 
 if __name__ == "__main__":

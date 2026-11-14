@@ -12,7 +12,7 @@ PHP 后端不进容器，由宿主机 Herd 运行；compose 只负责 MySQL、Re
 | EMQX WebSocket | 8083 | 11888 |
 | EMQX Dashboard | 18083 | 18083 |
 
-端口均可用环境变量覆盖：`MYSQL_HOST_PORT`、`REDIS_HOST_PORT`、`MQTT_HOST_PORT`、`MQTT_WS_HOST_PORT`、`EMQX_DASHBOARD_HOST_PORT`。
+MySQL、Redis、MQTT 的宿主机端口直接读取根目录 `.env` 的 `DB_PORT`、`REDIS_PORT`、`MQTT_PORT`，与 Laravel 共用变量；更改后重新执行启动命令。WebSocket 与 Dashboard 分别通过 `MQTT_WS_HOST_PORT`、`EMQX_DASHBOARD_HOST_PORT` 覆盖。
 
 ## 服务互访
 
@@ -66,3 +66,11 @@ docker compose --env-file .env -f docker/docker-compose.yml up -d redis emqx sim
 模拟器按 `mes/{factory}/{device}/status|data|alarm` 发布消息，消息体含 `device_code`、`timestamp`、`status`、`temperature`、`speed`、`pressure`、`output`。
 
 可调环境变量：`MQTT_FACTORY`、`MQTT_DEVICES`（逗号分隔）、`MQTT_INTERVAL`（秒）。
+
+模拟器等待 broker 确认连接后才开始生成数据，以 QoS 1 发布并等待确认。连接被拒绝、发布失败或 5 秒内未获确认时进程报错退出，由 Compose 的重启策略重新启动。
+
+模拟器回归测试（使用镜像中已安装的 MQTT 客户端依赖）：
+
+```bash
+docker compose --env-file .env -f docker/docker-compose.yml run --rm --no-deps -v "$PWD/docker/simulator:/app:ro" simulator python -B -m unittest discover -s /app -p 'test_*.py'
+```

@@ -5,7 +5,7 @@ services:
     image: mysql:8.4
     restart: unless-stopped
     ports:
-      - "127.0.0.1:${MYSQL_HOST_PORT:-13307}:3306"
+      - "127.0.0.1:${DB_PORT:-13307}:3306"
     environment:
       MYSQL_DATABASE: ${DB_DATABASE:-mes}
       MYSQL_USER: ${DB_USERNAME:-mes}
@@ -26,7 +26,7 @@ services:
     restart: unless-stopped
     command: ["redis-server", "--appendonly", "yes"]
     ports:
-      - "127.0.0.1:${REDIS_HOST_PORT:-16379}:6379"
+      - "127.0.0.1:${REDIS_PORT:-16379}:6379"
     volumes:
       - redis-data:/data
     healthcheck:
@@ -39,7 +39,7 @@ services:
     image: emqx/emqx:5.8
     restart: unless-stopped
     ports:
-      - "127.0.0.1:${MQTT_HOST_PORT:-11883}:1883"
+      - "127.0.0.1:${MQTT_PORT:-11883}:1883"
       - "127.0.0.1:${MQTT_WS_HOST_PORT:-11888}:8083"
       - "127.0.0.1:${EMQX_DASHBOARD_HOST_PORT:-18083}:18083"
     environment:
