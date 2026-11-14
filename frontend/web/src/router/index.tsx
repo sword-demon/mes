@@ -5,6 +5,7 @@ import Forbidden from '@/pages/forbidden';
 import AdminLayout from '@/layouts/admin-layout';
 import Employees from '@/pages/basic-data/employees';
 import Factories from '@/pages/basic-data/factories';
+import Materials from '@/pages/basic-data/materials';
 import ProductionLines from '@/pages/basic-data/production-lines';
 import Products from '@/pages/basic-data/products';
 import Teams from '@/pages/basic-data/teams';
@@ -31,6 +32,7 @@ const pages: Record<string, () => ReactNode> = {
     '/basic-data/lines': ProductionLines,
     '/basic-data/teams': Teams,
     '/basic-data/employees': Employees,
+    '/basic-data/materials': Materials,
     '/basic-data/products': Products,
     '/system/users': Users,
 };
