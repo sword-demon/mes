@@ -35,17 +35,21 @@ class UserController extends Controller
         $roleIds = $validated['role_ids'] ?? [];
         unset($validated['role_ids']);
 
-        return ApiResponse::success(UserResource::make($this->users->create($validated, $roleIds)));
+        return ApiResponse::success(UserResource::make(
+            $this->users->create($request->user(), $validated, $roleIds),
+        ));
     }
 
     public function update(UpdateUserRequest $request, User $user): JsonResponse
     {
-        return ApiResponse::success(UserResource::make($this->users->update($user, $request->validated())));
+        return ApiResponse::success(UserResource::make(
+            $this->users->update($request->user(), $user, $request->validated()),
+        ));
     }
 
     public function resetPassword(ResetUserPasswordRequest $request, User $user): JsonResponse
     {
-        $this->users->resetPassword($user, $request->string('password')->toString());
+        $this->users->resetPassword($request->user(), $user, $request->string('password')->toString());
 
         return ApiResponse::success();
     }
@@ -53,7 +57,7 @@ class UserController extends Controller
     public function assignRoles(AssignUserRolesRequest $request, User $user): JsonResponse
     {
         return ApiResponse::success(UserResource::make(
-            $this->users->assignRoles($user, $request->array('role_ids')),
+            $this->users->assignRoles($request->user(), $user, $request->array('role_ids')),
         ));
     }
 }

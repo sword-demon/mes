@@ -1,7 +1,9 @@
 <?php
 
 use App\Modules\System\Controller\AccessTokenController;
+use App\Modules\System\Controller\DepartmentController;
 use App\Modules\System\Controller\MeController;
+use App\Modules\System\Controller\MenuController;
 use App\Modules\System\Controller\PermissionController;
 use App\Modules\System\Controller\RoleController;
 use App\Modules\System\Controller\UserController;
@@ -40,5 +42,23 @@ Route::middleware(['auth:sanctum', 'active'])->group(function (): void {
 
         Route::get('/permissions', [PermissionController::class, 'index'])
             ->middleware('permission:system.permissions.index')->name('permissions.index');
+
+        Route::get('/menus', [MenuController::class, 'index'])
+            ->middleware('permission:system.menus.index')->name('menus.index');
+        Route::post('/menus', [MenuController::class, 'store'])
+            ->middleware('permission:system.menus.create')->name('menus.store');
+        Route::put('/menus/{menu}', [MenuController::class, 'update'])
+            ->middleware('permission:system.menus.update')->name('menus.update');
+        Route::delete('/menus/{menu}', [MenuController::class, 'destroy'])
+            ->middleware('permission:system.menus.delete')->name('menus.destroy');
+
+        Route::get('/departments', [DepartmentController::class, 'index'])
+            ->middleware('permission:system.departments.index')->name('departments.index');
+        Route::post('/departments', [DepartmentController::class, 'store'])
+            ->middleware('permission:system.departments.create')->name('departments.store');
+        Route::put('/departments/{department}', [DepartmentController::class, 'update'])
+            ->middleware('permission:system.departments.update')->name('departments.update');
+        Route::delete('/departments/{department}', [DepartmentController::class, 'destroy'])
+            ->middleware('permission:system.departments.delete')->name('departments.destroy');
     });
 });

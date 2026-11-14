@@ -56,6 +56,11 @@ class Role extends Model
         return $this->belongsToMany(User::class, 'sys_user_roles', 'role_id', 'user_id');
     }
 
+    public function isSuperAdmin(): bool
+    {
+        return $this->code === self::SUPER_ADMIN;
+    }
+
     /**
      * @return array<string, string>
      */

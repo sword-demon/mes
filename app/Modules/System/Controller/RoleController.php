@@ -26,6 +26,8 @@ class RoleController extends Controller
         $permissionIds = $validated['permission_ids'] ?? [];
         unset($validated['permission_ids']);
 
+        $this->roles->ensureCanGrantPermissions($request->user(), $permissionIds);
+
         return ApiResponse::success(RoleResource::make($this->roles->create($validated, $permissionIds)));
     }
 
@@ -34,6 +36,8 @@ class RoleController extends Controller
         $validated = $request->validated();
         $permissionIds = array_key_exists('permission_ids', $validated) ? $validated['permission_ids'] : null;
         unset($validated['permission_ids']);
+
+        $this->roles->ensureCanGrantPermissions($request->user(), $permissionIds ?? []);
 
         return ApiResponse::success(RoleResource::make($this->roles->update($role, $validated, $permissionIds)));
     }

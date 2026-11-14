@@ -2,11 +2,13 @@
 
 namespace Database\Seeders;
 
+use App\Modules\System\Model\Department;
 use App\Modules\System\Model\Menu;
 use App\Modules\System\Model\Permission;
 use App\Modules\System\Model\Role;
 use App\Modules\System\Model\User;
 use Illuminate\Database\Seeder;
+use RuntimeException;
 
 class SystemSeeder extends Seeder
 {
@@ -14,7 +16,12 @@ class SystemSeeder extends Seeder
      * Menu tree from PRD 8.2. `slug` is the permission namespace for the node.
      */
     private const MENUS = [
-        ['slug' => 'dashboard', 'name' => '首页驾驶舱', 'path' => '/dashboard', 'icon' => 'DashboardOutlined'],
+        ['slug' => 'dashboard', 'name' => '首页驾驶舱', 'path' => '/dashboard', 'icon' => 'DashboardOutlined', 'children' => [
+            ['slug' => 'dashboard.overview', 'name' => '生产数据总览', 'path' => '/dashboard/overview'],
+            ['slug' => 'dashboard.trend', 'name' => '生产趋势', 'path' => '/dashboard/trend'],
+            ['slug' => 'dashboard.quality', 'name' => '质量统计', 'path' => '/dashboard/quality'],
+            ['slug' => 'dashboard.equipment', 'name' => '设备状态', 'path' => '/dashboard/equipment'],
+        ]],
         ['slug' => 'basic', 'name' => '基础数据', 'icon' => 'DatabaseOutlined', 'children' => [
             ['slug' => 'basic.factories', 'name' => '工厂管理', 'path' => '/basic-data/factories'],
             ['slug' => 'basic.workshops', 'name' => '车间管理', 'path' => '/basic-data/workshops'],
@@ -85,6 +92,29 @@ class SystemSeeder extends Seeder
         'system.roles.update' => '编辑角色',
         'system.roles.delete' => '删除角色',
         'system.permissions.index' => '权限列表',
+        'system.menus.index' => '菜单列表',
+        'system.menus.create' => '新增菜单',
+        'system.menus.update' => '编辑菜单',
+        'system.menus.delete' => '删除菜单',
+        'system.departments.index' => '部门列表',
+        'system.departments.create' => '新增部门',
+        'system.departments.update' => '编辑部门',
+        'system.departments.delete' => '删除部门',
+    ];
+
+    /**
+     * Departments from PRD 8.2 / spec 235: the demo factory's admin backbone.
+     */
+    private const DEPARTMENTS = [
+        ['code' => 'root', 'name' => '演示工厂', 'children' => [
+            ['code' => 'production', 'name' => '生产部', 'children' => [
+                ['code' => 'workshop-a', 'name' => '一号车间'],
+                ['code' => 'workshop-b', 'name' => '二号车间'],
+            ]],
+            ['code' => 'quality', 'name' => '质量部'],
+            ['code' => 'warehouse', 'name' => '仓储部'],
+            ['code' => 'equipment', 'name' => '设备部'],
+        ]],
     ];
 
     private const DATA_PERMISSIONS = [
@@ -94,25 +124,55 @@ class SystemSeeder extends Seeder
     ];
 
     /**
-     * Roles and the menu roots they can reach. `api` grants the system API permissions.
+     * Roles and the menu roots they can reach.
+     *
+     * `api` grants the system API permissions, `scope` the data permission.
      */
     private const ROLES = [
-        'super_admin' => ['name' => '超级管理员', 'menus' => ['*'], 'api' => true],
-        'factory_admin' => ['name' => '工厂管理员', 'menus' => ['*'], 'api' => true],
-        'production_manager' => ['name' => '生产经理', 'menus' => ['dashboard', 'basic', 'process', 'production', 'execution', 'quality', 'traceability']],
-        'workshop_director' => ['name' => '车间主任', 'menus' => ['dashboard', 'production', 'execution', 'quality']],
-        'production_operator' => ['name' => '生产操作员', 'menus' => ['dashboard', 'production', 'execution']],
-        'quality_inspector' => ['name' => '质检员', 'menus' => ['dashboard', 'quality', 'traceability']],
-        'warehouse_manager' => ['name' => '仓库管理员', 'menus' => ['dashboard', 'material', 'basic', 'traceability']],
-        'equipment_manager' => ['name' => '设备管理员', 'menus' => ['dashboard', 'equipment']],
+        'super_admin' => ['name' => '超级管理员', 'menus' => ['*'], 'api' => true, 'scope' => 'all'],
+        'factory_admin' => ['name' => '工厂管理员', 'menus' => ['*'], 'api' => true, 'scope' => 'factory'],
+        'production_manager' => ['name' => '生产经理', 'menus' => ['dashboard', 'basic', 'process', 'production', 'execution', 'quality', 'traceability'], 'scope' => 'factory'],
+        'workshop_director' => ['name' => '车间主任', 'menus' => ['dashboard', 'production', 'execution', 'quality'], 'scope' => 'line'],
+        'production_operator' => ['name' => '生产操作员', 'menus' => ['dashboard', 'production', 'execution'], 'scope' => 'line'],
+        'quality_inspector' => ['name' => '质检员', 'menus' => ['dashboard', 'quality', 'traceability'], 'scope' => 'line'],
+        'warehouse_manager' => ['name' => '仓库管理员', 'menus' => ['dashboard', 'material', 'basic', 'traceability'], 'scope' => 'factory'],
+        'equipment_manager' => ['name' => '设备管理员', 'menus' => ['dashboard', 'equipment'], 'scope' => 'factory'],
     ];
 
     public function run(): void
     {
         $menuPermissions = $this->seedMenus();
         $permissions = $this->seedPermissions();
+        $departments = $this->seedDepartments();
         $this->seedRoles($menuPermissions, $permissions);
-        $this->seedUsers();
+        $this->seedUsers($departments);
+    }
+
+    /**
+     * @return array<string, int> department ids keyed by code
+     */
+    private function seedDepartments(): array
+    {
+        $ids = [];
+
+        $walk = function (array $nodes, ?int $parentId, int $sort) use (&$walk, &$ids): void {
+            foreach (array_values($nodes) as $index => $node) {
+                $department = Department::query()->updateOrCreate(
+                    ['code' => $node['code']],
+                    ['parent_id' => $parentId, 'name' => $node['name'], 'sort' => $sort + $index],
+                );
+
+                $ids[$node['code']] = $department->id;
+
+                if (! empty($node['children'])) {
+                    $walk($node['children'], $department->id, 0);
+                }
+            }
+        };
+
+        $walk(self::DEPARTMENTS, null, 0);
+
+        return $ids;
     }
 
     /**
@@ -208,46 +268,77 @@ class SystemSeeder extends Seeder
                 }
             }
 
+            $codes[] = "data.scope.{$definition['scope']}";
+
             $role->permissions()->sync(
                 array_values(array_filter(array_map(fn (string $code) => $permissions[$code] ?? null, $codes))),
             );
         }
     }
 
-    private function seedUsers(): void
+    /**
+     * @param  array<string, int>  $departments
+     */
+    private function seedUsers(array $departments): void
     {
         $seed = [
-            ['超级管理员', 'admin@mes.test', 'super_admin'],
-            ['工厂管理员', 'factory@mes.test', 'factory_admin'],
-            ['生产经理', 'production@mes.test', 'production_manager'],
-            ['车间主任', 'workshop@mes.test', 'workshop_director'],
+            ['超级管理员', 'admin@mes.test', 'super_admin', 'root', '系统管理员'],
+            ['工厂管理员', 'factory@mes.test', 'factory_admin', 'root', '厂长'],
+            ['生产经理', 'production@mes.test', 'production_manager', 'production', '生产经理'],
+            ['车间主任', 'workshop@mes.test', 'workshop_director', 'workshop-a', '车间主任'],
         ];
 
         $groups = [
-            'operator' => [8, 'production_operator', '生产操作员'],
-            'quality' => [4, 'quality_inspector', '质检员'],
-            'warehouse' => [2, 'warehouse_manager', '仓库管理员'],
-            'equipment' => [2, 'equipment_manager', '设备管理员'],
+            'operator' => [8, 'production_operator', '生产操作员', 'workshop-a', '操作工'],
+            'quality' => [4, 'quality_inspector', '质检员', 'quality', '检验员'],
+            'warehouse' => [2, 'warehouse_manager', '仓库管理员', 'warehouse', '仓管员'],
+            'equipment' => [2, 'equipment_manager', '设备管理员', 'equipment', '设备工程师'],
         ];
 
-        foreach ($groups as $prefix => [$count, $roleCode, $label]) {
+        foreach ($groups as $prefix => [$count, $roleCode, $label, $department, $position]) {
             for ($i = 1; $i <= $count; $i++) {
-                $seed[] = ["{$label}{$i}", "{$prefix}{$i}@mes.test", $roleCode];
+                $seed[] = ["{$label}{$i}", "{$prefix}{$i}@mes.test", $roleCode, $department, $position];
             }
         }
 
-        foreach ($seed as $index => [$name, $email, $roleCode]) {
+        $password = $this->demoPassword();
+
+        foreach ($seed as $index => [$name, $email, $roleCode, $departmentCode, $position]) {
             $user = User::query()->firstOrCreate(
                 ['email' => $email],
                 [
+                    'username' => strstr($email, '@', true) ?: $email,
                     'name' => $name,
                     'phone' => '138'.str_pad((string) ($index + 1), 8, '0', STR_PAD_LEFT),
-                    'password' => 'password',
+                    'department_id' => $departments[$departmentCode] ?? null,
+                    'position' => $position,
+                    'password' => $password,
                     'status' => true,
                 ],
             );
 
             $user->roles()->syncWithoutDetaching([Role::query()->where('code', $roleCode)->value('id')]);
         }
+    }
+
+    /**
+     * Seeding only runs for local demos, where a shared password is intentional.
+     *
+     * Outside local/testing the operator must supply SEED_PASSWORD; a silently
+     * weak default in a shared environment is exactly the leak we must avoid.
+     */
+    private function demoPassword(): string
+    {
+        $password = config('app.seed_password');
+
+        if (is_string($password) && $password !== '') {
+            return $password;
+        }
+
+        if (app()->environment(['local', 'testing'])) {
+            return 'password';
+        }
+
+        throw new RuntimeException('请通过 SEED_PASSWORD 指定演示账号密码后再执行 Seeder');
     }
 }

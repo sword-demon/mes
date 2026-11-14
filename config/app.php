@@ -86,6 +86,18 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Demo Seed Password
+    |--------------------------------------------------------------------------
+    |
+    | Password given to the demo accounts created by the seeders. Only read
+    | when seeding; set SEED_PASSWORD to override it outside local demos.
+    |
+    */
+
+    'seed_password' => env('SEED_PASSWORD'),
+
+    /*
+    |--------------------------------------------------------------------------
     | Encryption Key
     |--------------------------------------------------------------------------
     |

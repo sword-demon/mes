@@ -24,6 +24,7 @@ class MeController extends Controller
         return ApiResponse::success([
             ...UserResource::make($user)->resolve(),
             'permissions' => $permissions,
+            'data_scope' => $this->access->dataScope($user),
             'menus' => $this->access->menuTree($user, $permissions),
         ]);
     }

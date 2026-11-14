@@ -90,3 +90,23 @@ test('a bearer token can be revoked', function () {
 
     expect($user->tokens()->count())->toBe(0);
 });
+
+test('a disabled user is rejected at login', function () {
+    $user = User::factory()->create(['password' => 'secret-password']);
+    $user->update(['status' => false]);
+
+    $this->postJson('/api/v1/auth/tokens', [
+        'email' => $user->email,
+        'password' => 'secret-password',
+    ])->assertUnprocessable();
+
+    expect($user->tokens()->count())->toBe(0);
+});
+
+test('a token issued before the user was disabled stops working', function () {
+    $user = User::factory()->create();
+    $token = $user->createToken('web')->plainTextToken;
+    $user->update(['status' => false]);
+
+    $this->withToken($token)->getJson('/api/v1/me')->assertUnauthorized();
+});

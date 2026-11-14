@@ -19,9 +19,12 @@ class StoreUserRequest extends FormRequest
     public function rules(): array
     {
         return [
+            'username' => ['nullable', 'string', 'max:64', Rule::unique('sys_users', 'username')],
             'name' => ['required', 'string', 'max:64'],
             'email' => ['required', 'string', 'email', 'max:255', Rule::unique('sys_users', 'email')],
             'phone' => ['nullable', 'string', 'max:32'],
+            'department_id' => ['nullable', 'integer', Rule::exists('sys_departments', 'id')],
+            'position' => ['nullable', 'string', 'max:64'],
             'password' => ['required', 'string', Password::default()],
             'status' => ['sometimes', 'boolean'],
             'role_ids' => ['array'],

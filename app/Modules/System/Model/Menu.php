@@ -11,6 +11,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Collection;
 
 /**
  * @property int $id
@@ -45,5 +46,29 @@ class Menu extends Model
     public function children(): HasMany
     {
         return $this->hasMany(self::class, 'parent_id')->orderBy('sort')->orderBy('id');
+    }
+
+    /**
+     * Nest a flat menu collection by `parent_id`, ordered by `sort`.
+     *
+     * @param  Collection<int, Menu>  $menus
+     * @return array<int, array<string, mixed>>
+     */
+    public static function toTree(Collection $menus, ?int $parentId = null): array
+    {
+        return $menus
+            ->where('parent_id', $parentId)
+            ->map(fn (self $menu) => [
+                'id' => $menu->id,
+                'parent_id' => $menu->parent_id,
+                'permission_id' => $menu->permission_id,
+                'name' => $menu->name,
+                'path' => $menu->path,
+                'icon' => $menu->icon,
+                'sort' => $menu->sort,
+                'children' => self::toTree($menus, $menu->id),
+            ])
+            ->values()
+            ->all();
     }
 }

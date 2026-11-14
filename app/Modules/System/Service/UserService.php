@@ -8,13 +8,15 @@ use Illuminate\Pagination\LengthAwarePaginator;
 
 class UserService
 {
+    public function __construct(private readonly AccessControlService $access) {}
+
     /**
      * @return LengthAwarePaginator<int, User>
      */
     public function paginate(?string $keyword = null, ?bool $status = null): LengthAwarePaginator
     {
         return User::query()
-            ->with('roles')
+            ->with(['roles', 'department'])
             ->when($keyword, function ($query, string $keyword): void {
                 $query->where(fn ($inner) => $inner
                     ->where('name', 'like', "%{$keyword}%")
@@ -32,8 +34,10 @@ class UserService
      * @param  array<string, mixed>  $data
      * @param  array<int, int>  $roleIds
      */
-    public function create(array $data, array $roleIds): User
+    public function create(User $actor, array $data, array $roleIds): User
     {
+        $this->access->ensureCanGrantRoles($actor, $roleIds);
+
         $user = User::query()->create($data);
         $user->roles()->sync($roleIds);
 
@@ -43,9 +47,11 @@ class UserService
     /**
      * @param  array<string, mixed>  $data
      */
-    public function update(User $user, array $data): User
+    public function update(User $actor, User $user, array $data): User
     {
-        if (array_key_exists('status', $data) && $data['status'] === false && $user->is(auth()->user())) {
+        $this->access->ensureCanManageUser($actor, $user);
+
+        if (array_key_exists('status', $data) && $data['status'] === false && $user->is($actor)) {
             throw new ApiException('不能停用当前登录账号', 403, status: 403);
         }
 
@@ -54,8 +60,10 @@ class UserService
         return $user->load('roles');
     }
 
-    public function resetPassword(User $user, string $password): void
+    public function resetPassword(User $actor, User $user, string $password): void
     {
+        $this->access->ensureCanManageUser($actor, $user);
+
         $user->update(['password' => $password]);
         $user->tokens()->delete();
     }
@@ -63,8 +71,11 @@ class UserService
     /**
      * @param  array<int, int>  $roleIds
      */
-    public function assignRoles(User $user, array $roleIds): User
+    public function assignRoles(User $actor, User $user, array $roleIds): User
     {
+        $this->access->ensureCanManageUser($actor, $user);
+        $this->access->ensureCanGrantRoles($actor, $roleIds);
+
         $user->roles()->sync($roleIds);
 
         return $user->load('roles');

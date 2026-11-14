@@ -22,6 +22,13 @@ class UpdateUserRequest extends FormRequest
         $user = $this->route('user');
 
         return [
+            'username' => [
+                'sometimes',
+                'nullable',
+                'string',
+                'max:64',
+                Rule::unique('sys_users', 'username')->ignore($user->id),
+            ],
             'name' => ['sometimes', 'required', 'string', 'max:64'],
             'email' => [
                 'sometimes',
@@ -32,6 +39,8 @@ class UpdateUserRequest extends FormRequest
                 Rule::unique('sys_users', 'email')->ignore($user->id),
             ],
             'phone' => ['nullable', 'string', 'max:32'],
+            'department_id' => ['nullable', 'integer', Rule::exists('sys_departments', 'id')],
+            'position' => ['nullable', 'string', 'max:64'],
             'status' => ['sometimes', 'boolean'],
         ];
     }

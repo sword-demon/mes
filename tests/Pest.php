@@ -1,5 +1,8 @@
 <?php
 
+use App\Modules\System\Model\Permission;
+use App\Modules\System\Model\Role;
+use App\Modules\System\Model\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
@@ -47,4 +50,39 @@ expect()->extend('toBeOne', function () {
 function something()
 {
     // ..
+}
+
+/**
+ * A user holding a role that grants exactly these permission codes.
+ *
+ * @param  array<int, string>  $permissionCodes
+ */
+function userWithPermissions(array $permissionCodes, string $roleCode = 'tester'): User
+{
+    $role = Role::factory()->create(['code' => $roleCode]);
+
+    foreach ($permissionCodes as $code) {
+        $role->permissions()->attach(Permission::query()->firstOrCreate(
+            ['code' => $code],
+            ['name' => $code, 'type' => 'api'],
+        ));
+    }
+
+    $user = User::factory()->create();
+    $user->roles()->attach($role);
+
+    return $user;
+}
+
+function superAdmin(): User
+{
+    $user = User::factory()->create();
+    $user->roles()->attach(Role::factory()->create(['code' => Role::SUPER_ADMIN]));
+
+    return $user;
+}
+
+function bearer(User $user): TestCase
+{
+    return test()->withToken($user->createToken('web')->plainTextToken);
 }
