@@ -19,7 +19,7 @@ class AccessTokenService
     {
         $user = User::query()->where('email', $email)->first();
 
-        if (! $user || ! Hash::check($password, $user->password)) {
+        if (! $user || ! $user->status || ! Hash::check($password, $user->password)) {
             throw ValidationException::withMessages([
                 'email' => __('auth.failed'),
             ]);
