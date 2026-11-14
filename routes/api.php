@@ -1,5 +1,7 @@
 <?php
 
+use App\Modules\Bom\Controller\BomController;
+use App\Modules\Bom\Controller\BomItemController;
 use App\Modules\Material\Controller\MaterialController;
 use App\Modules\Organization\Controller\EmployeeController;
 use App\Modules\Organization\Controller\FactoryController;
@@ -132,6 +134,17 @@ Route::middleware(['auth:sanctum', 'active'])->group(function (): void {
         Route::put('/materials/{material}', [MaterialController::class, 'update'])
             ->middleware('permission:basic.materials.update')->name('materials.update');
 
+        Route::get('/boms', [BomController::class, 'index'])
+            ->middleware('permission:basic.boms.index')->name('boms.index');
+        Route::post('/boms', [BomController::class, 'store'])
+            ->middleware('permission:basic.boms.create')->name('boms.store');
+        Route::put('/boms/{bom}', [BomController::class, 'update'])
+            ->middleware('permission:basic.boms.update')->name('boms.update');
+        Route::post('/boms/{bom}/submit', [BomController::class, 'submit'])
+            ->middleware('permission:basic.boms.submit')->name('boms.submit');
+        Route::post('/boms/{bom}/approve', [BomController::class, 'approve'])
+            ->middleware('permission:basic.boms.audit')->name('boms.approve');
+
         // A version is always reached through its product, so a mismatched
         // pair never resolves.
         Route::scopeBindings()->group(function (): void {
@@ -141,6 +154,18 @@ Route::middleware(['auth:sanctum', 'active'])->group(function (): void {
                 ->middleware('permission:basic.products.create')->name('products.versions.store');
             Route::put('/products/{product}/versions/{version}', [ProductVersionController::class, 'update'])
                 ->middleware('permission:basic.products.update')->name('products.versions.update');
+        });
+
+        // Items are reached through their BOM, so a mismatched pair never resolves.
+        Route::scopeBindings()->group(function (): void {
+            Route::get('/boms/{bom}/items', [BomItemController::class, 'index'])
+                ->middleware('permission:basic.boms.index')->name('boms.items.index');
+            Route::post('/boms/{bom}/items', [BomItemController::class, 'store'])
+                ->middleware('permission:basic.boms.create')->name('boms.items.store');
+            Route::put('/boms/{bom}/items/{item}', [BomItemController::class, 'update'])
+                ->middleware('permission:basic.boms.update')->name('boms.items.update');
+            Route::delete('/boms/{bom}/items/{item}', [BomItemController::class, 'destroy'])
+                ->middleware('permission:basic.boms.update')->name('boms.items.destroy');
         });
     });
 });
