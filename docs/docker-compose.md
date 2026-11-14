@@ -9,7 +9,7 @@ PHP 后端不进容器，由宿主机 Herd 运行；compose 只负责 MySQL、Re
 | MySQL | 3306 | 13307 |
 | Redis | 6379 | 16379 |
 | EMQX MQTT | 1883 | 11883 |
-| EMQX WebSocket | 8883 | 11888 |
+| EMQX WebSocket | 8083 | 11888 |
 | EMQX Dashboard | 18083 | 18083 |
 
 端口均可用环境变量覆盖：`MYSQL_HOST_PORT`、`REDIS_HOST_PORT`、`MQTT_HOST_PORT`、`MQTT_WS_HOST_PORT`、`EMQX_DASHBOARD_HOST_PORT`。

@@ -40,14 +40,10 @@ services:
     restart: unless-stopped
     ports:
       - "127.0.0.1:${MQTT_HOST_PORT:-11883}:1883"
-      - "127.0.0.1:${MQTT_WS_HOST_PORT:-11888}:8883"
+      - "127.0.0.1:${MQTT_WS_HOST_PORT:-11888}:8083"
       - "127.0.0.1:${EMQX_DASHBOARD_HOST_PORT:-18083}:18083"
     environment:
       EMQX_DASHBOARD__DEFAULT_PASSWORD: ${EMQX_DASHBOARD_PASSWORD:-mes_secret}
-      # 8883 在容器内留给 WebSocket，关闭镜像默认的 MQTT over TLS 监听。
-      EMQX_LISTENERS__SSL__DEFAULT__ENABLE: "false"
-      EMQX_LISTENERS__WS__DEFAULT__BIND: "0.0.0.0:8883"
-      EMQX_LISTENERS__WS__DEFAULT__WEBSOCKET__MQTT_PATH: "/mqtt"
       EMQX_LOG__CONSOLE__LEVEL: warning
     volumes:
       - emqx-data:/opt/emqx/data

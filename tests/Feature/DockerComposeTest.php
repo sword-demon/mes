@@ -37,7 +37,7 @@ test('middleware publishes only high host ports', function () {
         ->and(publishedPorts('redis'))->toBe(['6379' => '16379'])
         ->and(publishedPorts('emqx'))->toBe([
             '1883' => '11883',
-            '8883' => '11888',
+            '8083' => '11888',
             '18083' => '18083',
         ]);
 });
