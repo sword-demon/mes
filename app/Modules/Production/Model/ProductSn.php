@@ -110,6 +110,9 @@ class ProductSn extends Model
     /**
      * Executions link to the SN by its printed code, not by a foreign key.
      *
+     * shortcut: one row per task+operation, so a multi-unit task shares this
+     * status; upgrade when per-unit routing is required.
+     *
      * @return HasMany<ProcessRecord, $this>
      */
     public function processRecords(): HasMany

@@ -84,8 +84,13 @@ class ProcessRecordService
 
             $sn = $data['sn'] ?? $locked->sn;
 
+            if ($locked->sn !== null && $sn !== null && $sn !== $locked->sn) {
+                throw new ApiException('SN 已绑定，不能更换', 422);
+            }
+
             if (is_string($sn) && $sn !== '') {
                 $this->ensureSerialNumber($sn, $task);
+                $this->ensureSerialNumberFreeForTask($sn, $task);
             }
 
             $locked->update([
@@ -329,6 +334,24 @@ class ProcessRecordService
 
         if ($voided) {
             throw new ApiException('SN 已作废，不能继续工序流转', 422);
+        }
+    }
+
+    /**
+     * A unit belongs to one task; the same code reappearing elsewhere means a
+     * scan error or a duplicated label.
+     *
+     * @throws ApiException
+     */
+    private function ensureSerialNumberFreeForTask(string $sn, ProductionTask $task): void
+    {
+        $usedElsewhere = ProcessRecord::query()
+            ->where('sn', $sn)
+            ->where('production_task_id', '!=', $task->id)
+            ->exists();
+
+        if ($usedElsewhere) {
+            throw new ApiException('SN 已用于其他生产任务', 422);
         }
     }
 

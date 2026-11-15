@@ -124,6 +124,55 @@ it('blocks forward flow once the serial number is voided', function () {
         ->assertJsonPath('code', 422);
 });
 
+it('refuses to swap the serial number once an operation has started', function () {
+    [$task, $records, $employee] = flowTask([false]);
+    $actor = userWithPermissions(['production.flows.start', 'production.flows.rework']);
+    $record = $records->first();
+    $first = ProductSn::factory()->create(['production_order_id' => $task->production_order_id]);
+    $second = ProductSn::factory()->create(['production_order_id' => $task->production_order_id]);
+    $url = "/api/v1/production/process-records/{$record->id}";
+
+    bearer($actor)->postJson("{$url}/start", ['employee_id' => $employee->id, 'sn' => $first->sn])
+        ->assertOk();
+    bearer($actor)->postJson("{$url}/rework", ['reason' => '尺寸超差'])
+        ->assertOk();
+
+    bearer($actor)->postJson("{$url}/start", ['employee_id' => $employee->id, 'sn' => $second->sn])
+        ->assertStatus(422)
+        ->assertJsonPath('code', 422);
+
+    expect($record->fresh()->sn)->toBe($first->sn);
+});
+
+it('refuses to use one serial number on a second production task', function () {
+    [$task, $records, $employee] = flowTask([false]);
+    $actor = userWithPermissions(['production.flows.start']);
+    $sn = ProductSn::factory()->create(['production_order_id' => $task->production_order_id]);
+    $otherTask = ProductionTask::factory()->create([
+        'production_order_id' => $task->production_order_id,
+        'route_id' => $task->route_id,
+        'status' => ProductionTask::IN_PROGRESS,
+    ]);
+    $other = ProcessRecord::factory()->create([
+        'production_task_id' => $otherTask->id,
+        'route_operation_id' => $records->first()->route_operation_id,
+        'sequence' => 1,
+    ]);
+
+    bearer($actor)->postJson("/api/v1/production/process-records/{$records->first()->id}/start", [
+        'employee_id' => $employee->id,
+        'sn' => $sn->sn,
+    ])->assertOk();
+
+    bearer($actor)->postJson("/api/v1/production/process-records/{$other->id}/start", [
+        'employee_id' => $employee->id,
+        'sn' => $sn->sn,
+    ])->assertStatus(422)
+        ->assertJsonPath('code', 422);
+
+    expect($other->fresh()->status)->toBe(ProcessRecord::PENDING);
+});
+
 it('refuses to start a later operation before the previous one is transferred', function () {
     [, $records, $employee] = flowTask([false, false]);
     $actor = userWithPermissions([

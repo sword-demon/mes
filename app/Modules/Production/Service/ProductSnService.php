@@ -155,6 +155,7 @@ class ProductSnService
             throw new ApiException($message, 422);
         }
 
+        // Scrapped units free their plan slot so a replacement can be issued.
         $issued = ProductSn::query()
             ->where('production_order_id', $order->id)
             ->where('status', ProductSn::ACTIVE)

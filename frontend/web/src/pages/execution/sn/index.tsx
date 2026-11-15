@@ -1,19 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import {
-    App,
-    Button,
-    Descriptions,
-    Drawer,
-    Form,
-    Input,
-    InputNumber,
-    Modal,
-    Select,
-    Space,
-    Table,
-    Tag,
-    Typography,
-} from 'antd';
+import { App, Button, Input, Select, Space, Table, Tag, Typography } from 'antd';
 import dayjs from 'dayjs';
 import { useState } from 'react';
 import Can from '@/components/can';
@@ -22,7 +8,6 @@ import {
     generateProductSns,
     getProductSn,
     getProductSnLabel,
-    getProductSnOptions,
     listProductSns,
     printProductSn,
     PRODUCT_SN_STATUSES,
@@ -31,232 +16,18 @@ import {
 import type {
     ProductSn,
     ProductSnBindPayload,
-    ProductSnGeneratePayload,
     ProductSnLabel,
     ProductSnStatus,
 } from '@/api/production';
 import { useAuthStore } from '@/stores/auth';
 import { ApiRequestError } from '@/utils/api-error';
 import { can } from '@/utils/permission';
-
-const statusColor = Object.fromEntries(
-    PRODUCT_SN_STATUSES.map(({ value, color }) => [value, color]),
-);
-
-function GenerateSnModal({
-    saving,
-    onSave,
-    onClose,
-}: {
-    saving: boolean;
-    onSave: (payload: ProductSnGeneratePayload) => void;
-    onClose: () => void;
-}) {
-    const [form] = Form.useForm();
-    const options = useQuery({
-        queryKey: ['production.sns', 'options'],
-        queryFn: getProductSnOptions,
-    });
-
-    return (
-        <Modal
-            open
-            title="生成 SN"
-            confirmLoading={saving}
-            width={520}
-            onCancel={onClose}
-            onOk={() => form.submit()}
-        >
-            <Form
-                form={form}
-                layout="vertical"
-                initialValues={{ quantity: 1 }}
-                onFinish={(values) =>
-                    onSave({
-                        production_order_id: values.production_order_id,
-                        quantity: values.quantity,
-                        employee_id: values.employee_id,
-                    })
-                }
-            >
-                <Form.Item
-                    name="production_order_id"
-                    label="生产订单"
-                    rules={[{ required: true, message: '请选择生产订单' }]}
-                >
-                    <Select
-                        showSearch
-                        optionFilterProp="label"
-                        loading={options.isLoading}
-                        options={(options.data?.orders ?? []).map((order) => ({
-                            value: order.id,
-                            label: `${order.code}${order.product ? `（${order.product.name}）` : ''}`,
-                        }))}
-                    />
-                </Form.Item>
-                <Form.Item
-                    name="quantity"
-                    label="生成数量"
-                    rules={[{ required: true, message: '请输入生成数量' }]}
-                >
-                    <InputNumber min={1} max={1000} className="w-full" />
-                </Form.Item>
-                <Form.Item name="employee_id" label="操作人员">
-                    <Select
-                        allowClear
-                        showSearch
-                        optionFilterProp="label"
-                        options={(options.data?.employees ?? []).map((employee) => ({
-                            value: employee.id,
-                            label: `${employee.employee_no} ${employee.name}`,
-                        }))}
-                    />
-                </Form.Item>
-            </Form>
-        </Modal>
-    );
-}
-
-function BindSnModal({
-    sn,
-    saving,
-    onSave,
-    onClose,
-}: {
-    sn: ProductSn;
-    saving: boolean;
-    onSave: (payload: ProductSnBindPayload) => void;
-    onClose: () => void;
-}) {
-    const [form] = Form.useForm();
-    const options = useQuery({
-        queryKey: ['production.sns', 'options'],
-        queryFn: getProductSnOptions,
-    });
-
-    return (
-        <Modal
-            open
-            title={`绑定信息 · ${sn.sn}`}
-            confirmLoading={saving}
-            width={520}
-            onCancel={onClose}
-            onOk={() => form.submit()}
-        >
-            <Form
-                form={form}
-                layout="vertical"
-                initialValues={{
-                    material_batch_no: sn.material_batch_no ?? undefined,
-                    employee_id: sn.employee_id ?? undefined,
-                }}
-                onFinish={(values) =>
-                    onSave({
-                        material_batch_no: values.material_batch_no || undefined,
-                        employee_id: values.employee_id,
-                    })
-                }
-            >
-                <Form.Item name="material_batch_no" label="物料批次">
-                    <Input placeholder="扫描或输入物料批次号" maxLength={64} />
-                </Form.Item>
-                <Form.Item name="employee_id" label="操作人员">
-                    <Select
-                        allowClear
-                        showSearch
-                        optionFilterProp="label"
-                        options={(options.data?.employees ?? []).map((employee) => ({
-                            value: employee.id,
-                            label: `${employee.employee_no} ${employee.name}`,
-                        }))}
-                    />
-                </Form.Item>
-            </Form>
-        </Modal>
-    );
-}
-
-function VoidSnModal({
-    sn,
-    saving,
-    onSave,
-    onClose,
-}: {
-    sn: ProductSn;
-    saving: boolean;
-    onSave: (reason: string) => void;
-    onClose: () => void;
-}) {
-    const [form] = Form.useForm();
-
-    return (
-        <Modal
-            open
-            title={`作废 SN · ${sn.sn}`}
-            confirmLoading={saving}
-            width={480}
-            onCancel={onClose}
-            onOk={() => form.submit()}
-        >
-            <Form form={form} layout="vertical" onFinish={(values) => onSave(values.reason)}>
-                <Form.Item
-                    name="reason"
-                    label="作废原因"
-                    rules={[{ required: true, message: '请填写作废原因' }]}
-                >
-                    <Input.TextArea rows={3} maxLength={255} placeholder="如：产品报废" />
-                </Form.Item>
-            </Form>
-        </Modal>
-    );
-}
-
-function LabelModal({
-    label,
-    printing,
-    onPrint,
-    onClose,
-}: {
-    label: ProductSnLabel;
-    printing: boolean;
-    onPrint: () => void;
-    onClose: () => void;
-}) {
-    return (
-        <Modal
-            open
-            title="SN 标签"
-            onCancel={onClose}
-            footer={
-                <Space>
-                    <Button onClick={onClose}>关闭</Button>
-                    <Button type="primary" loading={printing} onClick={onPrint}>
-                        打印
-                    </Button>
-                </Space>
-            }
-        >
-            <div className="sn-label rounded border-2 border-dashed border-gray-400 p-6">
-                <Typography.Title level={3} className="mb-2! text-center">
-                    {label.product_name}
-                </Typography.Title>
-                <Typography.Paragraph className="mb-4 text-center" type="secondary">
-                    {label.product_code}
-                </Typography.Paragraph>
-                <div className="mb-4 text-center font-mono text-2xl tracking-widest">
-                    {label.sn}
-                </div>
-                <Descriptions column={1} size="small">
-                    <Descriptions.Item label="生产订单">{label.production_order}</Descriptions.Item>
-                    <Descriptions.Item label="生产批次">{label.production_batch}</Descriptions.Item>
-                    <Descriptions.Item label="生成时间">
-                        {dayjs(label.generated_at).format('YYYY-MM-DD HH:mm')}
-                    </Descriptions.Item>
-                </Descriptions>
-            </div>
-        </Modal>
-    );
-}
+import BindSnModal from './bind-sn-modal';
+import DetailDrawer from './detail-drawer';
+import GenerateSnModal from './generate-sn-modal';
+import LabelModal from './label-modal';
+import { snStatusColor } from './status-color';
+import VoidSnModal from './void-sn-modal';
 
 export default function ProductSnPage() {
     const { message } = App.useApp();
@@ -425,7 +196,7 @@ export default function ProductSnPage() {
                         title: '状态',
                         width: 90,
                         render: (_, record) => (
-                            <Tag color={statusColor[record.status]}>{record.status_label}</Tag>
+                            <Tag color={snStatusColor[record.status]}>{record.status_label}</Tag>
                         ),
                     },
                     {
@@ -469,86 +240,11 @@ export default function ProductSnPage() {
                     },
                 ]}
             />
-            <Drawer
-                open={detailSn !== null}
-                title={detailSn ?? 'SN 详情'}
-                size={760}
+            <DetailDrawer
+                sn={detailSn}
+                data={detail.data}
                 onClose={() => setDetailSn(null)}
-            >
-                {detail.data && (
-                    <Space orientation="vertical" className="w-full" size="large">
-                        <Descriptions column={2} bordered size="small">
-                            <Descriptions.Item label="状态">
-                                <Tag color={statusColor[detail.data.status]}>
-                                    {detail.data.status_label}
-                                </Tag>
-                            </Descriptions.Item>
-                            <Descriptions.Item label="物料批次">
-                                {detail.data.material_batch_no ?? '-'}
-                            </Descriptions.Item>
-                            <Descriptions.Item label="生产订单">
-                                {detail.data.production_order?.code ?? '-'}
-                            </Descriptions.Item>
-                            <Descriptions.Item label="生产批次">
-                                {detail.data.production_batch?.code ?? '-'}
-                            </Descriptions.Item>
-                            <Descriptions.Item label="产品">
-                                {detail.data.production_order?.product?.name ?? '-'}
-                            </Descriptions.Item>
-                            <Descriptions.Item label="操作人员">
-                                {detail.data.employee
-                                    ? `${detail.data.employee.employee_no} ${detail.data.employee.name}`
-                                    : '-'}
-                            </Descriptions.Item>
-                            {detail.data.void_reason && (
-                                <Descriptions.Item label="作废原因" span={2}>
-                                    {detail.data.void_reason}
-                                </Descriptions.Item>
-                            )}
-                        </Descriptions>
-                        <div>
-                            <Typography.Title level={5}>工序执行状态</Typography.Title>
-                            <Table
-                                rowKey="id"
-                                size="small"
-                                pagination={false}
-                                dataSource={detail.data.process_records ?? []}
-                                columns={[
-                                    { title: '顺序', dataIndex: 'sequence', width: 70 },
-                                    {
-                                        title: '工序',
-                                        render: (_, record) =>
-                                            record.route_operation
-                                                ? `${record.route_operation.sequence}. ${record.route_operation.process.name}`
-                                                : '-',
-                                    },
-                                    {
-                                        title: '操作人员',
-                                        width: 130,
-                                        render: (_, record) =>
-                                            record.employee
-                                                ? `${record.employee.employee_no} ${record.employee.name}`
-                                                : '-',
-                                    },
-                                    {
-                                        title: '状态',
-                                        width: 100,
-                                        render: (_, record) => <Tag>{record.status_label}</Tag>,
-                                    },
-                                    {
-                                        title: '开始时间',
-                                        width: 150,
-                                        render: (_, record) =>
-                                            record.started_at
-                                                ? dayjs(record.started_at).format('MM-DD HH:mm')
-                                                : '-',
-                                    },
-                                ]}
-                            />
-                        </div>
-                    </Space>
-                )}
-            </Drawer>
+            />
             {generating && (
                 <GenerateSnModal
                     saving={generate.isPending}
