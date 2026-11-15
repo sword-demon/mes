@@ -21,6 +21,7 @@ import Users from '@/pages/system/users';
 import QualityStandards from '@/pages/quality/standards';
 import QualityRecords from '@/pages/quality/records';
 import QualityTasks from '@/pages/quality/tasks';
+import QualityDefects from '@/pages/quality/defects';
 import { useAuthStore } from '@/stores/auth';
 import { findMenu, firstMenuPath } from '@/utils/permission';
 
@@ -51,6 +52,7 @@ const pages: Record<string, () => ReactNode> = {
     '/quality/standards': QualityStandards,
     '/quality/tasks': QualityTasks,
     '/quality/records': QualityRecords,
+    '/quality/defects': QualityDefects,
 };
 
 /**

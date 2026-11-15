@@ -20,6 +20,7 @@ use App\Modules\Production\Controller\ProductionReportController;
 use App\Modules\Production\Controller\ProductionTaskController;
 use App\Modules\Production\Controller\ProductSnController;
 use App\Modules\Quality\Controller\DefectCodeController;
+use App\Modules\Quality\Controller\DefectiveProductController;
 use App\Modules\Quality\Controller\InspectionItemController;
 use App\Modules\Quality\Controller\InspectionTaskController;
 use App\Modules\System\Controller\AccessTokenController;
@@ -60,6 +61,21 @@ Route::middleware(['auth:sanctum', 'active'])->group(function (): void {
             ->middleware('permission:quality.inspections.record')->name('inspection-tasks.record');
         Route::post('/inspection-tasks/{task}/images', [InspectionTaskController::class, 'storeImages'])
             ->middleware('permission:quality.inspections.record')->name('inspection-tasks.images.store');
+
+        Route::get('/defective-products/options', [DefectiveProductController::class, 'options'])
+            ->middleware('permission:quality.defects.index')->name('defective-products.options');
+        Route::get('/defective-products', [DefectiveProductController::class, 'index'])
+            ->middleware('permission:quality.defects.index')->name('defective-products.index');
+        Route::post('/defective-products', [DefectiveProductController::class, 'store'])
+            ->middleware('permission:quality.defects.create')->name('defective-products.store');
+        Route::post('/defective-products/{defective}/start', [DefectiveProductController::class, 'start'])
+            ->middleware('permission:quality.defects.process')->name('defective-products.start');
+        Route::post('/defective-products/{defective}/rework', [DefectiveProductController::class, 'rework'])
+            ->middleware('permission:quality.defects.rework')->name('defective-products.rework');
+        Route::post('/defective-products/{defective}/scrap', [DefectiveProductController::class, 'scrap'])
+            ->middleware('permission:quality.defects.scrap')->name('defective-products.scrap');
+        Route::post('/defective-products/{defective}/recheck', [DefectiveProductController::class, 'recheck'])
+            ->middleware('permission:quality.defects.recheck')->name('defective-products.recheck');
     });
     Route::get('/me', [MeController::class, 'show'])->name('api.me');
 

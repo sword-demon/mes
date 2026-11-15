@@ -187,3 +187,117 @@ export function uploadInspectionImages(id: number, files: File[]) {
 
     return api.post<InspectionTask>(`/quality/inspection-tasks/${id}/images`, form);
 }
+
+export const DEFECT_STATUSES = [
+    { value: 'pending', label: '待处理', color: 'gold' },
+    { value: 'processing', label: '处理中', color: 'blue' },
+    { value: 'pending_recheck', label: '待复检', color: 'orange' },
+    { value: 'closed', label: '已关闭', color: 'green' },
+] as const;
+
+export type DefectStatus = (typeof DEFECT_STATUSES)[number]['value'];
+
+export type DefectReworkOrder = {
+    id: number;
+    code: string;
+    reason: string;
+    created_by: { id: number; name: string } | null;
+    recheck_result: 'passed' | 'failed' | null;
+    recheck_remark: string | null;
+    rechecked_by: { id: number; name: string } | null;
+    rechecked_at: string | null;
+    created_at: string;
+};
+
+export type DefectiveProduct = {
+    id: number;
+    status: DefectStatus;
+    status_label: string;
+    quantity: string;
+    remark: string | null;
+    production_order: InspectionOrderRef;
+    route_operation: { id: number; sequence: number; process: { id: number; code: string; name: string } };
+    production_batch: { id: number; code: string; quantity: number };
+    defect_code: { id: number; code: string; name: string; category: string };
+    handled_by: { id: number; name: string } | null;
+    rework_orders: DefectReworkOrder[];
+    recheck_result: 'passed' | 'failed' | null;
+    recheck_remark: string | null;
+    rechecked_at: string | null;
+    scrap_reason: string | null;
+    scrap_quantity: string | null;
+    scrapped_at: string | null;
+    created_at: string;
+    updated_at: string;
+};
+
+export type DefectOptions = {
+    orders: InspectionOrderRef[];
+    operations: { id: number; sequence: number; process: { id: number; name: string } }[];
+    batches: { id: number; code: string; quantity: number }[];
+    defect_codes: { id: number; code: string; name: string; category: string }[];
+};
+
+export type DefectParams = {
+    page?: number;
+    per_page?: number;
+    status?: DefectStatus;
+    production_order_id?: number;
+};
+
+export type DefectPayload = {
+    production_order_id: number;
+    route_operation_id: number;
+    production_batch_id: number;
+    defect_code_id: number;
+    quantity: number;
+    remark?: string | null;
+};
+
+export function listDefectiveProducts(params: DefectParams = {}) {
+    return api.get<Paginated<DefectiveProduct>>('/quality/defective-products', params);
+}
+
+export function getDefectOptions(productionOrderId?: number, keyword?: string) {
+    return api.get<DefectOptions>('/quality/defective-products/options', {
+        production_order_id: productionOrderId,
+        keyword,
+    });
+}
+
+export function createDefectiveProduct(payload: DefectPayload) {
+    return api.post<DefectiveProduct>('/quality/defective-products', payload);
+}
+
+export function startDefectiveProduct(id: number) {
+    return api.post<DefectiveProduct>(`/quality/defective-products/${id}/start`);
+}
+
+export function reworkDefectiveProduct(id: number, payload: { reason: string }) {
+    return api.post<DefectiveProduct>(`/quality/defective-products/${id}/rework`, payload);
+}
+
+export function scrapDefectiveProduct(id: number, payload: { reason: string; quantity: number }) {
+    return api.post<DefectiveProduct>(`/quality/defective-products/${id}/scrap`, payload);
+}
+
+export function recheckDefectiveProduct(id: number, payload: { passed: boolean; remark?: string | null }) {
+    return api.post<DefectiveProduct>(`/quality/defective-products/${id}/recheck`, payload);
+}
+
+export type DefectDisposition =
+    | { mode: 'rework'; reason: string }
+    | { mode: 'scrap'; reason: string; quantity: number }
+    | { mode: 'recheck'; passed: boolean; remark?: string | null };
+
+export function disposeDefectiveProduct(id: number, disposition: DefectDisposition) {
+    if (disposition.mode === 'rework') {
+        return reworkDefectiveProduct(id, { reason: disposition.reason });
+    }
+
+    if (disposition.mode === 'scrap') {
+        return scrapDefectiveProduct(id, { reason: disposition.reason, quantity: disposition.quantity });
+    }
+
+    return recheckDefectiveProduct(id, { passed: disposition.passed, remark: disposition.remark });
+}
