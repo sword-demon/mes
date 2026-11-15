@@ -21,6 +21,7 @@ use App\Modules\Production\Controller\ProductionTaskController;
 use App\Modules\Production\Controller\ProductSnController;
 use App\Modules\Quality\Controller\DefectCodeController;
 use App\Modules\Quality\Controller\InspectionItemController;
+use App\Modules\Quality\Controller\InspectionTaskController;
 use App\Modules\System\Controller\AccessTokenController;
 use App\Modules\System\Controller\DepartmentController;
 use App\Modules\System\Controller\MeController;
@@ -48,6 +49,17 @@ Route::middleware(['auth:sanctum', 'active'])->group(function (): void {
             ->middleware('permission:quality.standards.create')->name('inspection-items.store');
         Route::put('/inspection-items/{item}', [InspectionItemController::class, 'update'])
             ->middleware('permission:quality.standards.update')->name('inspection-items.update');
+
+        Route::get('/inspection-tasks/options', [InspectionTaskController::class, 'options'])
+            ->middleware('permission:quality.inspections.index')->name('inspection-tasks.options');
+        Route::get('/inspection-tasks', [InspectionTaskController::class, 'index'])
+            ->middleware('permission:quality.inspections.index')->name('inspection-tasks.index');
+        Route::post('/inspection-tasks', [InspectionTaskController::class, 'store'])
+            ->middleware('permission:quality.inspections.create')->name('inspection-tasks.store');
+        Route::post('/inspection-tasks/{task}/record', [InspectionTaskController::class, 'record'])
+            ->middleware('permission:quality.inspections.record')->name('inspection-tasks.record');
+        Route::post('/inspection-tasks/{task}/images', [InspectionTaskController::class, 'storeImages'])
+            ->middleware('permission:quality.inspections.record')->name('inspection-tasks.images.store');
     });
     Route::get('/me', [MeController::class, 'show'])->name('api.me');
 

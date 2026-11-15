@@ -16,7 +16,7 @@ use Illuminate\Database\Eloquent\Relations\HasOne;
  * @property string $name
  * @property string $unit
  * @property bool $status
- * @property-read InspectionStandard $standard
+ * @property-read InspectionStandard|null $standard
  */
 #[Fillable(['code', 'name', 'unit', 'status'])]
 #[Table('mes_inspection_items')]
