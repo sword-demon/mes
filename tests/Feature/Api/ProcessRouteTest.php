@@ -193,6 +193,14 @@ it('only surfaces approved and enabled routes of an enabled product as usable', 
         'status' => false,
     ]);
 
+    $retiredProcess = ProcessRoute::factory()->create([
+        'product_id' => $product->id,
+        'version' => 'V4.0',
+        'audit_status' => ProcessRoute::APPROVED,
+    ]);
+    $operation = RouteOperation::factory()->create(['route_id' => $retiredProcess->id]);
+    $operation->process()->update(['status' => false]);
+
     $disabledProduct = Product::factory()->create(['status' => false]);
     ProcessRoute::factory()->create([
         'product_id' => $disabledProduct->id,
@@ -273,4 +281,48 @@ it('keeps its own code and version when a route is updated', function () {
         'remark' => '补充说明',
     ])->assertOk()
         ->assertJsonPath('data.remark', '补充说明');
+});
+
+it('rejects updating a route to a version its product already uses', function () {
+    $actor = userWithPermissions(['process.routes.update']);
+    $product = Product::factory()->create();
+    $route = ProcessRoute::factory()->create(['product_id' => $product->id, 'version' => 'V1.0']);
+    ProcessRoute::factory()->create(['product_id' => $product->id, 'version' => 'V2.0']);
+
+    bearer($actor)->putJson("/api/v1/process/routes/{$route->id}", ['version' => 'V2.0'])
+        ->assertUnprocessable()
+        ->assertJsonPath('message', '版本号已存在');
+});
+
+it('rejects every route endpoint without its permission', function () {
+    $actor = userWithPermissions([]);
+    $route = ProcessRoute::factory()->create();
+    $operation = RouteOperation::factory()->create(['route_id' => $route->id]);
+    $process = Process::factory()->create();
+
+    $requests = [
+        ['GET', '/api/v1/process/routes', []],
+        ['POST', '/api/v1/process/routes', ['code' => 'RT-X', 'product_id' => $route->product_id, 'version' => 'V9.0']],
+        ['PUT', "/api/v1/process/routes/{$route->id}", ['remark' => 'x']],
+        ['POST', "/api/v1/process/routes/{$route->id}/submit", []],
+        ['POST', "/api/v1/process/routes/{$route->id}/approve", []],
+        ['GET', "/api/v1/process/routes/{$route->id}/operations", []],
+        ['POST', "/api/v1/process/routes/{$route->id}/operations", ['process_id' => $process->id, 'sequence' => 2]],
+        ['PUT', "/api/v1/process/routes/{$route->id}/operations/{$operation->id}", ['sequence' => 3]],
+        ['DELETE', "/api/v1/process/routes/{$route->id}/operations/{$operation->id}", []],
+    ];
+
+    foreach ($requests as [$method, $url, $payload]) {
+        bearer($actor)->json($method, $url, $payload)->assertForbidden();
+    }
+});
+
+it('refuses to submit a disabled route', function () {
+    $actor = userWithPermissions(['process.routes.submit']);
+    $route = ProcessRoute::factory()->create(['status' => false]);
+    RouteOperation::factory()->create(['route_id' => $route->id]);
+
+    bearer($actor)->postJson("/api/v1/process/routes/{$route->id}/submit")
+        ->assertUnprocessable()
+        ->assertJsonPath('message', '工艺路线已停用，不能提交审核');
 });

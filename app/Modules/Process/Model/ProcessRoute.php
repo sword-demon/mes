@@ -82,6 +82,29 @@ class ProcessRoute extends Model
     }
 
     /**
+     * A route joins the audit flow only while its product and every process
+     * stay active; otherwise production would inherit a step nobody can run.
+     *
+     * @throws ApiException
+     */
+    public function ensureAuditable(string $action): void
+    {
+        if (! $this->status) {
+            throw new ApiException("工艺路线已停用，不能{$action}", 422);
+        }
+
+        $this->loadMissing('product');
+
+        if (! $this->product->status) {
+            throw new ApiException("产品已停用，不能{$action}", 422);
+        }
+
+        if ($this->operations()->whereHas('process', fn ($query) => $query->where('status', false))->exists()) {
+            throw new ApiException("工艺路线包含已停用的工序，不能{$action}", 422);
+        }
+    }
+
+    /**
      * @return BelongsTo<Product, $this>
      */
     public function product(): BelongsTo

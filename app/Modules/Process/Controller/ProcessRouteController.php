@@ -25,7 +25,9 @@ class ProcessRouteController extends Controller
                 ['product'],
                 $request->only(['product_id', 'audit_status', 'status', 'keyword', 'per_page']),
                 ['code', 'version'],
-                enabledRelations: ['product'],
+                // `status=1` feeds the dropdowns, so a route whose product or
+                // any of its processes was retired must not look selectable.
+                enabledRelations: ['product', 'operations.process'],
                 filterColumns: ['product_id', 'audit_status'],
             ),
             ProcessRouteResource::class,
@@ -53,8 +55,7 @@ class ProcessRouteController extends Controller
 
     public function submit(ProcessRoute $route): JsonResponse
     {
-        $this->ensureActiveProduct($route, '提交审核');
-        $this->ensureActiveProcesses($route, '提交审核');
+        $route->ensureAuditable('提交审核');
 
         if ($route->audit_status !== ProcessRoute::DRAFT) {
             throw new ApiException('只有草稿状态的工艺路线才能提交审核', 422);
@@ -64,46 +65,30 @@ class ProcessRouteController extends Controller
             throw new ApiException('工艺路线至少需要一道工序才能提交审核', 422);
         }
 
-        return ApiResponse::success(ProcessRouteResource::make(
-            $this->entities->update($route, ['audit_status' => ProcessRoute::PENDING])
-                ->load('product'),
-        ));
+        return $this->transition($route, ['audit_status' => ProcessRoute::PENDING]);
     }
 
     public function approve(ProcessRoute $route): JsonResponse
     {
-        $this->ensureActiveProduct($route, '审核通过');
-        $this->ensureActiveProcesses($route, '审核通过');
+        $route->ensureAuditable('审核通过');
 
         if ($route->audit_status !== ProcessRoute::PENDING) {
             throw new ApiException('只有待审核的工艺路线才能审核通过', 422);
         }
 
-        return ApiResponse::success(ProcessRouteResource::make(
-            $this->entities->update($route, [
-                'audit_status' => ProcessRoute::APPROVED,
-                'audited_at' => now(),
-            ])->load('product'),
-        ));
-    }
-
-    private function ensureActiveProduct(ProcessRoute $route, string $action): void
-    {
-        $route->loadMissing('product');
-
-        if (! $route->product->status) {
-            throw new ApiException("产品已停用，不能{$action}", 422);
-        }
+        return $this->transition($route, [
+            'audit_status' => ProcessRoute::APPROVED,
+            'audited_at' => now(),
+        ]);
     }
 
     /**
-     * A process can be retired while a draft still references it; approving
-     * such a route would hand production a step nobody can execute.
+     * @param  array<string, mixed>  $data
      */
-    private function ensureActiveProcesses(ProcessRoute $route, string $action): void
+    private function transition(ProcessRoute $route, array $data): JsonResponse
     {
-        if ($route->operations()->whereHas('process', fn ($query) => $query->where('status', false))->exists()) {
-            throw new ApiException("工艺路线包含已停用的工序，不能{$action}", 422);
-        }
+        return ApiResponse::success(ProcessRouteResource::make(
+            $this->entities->update($route, $data)->load('product'),
+        ));
     }
 }

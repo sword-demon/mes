@@ -3,7 +3,6 @@
 namespace App\Modules\Process\FormRequest;
 
 use App\Modules\Process\Model\ProcessRoute;
-use Closure;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 
@@ -24,13 +23,17 @@ abstract class ProcessRouteRequest extends FormRequest
         $presence = $route === null ? [] : ['sometimes'];
         $code = Rule::unique('mes_routes', 'code');
 
+        $version = Rule::unique('mes_routes', 'version')
+            ->where('product_id', $route->product_id ?? $this->input('product_id'));
+
         if ($route !== null) {
             $code->ignore($route->id);
+            $version->ignore($route->id);
         }
 
         $rules = [
             'code' => [...$presence, 'required', 'string', 'max:64', $code],
-            'version' => [...$presence, 'required', 'string', 'max:32', $this->versionAvailable($route)],
+            'version' => [...$presence, 'required', 'string', 'max:32', $version],
             'remark' => ['nullable', 'string', 'max:255'],
             'status' => ['sometimes', 'boolean'],
         ];
@@ -44,31 +47,13 @@ abstract class ProcessRouteRequest extends FormRequest
     }
 
     /**
-     * A route version is unique inside its product, so an order always pins
-     * exactly one route row.
-     */
-    private function versionAvailable(?ProcessRoute $route): Closure
-    {
-        return function (string $attribute, mixed $value, Closure $fail) use ($route): void {
-            $taken = ProcessRoute::query()
-                ->where('product_id', $route->product_id ?? $this->input('product_id'))
-                ->where('version', (string) $value)
-                ->when($route !== null, fn ($query) => $query->whereKeyNot($route->id))
-                ->exists();
-
-            if ($taken) {
-                $fail('版本号已存在');
-            }
-        };
-    }
-
-    /**
      * @return array<string, string>
      */
     public function messages(): array
     {
         return [
             'code.unique' => '编码已存在',
+            'version.unique' => '版本号已存在',
         ];
     }
 }
