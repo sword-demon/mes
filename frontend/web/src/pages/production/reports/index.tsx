@@ -239,9 +239,11 @@ export default function ProductionReports() {
     const showError = (error: unknown) =>
         message.error(error instanceof ApiRequestError ? error.message : '操作失败');
     const invalidate = async () => {
-        await queryClient.invalidateQueries({ queryKey: ['production.reports'] });
-        await queryClient.invalidateQueries({ queryKey: ['production.tasks'] });
-        await queryClient.invalidateQueries({ queryKey: ['production.orders'] });
+        await Promise.all([
+            queryClient.invalidateQueries({ queryKey: ['production.reports'] }),
+            queryClient.invalidateQueries({ queryKey: ['production.tasks'] }),
+            queryClient.invalidateQueries({ queryKey: ['production.orders'] }),
+        ]);
     };
     const create = useMutation({
         mutationFn: createReport,

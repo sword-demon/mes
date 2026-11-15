@@ -2,6 +2,7 @@
 
 namespace App\Modules\Production\Resource;
 
+use App\Modules\Organization\Resource\Concerns\ProjectsNamedRef;
 use App\Modules\Production\Model\ProductionReport;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
@@ -11,6 +12,8 @@ use Illuminate\Http\Resources\Json\JsonResource;
  */
 class ProductionReportResource extends JsonResource
 {
+    use ProjectsNamedRef;
+
     /**
      * @return array<string, mixed>
      */
@@ -44,30 +47,18 @@ class ProductionReportResource extends JsonResource
                 'id' => $this->productionTask->productionOrder->id,
                 'code' => $this->productionTask->productionOrder->code,
             ]),
-            'product' => $this->whenLoaded('productionTask', fn () => [
-                'id' => $this->productionTask->product->id,
-                'code' => $this->productionTask->product->code,
-                'name' => $this->productionTask->product->name,
-            ]),
+            'product' => $this->whenLoaded('productionTask', fn () => $this->namedRef($this->productionTask->product)),
             'route_operation' => $this->whenLoaded('routeOperation', fn () => [
                 'id' => $this->routeOperation->id,
                 'sequence' => $this->routeOperation->sequence,
-                'process' => [
-                    'id' => $this->routeOperation->process->id,
-                    'code' => $this->routeOperation->process->code,
-                    'name' => $this->routeOperation->process->name,
-                ],
+                'process' => $this->namedRef($this->routeOperation->process),
             ]),
             'employee' => $this->whenLoaded('employee', fn () => [
                 'id' => $this->employee->id,
                 'employee_no' => $this->employee->employee_no,
                 'name' => $this->employee->name,
             ]),
-            'team' => $this->whenLoaded('team', fn () => $this->team === null ? null : [
-                'id' => $this->team->id,
-                'code' => $this->team->code,
-                'name' => $this->team->name,
-            ]),
+            'team' => $this->whenLoaded('team', fn () => $this->namedRef($this->team)),
             'created_at' => $this->created_at,
             'updated_at' => $this->updated_at,
         ];

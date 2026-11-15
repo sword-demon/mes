@@ -6,10 +6,7 @@ use App\Core\Services\EntityService;
 use App\Http\Controllers\Controller;
 use App\Http\Responses\ApiResponse;
 use App\Modules\Organization\Model\Employee;
-use App\Modules\Process\Model\RouteOperation;
-use App\Modules\Process\Resource\RouteOperationResource;
 use App\Modules\Production\FormRequest\StoreProductionReportRequest;
-use App\Modules\Production\Model\ProductionOrder;
 use App\Modules\Production\Model\ProductionReport;
 use App\Modules\Production\Model\ProductionTask;
 use App\Modules\Production\Resource\ProductionReportResource;
@@ -17,6 +14,7 @@ use App\Modules\Production\Service\ProductionReportService;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Carbon;
 
 class ProductionReportController extends Controller
 {
@@ -51,11 +49,11 @@ class ProductionReportController extends Controller
             )
             ->when(
                 is_string($startDate) && $startDate !== '',
-                fn (Builder $query) => $query->whereDate('reported_at', '>=', $startDate),
+                fn (Builder $query) => $query->where('reported_at', '>=', Carbon::parse($startDate)->startOfDay()),
             )
             ->when(
                 is_string($endDate) && $endDate !== '',
-                fn (Builder $query) => $query->whereDate('reported_at', '<=', $endDate),
+                fn (Builder $query) => $query->where('reported_at', '<', Carbon::parse($endDate)->addDay()->startOfDay()),
             )
             ->when(is_string($keyword) && $keyword !== '', function (Builder $query) use ($keyword): void {
                 $query->where(fn (Builder $inner) => $inner
@@ -87,16 +85,10 @@ class ProductionReportController extends Controller
      */
     public function options(): JsonResponse
     {
-        $reportableOrderStatuses = [
-            ProductionOrder::RELEASED,
-            ProductionOrder::IN_PROGRESS,
-            ProductionOrder::PAUSED,
-        ];
-
         // shortcut: one page covers a demo factory's open tasks; add paging when it does not.
         $tasks = ProductionTask::query()
             ->with(['product:id,code,name', 'productionOrder:id,code'])
-            ->whereHas('productionOrder', fn (Builder $order) => $order->whereIn('status', $reportableOrderStatuses))
+            ->whereHas('productionOrder', fn (Builder $order) => $order->whereIn('status', ProductionReportService::REPORTABLE_ORDER_STATUSES))
             ->where('status', '!=', ProductionTask::COMPLETED)
             ->orderBy('id')
             ->limit(100)
@@ -121,19 +113,6 @@ class ProductionReportController extends Controller
             'tasks' => $tasks,
             'employees' => $employees,
         ]);
-    }
-
-    public function operations(ProductionTask $task): JsonResponse
-    {
-        return ApiResponse::success(
-            RouteOperationResource::collection(
-                RouteOperation::query()
-                    ->with('process')
-                    ->where('route_id', $task->route_id)
-                    ->orderBy('sequence')
-                    ->get(),
-            )->resolve(),
-        );
     }
 
     public function store(StoreProductionReportRequest $request): JsonResponse

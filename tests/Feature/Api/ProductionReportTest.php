@@ -59,7 +59,9 @@ it('reports production and rolls the quantities up to the task and order', funct
         ->assertJsonPath('data.quantity', '12.000')
         ->assertJsonPath('data.production_task.id', $task->id)
         ->assertJsonPath('data.production_order.id', $task->production_order_id)
+        ->assertJsonPath('data.product.id', $task->product_id)
         ->assertJsonPath('data.route_operation.id', $operation->id)
+        ->assertJsonPath('data.route_operation.process.id', $operation->process_id)
         ->assertJsonPath('data.employee.id', $employee->id)
         ->assertJsonPath('data.team.id', $employee->team_id);
 
@@ -201,6 +203,18 @@ it('lists reports filtered by task, order and type', function () {
         ->assertOk()
         ->assertJsonPath('data.meta.total', 1)
         ->assertJsonPath('data.items.0.id', $other->id);
+});
+
+it('filters reports by an inclusive reported date range', function () {
+    $actor = userWithPermissions(['production.reports.index']);
+    $inside = ProductionReport::factory()->create(['reported_at' => '2026-11-15 23:30:00']);
+    ProductionReport::factory()->create(['reported_at' => '2026-11-14 23:59:59']);
+    ProductionReport::factory()->create(['reported_at' => '2026-11-16 00:00:00']);
+
+    bearer($actor)->getJson('/api/v1/production/reports?start_date=2026-11-15&end_date=2026-11-15')
+        ->assertOk()
+        ->assertJsonPath('data.meta.total', 1)
+        ->assertJsonPath('data.items.0.id', $inside->id);
 });
 
 it('reverses a report and rolls the quantities back without deleting it', function () {

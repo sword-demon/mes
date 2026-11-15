@@ -12,6 +12,12 @@ use Illuminate\Support\Facades\DB;
 
 class ProductionReportService
 {
+    public const array REPORTABLE_ORDER_STATUSES = [
+        ProductionOrder::RELEASED,
+        ProductionOrder::IN_PROGRESS,
+        ProductionOrder::PAUSED,
+    ];
+
     /**
      * The task row lock serialises concurrent reports, so two requests cannot
      * both read the same remainder and together overshoot the planned quantity.
@@ -114,13 +120,7 @@ class ProductionReportService
      */
     private function ensureReportable(ProductionTask $task, ProductionOrder $order): void
     {
-        $reportableOrderStatuses = [
-            ProductionOrder::RELEASED,
-            ProductionOrder::IN_PROGRESS,
-            ProductionOrder::PAUSED,
-        ];
-
-        if (! in_array($order->status, $reportableOrderStatuses, true)
+        if (! in_array($order->status, self::REPORTABLE_ORDER_STATUSES, true)
             || $task->status === ProductionTask::COMPLETED) {
             throw new ApiException('只有已下达且未完成的生产任务可以报工', 422);
         }

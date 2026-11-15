@@ -260,7 +260,7 @@ Route::middleware(['auth:sanctum', 'active'])->group(function (): void {
             ->middleware('permission:production.reports.index')->name('reports.index');
         Route::get('/reports/options', [ProductionReportController::class, 'options'])
             ->middleware('permission:production.reports.create')->name('reports.options');
-        Route::get('/reports/tasks/{task}/operations', [ProductionReportController::class, 'operations'])
+        Route::get('/reports/tasks/{task}/operations', [ProductionDispatchController::class, 'operations'])
             ->middleware('permission:production.reports.create')->name('reports.tasks.operations');
         Route::post('/reports', [ProductionReportController::class, 'store'])
             ->middleware('permission:production.reports.create')->name('reports.store');
