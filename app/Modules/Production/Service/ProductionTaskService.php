@@ -29,11 +29,7 @@ class ProductionTaskService
                 ->whereKey($order->getKey())
                 ->firstOrFail();
 
-            if (! in_array($locked->status, [
-                ProductionOrder::RELEASED,
-                ProductionOrder::IN_PROGRESS,
-                ProductionOrder::PAUSED,
-            ], true)) {
+            if ($locked->status !== ProductionOrder::RELEASED) {
                 throw new ApiException('只有已下达的生产订单可以拆分生产任务', 422);
             }
 
@@ -91,7 +87,7 @@ class ProductionTaskService
 
             $this->ensureActiveLine((int) $data['production_line_id']);
             $this->ensureActiveTeam((int) $data['team_id']);
-            $this->ensureActiveEmployee((int) $data['owner_id']);
+            $this->ensureActiveEmployee((int) $data['owner_id'], (int) $data['team_id']);
 
             $locked->update([
                 ...$data,
@@ -143,10 +139,16 @@ class ProductionTaskService
     /**
      * @throws ApiException
      */
-    private function ensureActiveEmployee(int $employeeId): void
+    private function ensureActiveEmployee(int $employeeId, int $teamId): void
     {
-        if (! Employee::query()->whereKey($employeeId)->where('status', true)->exists()) {
+        $employee = Employee::query()->whereKey($employeeId)->where('status', true)->first();
+
+        if ($employee === null) {
             throw new ApiException('负责人不存在或已停用，不能分配给生产任务', 422);
+        }
+
+        if ($employee->team_id !== $teamId) {
+            throw new ApiException('负责人不属于所选班组', 422);
         }
     }
 }

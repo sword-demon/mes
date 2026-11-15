@@ -60,16 +60,30 @@ it('splits a released order into tasks that inherit the product and route', func
         ->assertJsonPath('data.status', ProductionTask::PENDING)
         ->assertJsonPath('data.status_label', '待分配');
 
+    $this->assertDatabaseHas('mes_production_tasks', [
+        'code' => "{$order->code}-T01",
+        'production_order_id' => $order->id,
+        'product_id' => $order->product_id,
+        'route_id' => $order->route_id,
+        'status' => ProductionTask::PENDING,
+    ]);
+
     bearer($actor)->postJson("/api/v1/production/orders/{$order->id}/tasks", [
         'planned_quantity' => 60,
     ])->assertOk()
         ->assertJsonPath('data.code', "{$order->code}-T02");
 });
 
-it('only splits orders that are released, running or paused', function () {
+it('only splits orders that are released', function () {
     $actor = userWithPermissions(['production.tasks.create']);
 
-    foreach ([ProductionOrder::DRAFT, ProductionOrder::COMPLETED, ProductionOrder::CANCELLED] as $status) {
+    foreach ([
+        ProductionOrder::DRAFT,
+        ProductionOrder::PENDING,
+        ProductionOrder::APPROVED,
+        ProductionOrder::COMPLETED,
+        ProductionOrder::CANCELLED,
+    ] as $status) {
         $order = ProductionOrder::factory()->create(['status' => $status]);
 
         bearer($actor)->postJson("/api/v1/production/orders/{$order->id}/tasks", [
@@ -78,11 +92,42 @@ it('only splits orders that are released, running or paused', function () {
             ->assertJsonPath('message', '只有已下达的生产订单可以拆分生产任务');
     }
 
-    $running = ProductionOrder::factory()->create(['status' => ProductionOrder::IN_PROGRESS]);
+    $released = ProductionOrder::factory()->create(['status' => ProductionOrder::RELEASED]);
 
-    bearer($actor)->postJson("/api/v1/production/orders/{$running->id}/tasks", [
+    bearer($actor)->postJson("/api/v1/production/orders/{$released->id}/tasks", [
         'planned_quantity' => 10,
     ])->assertOk();
+});
+
+it('refuses to split an order that already started or is paused', function () {
+    $actor = userWithPermissions(['production.tasks.create']);
+
+    foreach ([ProductionOrder::IN_PROGRESS, ProductionOrder::PAUSED] as $status) {
+        $order = ProductionOrder::factory()->create([
+            'status' => $status,
+            'planned_quantity' => 100,
+        ]);
+
+        bearer($actor)->postJson("/api/v1/production/orders/{$order->id}/tasks", [
+            'planned_quantity' => 10,
+        ])->assertUnprocessable()
+            ->assertJsonPath('message', '只有已下达的生产订单可以拆分生产任务');
+    }
+});
+
+it('rejects planned quantities outside the decimal column precision', function () {
+    $order = releasedOrder();
+    $actor = userWithPermissions(['production.tasks.create']);
+
+    bearer($actor)->postJson("/api/v1/production/orders/{$order->id}/tasks", [
+        'planned_quantity' => 0.0004,
+    ])->assertUnprocessable()
+        ->assertJsonPath('message', '计划数量最多保留 3 位小数');
+
+    bearer($actor)->postJson("/api/v1/production/orders/{$order->id}/tasks", [
+        'planned_quantity' => 1000000000,
+    ])->assertUnprocessable()
+        ->assertJsonPath('message', '计划数量不能超过 999999999.999');
 });
 
 it('refuses a split that would exceed the order planned quantity', function () {
@@ -116,6 +161,14 @@ it('assigns an active line, team and owner and starts the task', function () {
         ->assertJsonPath('data.production_line.id', $line->id)
         ->assertJsonPath('data.team.id', $team->id)
         ->assertJsonPath('data.owner.id', $employee->id);
+
+    $this->assertDatabaseHas('mes_production_tasks', [
+        'id' => $task->id,
+        'production_line_id' => $line->id,
+        'team_id' => $team->id,
+        'owner_id' => $employee->id,
+        'status' => ProductionTask::IN_PROGRESS,
+    ]);
 });
 
 it('refuses to assign a disabled line, team or owner', function () {
@@ -152,6 +205,21 @@ it('refuses to assign a disabled line, team or owner', function () {
         'owner_id' => $employee->id,
     ])->assertUnprocessable()
         ->assertJsonPath('message', '负责人不存在或已停用，不能分配给生产任务');
+});
+
+it('refuses to assign an owner from another team', function () {
+    $order = releasedOrder();
+    $task = taskForOrder($order);
+    [$line, $team] = taskAssignmentReferences();
+    $outsider = Employee::factory()->create(['team_id' => Team::factory()->create()->id]);
+    $actor = userWithPermissions(['production.tasks.update']);
+
+    bearer($actor)->putJson("/api/v1/production/tasks/{$task->id}", [
+        'production_line_id' => $line->id,
+        'team_id' => $team->id,
+        'owner_id' => $outsider->id,
+    ])->assertUnprocessable()
+        ->assertJsonPath('message', '负责人不属于所选班组');
 });
 
 it('pauses, resumes and completes a task in the legal order', function () {

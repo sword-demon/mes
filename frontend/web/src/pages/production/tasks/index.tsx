@@ -36,7 +36,7 @@ import type {
 } from '@/api/production';
 import { ApiRequestError } from '@/utils/api-error';
 
-const SPLITTABLE_ORDER_STATUSES = ['released', 'in_progress', 'paused'];
+const SPLITTABLE_ORDER_STATUSES = ['released'];
 const statusOptions = PRODUCTION_TASK_STATUSES.map(({ value, label }) => ({ value, label }));
 const statusColor = Object.fromEntries(
     PRODUCTION_TASK_STATUSES.map(({ value, color }) => [value, color]),
@@ -426,6 +426,16 @@ export default function ProductionTasks() {
                         width: 120,
                         render: (_, record) =>
                             `${Number(record.produced_quantity)} / ${Number(record.planned_quantity)}`,
+                    },
+                    {
+                        title: '计划时间',
+                        width: 190,
+                        render: (_, record) =>
+                            `${dayjs(record.planned_start_at).format('YYYY-MM-DD HH:mm')}${
+                                record.planned_end_at
+                                    ? ` ~ ${dayjs(record.planned_end_at).format('MM-DD HH:mm')}`
+                                    : ''
+                            }`,
                     },
                     {
                         title: '进度',
