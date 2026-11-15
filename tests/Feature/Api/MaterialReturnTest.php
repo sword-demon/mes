@@ -248,6 +248,108 @@ it('requires a destination for every return item before approving', function () 
         ->and(InventoryTransaction::query()->count())->toBe(0);
 });
 
+it('rejects approving a return item that belongs to another return', function () {
+    $actor = userWithPermissions(['material.returns.audit']);
+    [, $location] = inventoryLocation();
+    $requisition = MaterialRequisition::query()->create([
+        'code' => 'MR-600013',
+        'production_order_id' => ProductionOrder::factory()->create()->id,
+        'created_by_id' => $actor->id,
+    ]);
+    $firstItem = $requisition->items()->create([
+        'material_id' => Material::factory()->create()->id,
+        'requested_quantity' => 1,
+        'issued_quantity' => 1,
+    ]);
+    $secondItem = $requisition->items()->create([
+        'material_id' => Material::factory()->create()->id,
+        'requested_quantity' => 1,
+        'issued_quantity' => 1,
+    ]);
+    $firstReturn = MaterialReturn::query()->create([
+        'code' => 'RT-600009',
+        'requisition_id' => $requisition->id,
+        'production_order_id' => $requisition->production_order_id,
+        'created_by_id' => $actor->id,
+    ]);
+    $firstReturn->items()->create(['requisition_item_id' => $firstItem->id, 'quantity' => 1]);
+    $secondReturn = MaterialReturn::query()->create([
+        'code' => 'RT-600010',
+        'requisition_id' => $requisition->id,
+        'production_order_id' => $requisition->production_order_id,
+        'created_by_id' => $actor->id,
+    ]);
+    $foreignItem = $secondReturn->items()->create(['requisition_item_id' => $secondItem->id, 'quantity' => 1]);
+
+    bearer($actor)->postJson("/api/v1/materials/returns/{$firstReturn->id}/approve", [
+        'items' => [[
+            'id' => $foreignItem->id,
+            'warehouse_id' => $location->warehouse_id,
+            'location_id' => $location->id,
+        ]],
+    ])->assertStatus(422)
+        ->assertJsonPath('message', '退料明细不属于该退料单');
+
+    expect($firstReturn->refresh()->status)->toBe('pending')
+        ->and(InventoryTransaction::query()->count())->toBe(0);
+});
+
+it('rolls back earlier lines when a later approval line fails', function () {
+    $actor = userWithPermissions(['material.returns.audit']);
+    [, $location] = inventoryLocation();
+    $firstMaterial = Material::factory()->create(['batch_managed' => false]);
+    $secondMaterial = Material::factory()->create(['batch_managed' => true]);
+    $inventory = Inventory::factory()->create([
+        'material_id' => $firstMaterial->id,
+        'location_id' => $location->id,
+        'batch_no' => '',
+        'current_quantity' => 10,
+    ]);
+    $requisition = MaterialRequisition::query()->create([
+        'code' => 'MR-600014',
+        'production_order_id' => ProductionOrder::factory()->create()->id,
+        'created_by_id' => $actor->id,
+    ]);
+    $firstItem = $requisition->items()->create([
+        'material_id' => $firstMaterial->id,
+        'requested_quantity' => 1,
+        'issued_quantity' => 1,
+    ]);
+    $secondItem = $requisition->items()->create([
+        'material_id' => $secondMaterial->id,
+        'requested_quantity' => 1,
+        'issued_quantity' => 1,
+    ]);
+    $return = MaterialReturn::query()->create([
+        'code' => 'RT-600011',
+        'requisition_id' => $requisition->id,
+        'production_order_id' => $requisition->production_order_id,
+        'created_by_id' => $actor->id,
+    ]);
+    $firstReturnItem = $return->items()->create(['requisition_item_id' => $firstItem->id, 'quantity' => 1]);
+    $secondReturnItem = $return->items()->create(['requisition_item_id' => $secondItem->id, 'quantity' => 1]);
+
+    bearer($actor)->postJson("/api/v1/materials/returns/{$return->id}/approve", [
+        'items' => [
+            [
+                'id' => $firstReturnItem->id,
+                'warehouse_id' => $location->warehouse_id,
+                'location_id' => $location->id,
+            ],
+            [
+                'id' => $secondReturnItem->id,
+                'warehouse_id' => $location->warehouse_id,
+                'location_id' => $location->id,
+            ],
+        ],
+    ])->assertStatus(422)
+        ->assertJsonPath('message', '批次管理物料必须填写批次号');
+
+    expect((float) $inventory->refresh()->current_quantity)->toBe(10.0)
+        ->and($return->refresh()->status)->toBe('pending')
+        ->and(InventoryTransaction::query()->count())->toBe(0);
+});
+
 it('lists returnable quantities for a requisition after earlier returns', function () {
     $actor = userWithPermissions(['material.returns.create']);
     $order = ProductionOrder::factory()->create();
@@ -299,7 +401,8 @@ it('lists returnable quantities for a requisition after earlier returns', functi
         ->assertJsonPath('data.0.requisition_item_id', $firstItem->id)
         ->assertJsonPath('data.0.material.code', 'M001')
         ->assertJsonPath('data.0.issued_quantity', 5)
-        ->assertJsonPath('data.0.returned_quantity', 1)
+        ->assertJsonPath('data.0.approved_returned_quantity', 1)
+        ->assertJsonPath('data.0.pending_quantity', 2)
         ->assertJsonPath('data.0.returnable_quantity', 4);
 });
 

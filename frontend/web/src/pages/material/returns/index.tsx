@@ -101,7 +101,7 @@ function CreateModal({ onClose }: { onClose: () => void }) {
                         name={['quantities', item.requisition_item_id]}
                         label={`${item.material.code} ${item.material.name}`}
                         initialValue={item.returnable_quantity}
-                        extra={`已领 ${item.issued_quantity}，已退 ${item.returned_quantity}，可退 ${item.returnable_quantity} ${item.material.unit}`}
+                        extra={`已领 ${item.issued_quantity}，已审退 ${item.approved_returned_quantity}，待审 ${item.pending_quantity}，可申请 ${item.returnable_quantity} ${item.material.unit}`}
                     >
                         <InputNumber min={0} max={item.returnable_quantity} precision={3} step={0.001} className="w-full" />
                     </Form.Item>
@@ -145,8 +145,14 @@ function ReturnItemFields({
             <Form.Item name={['items', item.id, 'location_id']} label="退回库位" rules={[{ required: true, message: '请选择库位' }]}>
                 <Select disabled={warehouseId === undefined} options={locations} />
             </Form.Item>
-            <Form.Item name={['items', item.id, 'batch_no']} label="批次号">
-                <Input maxLength={80} />
+            <Form.Item
+                name={['items', item.id, 'batch_no']}
+                label={item.material?.batch_managed === true ? '批次号（必填）' : '批次号'}
+                rules={item.material?.batch_managed === true
+                    ? [{ required: true, message: '批次管理物料必须填写批次号' }]
+                    : []}
+            >
+                <Input maxLength={80} placeholder={item.material?.batch_managed === true ? '批次管理物料必填' : '选填'} />
             </Form.Item>
         </div>
     );

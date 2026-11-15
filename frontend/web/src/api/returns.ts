@@ -37,7 +37,8 @@ export type ReturnSuggestion = {
     requisition_item_id: number;
     material: ReturnMaterial;
     issued_quantity: number;
-    returned_quantity: number;
+    approved_returned_quantity: number;
+    pending_quantity: number;
     returnable_quantity: number;
 };
 

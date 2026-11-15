@@ -25,7 +25,7 @@ class MaterialRequisitionService
             $this->ensureOrderCanRequisition($order);
 
             $requisition = MaterialRequisition::query()->create([
-                'code' => $this->nextCode(),
+                'code' => DocumentNumber::next('MR-', MaterialRequisition::class),
                 'production_order_id' => $order->id,
                 'remark' => $data['remark'] ?? null,
                 'created_by_id' => $userId,
@@ -71,8 +71,8 @@ class MaterialRequisitionService
                     throw new ApiException('发料明细不属于该领料单', 422);
                 }
 
-                $remaining = $this->milli($item->requested_quantity) - $this->milli($item->issued_quantity);
-                $quantity = $this->milli($row['quantity']);
+                $remaining = Quantity::toMilli($item->requested_quantity) - Quantity::toMilli($item->issued_quantity);
+                $quantity = Quantity::toMilli($row['quantity']);
 
                 if ($quantity > $remaining) {
                     throw new ApiException('发料数量超过申请数量', 422);
@@ -88,11 +88,11 @@ class MaterialRequisitionService
                     'remark' => '生产发料',
                 ], $userId);
 
-                $item->update(['issued_quantity' => $this->decimal($this->milli($item->issued_quantity) + $quantity)]);
+                $item->update(['issued_quantity' => Quantity::toDecimal(Quantity::toMilli($item->issued_quantity) + $quantity)]);
             }
 
             $complete = $items->fresh()->every(
-                fn (MaterialRequisitionItem $item): bool => $this->milli($item->issued_quantity) === $this->milli($item->requested_quantity),
+                fn (MaterialRequisitionItem $item): bool => Quantity::toMilli($item->issued_quantity) === Quantity::toMilli($item->requested_quantity),
             );
             $requisition->update(['status' => $complete ? MaterialRequisition::ISSUED : MaterialRequisition::PENDING]);
 
@@ -123,9 +123,9 @@ class MaterialRequisitionService
                         'name' => $item->material->name,
                         'unit' => $item->material->unit,
                     ],
-                    'required_quantity' => $this->quantity($required),
-                    'issued_quantity' => $this->quantity($issuedQuantity),
-                    'suggested_quantity' => $this->quantity(max(0, $required - $issuedQuantity)),
+                    'required_quantity' => Quantity::toFloat($required),
+                    'issued_quantity' => Quantity::toFloat($issuedQuantity),
+                    'suggested_quantity' => Quantity::toFloat(max(0, $required - $issuedQuantity)),
                 ];
             })
             ->all();
@@ -155,7 +155,7 @@ class MaterialRequisitionService
             ->whereHas('requisition', fn ($query) => $query->where('production_order_id', $order->id))
             ->get(['material_id', 'issued_quantity'])
             ->groupBy('material_id')
-            ->map(fn ($items) => $items->sum(fn (MaterialRequisitionItem $item): int => $this->milli($item->issued_quantity)))
+            ->map(fn ($items) => $items->sum(fn (MaterialRequisitionItem $item): int => Quantity::toMilli($item->issued_quantity)))
             ->all();
     }
 
@@ -187,36 +187,10 @@ class MaterialRequisitionService
         throw new ApiException("生产订单当前状态为「{$order->statusLabel()}」，不能领料", 422);
     }
 
-    private function nextCode(): string
-    {
-        do {
-            $code = 'MR-'.now()->format('YmdHis').'-'.str_pad((string) random_int(0, 999), 3, '0', STR_PAD_LEFT);
-        } while (MaterialRequisition::query()->where('code', $code)->exists());
-
-        return $code;
-    }
-
     private function requiredQuantity(ProductionOrder $order, BomItem $item): int
     {
-        return (int) round(
-            (float) $order->planned_quantity * $item->quantity * (1 + $item->loss_rate / 100) * 1000,
+        return Quantity::toMilli(
+            (float) $order->planned_quantity * $item->quantity * (1 + $item->loss_rate / 100),
         );
-    }
-
-    private function quantity(int $milli): float
-    {
-        return (float) $this->decimal($milli);
-    }
-
-    private function milli(mixed $value): int
-    {
-        $normalized = number_format((float) $value, 3, '.', '');
-
-        return (int) bcmul($normalized, '1000', 0);
-    }
-
-    private function decimal(int $milli): string
-    {
-        return number_format($milli / 1000, 3, '.', '');
     }
 }

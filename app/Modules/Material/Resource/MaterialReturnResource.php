@@ -45,6 +45,7 @@ class MaterialReturnResource extends JsonResource
                         'code' => $requisitionItem->material->code,
                         'name' => $requisitionItem->material->name,
                         'unit' => $requisitionItem->material->unit,
+                        'batch_managed' => $requisitionItem->material->batch_managed,
                     ] : null,
                     'quantity' => (float) $item->quantity,
                 ];
