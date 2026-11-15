@@ -31,6 +31,7 @@ return new class extends Migration
             $table->foreignId('material_id')->comment('物料 ID')->constrained('mes_materials')->restrictOnDelete();
             $table->decimal('requested_quantity', 12, 3)->comment('申请领用量');
             $table->decimal('issued_quantity', 12, 3)->default(0)->comment('已发料量');
+            $table->boolean('over_requirement')->default(false)->comment('累计发料是否超过 BOM 需求');
             $table->timestamp('created_at')->nullable()->comment('创建时间');
             $table->timestamp('updated_at')->nullable()->comment('更新时间');
 

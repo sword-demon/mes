@@ -30,6 +30,7 @@ class MaterialRequisitionController extends Controller
 
         $query = MaterialRequisition::query()
             ->with(['productionOrder', 'items.material'])
+            ->orderByDesc('id')
             ->when(is_scalar($materialId), fn (Builder $query) => $query->whereHas(
                 'items',
                 fn (Builder $items) => $items->where('material_id', $materialId),

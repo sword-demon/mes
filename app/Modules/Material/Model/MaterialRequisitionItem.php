@@ -14,10 +14,11 @@ use Illuminate\Support\Carbon;
  * @property int $material_id
  * @property float $requested_quantity
  * @property float $issued_quantity
+ * @property bool $over_requirement
  * @property Carbon|null $created_at
  * @property Carbon|null $updated_at
  */
-#[Fillable(['requisition_id', 'material_id', 'requested_quantity', 'issued_quantity'])]
+#[Fillable(['requisition_id', 'material_id', 'requested_quantity', 'issued_quantity', 'over_requirement'])]
 #[Table('mes_material_requisition_items')]
 class MaterialRequisitionItem extends Model
 {
@@ -26,6 +27,7 @@ class MaterialRequisitionItem extends Model
      */
     protected $attributes = [
         'issued_quantity' => 0,
+        'over_requirement' => false,
     ];
 
     /**
@@ -50,8 +52,9 @@ class MaterialRequisitionItem extends Model
     protected function casts(): array
     {
         return [
-            'requested_quantity' => 'float',
-            'issued_quantity' => 'float',
+            'requested_quantity' => 'decimal:3',
+            'issued_quantity' => 'decimal:3',
+            'over_requirement' => 'boolean',
         ];
     }
 }

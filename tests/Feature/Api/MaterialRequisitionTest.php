@@ -37,7 +37,7 @@ it('creates a requisition linked to the production order and material', function
     $order = ProductionOrder::factory()->create(['status' => ProductionOrder::RELEASED]);
     $material = Material::factory()->create();
 
-    bearer($actor)->postJson('/api/v1/materials/requisitions', [
+    $response = bearer($actor)->postJson('/api/v1/materials/requisitions', [
         'production_order_id' => $order->id,
         'items' => [[
             'material_id' => $material->id,
@@ -152,7 +152,7 @@ it('refuses to issue more than the available stock and changes nothing', functio
 });
 
 it('warns when issued quantity exceeds the BOM requirement but still issues', function () {
-    $actor = userWithPermissions(['material.requisitions.create', 'material.requisitions.issue']);
+    $actor = userWithPermissions(['material.requisitions.create', 'material.requisitions.issue', 'material.requisitions.index']);
     [, $location] = inventoryLocation();
     $order = ProductionOrder::factory()->create([
         'status' => ProductionOrder::RELEASED,
@@ -187,6 +187,10 @@ it('warns when issued quantity exceeds the BOM requirement but still issues', fu
     ])->assertOk()
         ->assertJsonPath('data.status', 'issued')
         ->assertJsonPath('data.items.0.over_requirement', true);
+
+    bearer($actor)->getJson('/api/v1/materials/requisitions?production_order_id='.$order->id)
+        ->assertOk()
+        ->assertJsonPath('data.items.0.items.0.over_requirement', true);
 });
 
 it('filters requisitions by order, material and date', function () {
@@ -269,6 +273,108 @@ it('rejects issuing a requisition item twice', function () {
         ->assertJsonPath('message', '领料单已发料');
 
     expect(InventoryTransaction::query()->count())->toBe(0);
+});
+
+it('rolls back every line when a later line exceeds available stock', function () {
+    $actor = userWithPermissions(['material.requisitions.issue']);
+    [, $firstLocation] = inventoryLocation();
+    [, $secondLocation] = inventoryLocation('WH02', 'B-01');
+    $order = ProductionOrder::factory()->create(['status' => ProductionOrder::RELEASED]);
+    $firstMaterial = Material::factory()->create(['batch_managed' => false]);
+    $secondMaterial = Material::factory()->create(['batch_managed' => false]);
+    $firstInventory = Inventory::factory()->create([
+        'material_id' => $firstMaterial->id,
+        'location_id' => $firstLocation->id,
+        'batch_no' => '',
+        'current_quantity' => 10,
+    ]);
+    $secondInventory = Inventory::factory()->create([
+        'material_id' => $secondMaterial->id,
+        'location_id' => $secondLocation->id,
+        'batch_no' => '',
+        'current_quantity' => 1,
+    ]);
+    $requisition = MaterialRequisition::query()->create([
+        'code' => 'MR-400001',
+        'production_order_id' => $order->id,
+        'created_by_id' => $actor->id,
+    ]);
+    $firstItem = $requisition->items()->create(['material_id' => $firstMaterial->id, 'requested_quantity' => 4]);
+    $secondItem = $requisition->items()->create(['material_id' => $secondMaterial->id, 'requested_quantity' => 4]);
+
+    bearer($actor)->postJson("/api/v1/materials/requisitions/{$requisition->id}/issue", [
+        'items' => [
+            [
+                'id' => $firstItem->id,
+                'warehouse_id' => $firstLocation->warehouse_id,
+                'location_id' => $firstLocation->id,
+                'quantity' => 4,
+            ],
+            [
+                'id' => $secondItem->id,
+                'warehouse_id' => $secondLocation->warehouse_id,
+                'location_id' => $secondLocation->id,
+                'quantity' => 4,
+            ],
+        ],
+    ])->assertStatus(422)
+        ->assertJsonPath('message', '出库数量超过可用库存');
+
+    expect((float) $firstInventory->refresh()->current_quantity)->toBe(10.0)
+        ->and((float) $secondInventory->refresh()->current_quantity)->toBe(1.0)
+        ->and((float) $firstItem->refresh()->issued_quantity)->toBe(0.0)
+        ->and($requisition->refresh()->status)->toBe('pending')
+        ->and(InventoryTransaction::query()->count())->toBe(0);
+});
+
+it('rejects unauthenticated requisition requests', function () {
+    $this->getJson('/api/v1/materials/requisitions')->assertUnauthorized();
+    $this->getJson('/api/v1/materials/requisitions/suggestions')->assertUnauthorized();
+    $this->postJson('/api/v1/materials/requisitions', [])->assertUnauthorized();
+    $this->postJson('/api/v1/materials/requisitions/1/issue', [])->assertUnauthorized();
+});
+
+it('rejects an empty requisition and a duplicated material', function () {
+    $actor = userWithPermissions(['material.requisitions.create']);
+    $order = ProductionOrder::factory()->create(['status' => ProductionOrder::RELEASED]);
+    $material = Material::factory()->create();
+
+    bearer($actor)->postJson('/api/v1/materials/requisitions', [])
+        ->assertUnprocessable()
+        ->assertJsonValidationErrors(['production_order_id', 'items'], 'data.errors')
+        ->assertJsonPath('data.errors.items.0', '请选择领料物料');
+
+    $response = bearer($actor)->postJson('/api/v1/materials/requisitions', [
+        'production_order_id' => $order->id,
+        'items' => [
+            ['material_id' => $material->id, 'requested_quantity' => 1],
+            ['material_id' => $material->id, 'requested_quantity' => 0],
+        ],
+    ])->assertUnprocessable();
+    expect($response->json('data.errors'))->toMatchArray([
+        'items.0.material_id' => ['同一领料单不能重复选择物料'],
+        'items.1.requested_quantity' => ['领料数量必须大于 0'],
+    ]);
+});
+
+it('rejects an issue quantity with more than three decimals', function () {
+    $actor = userWithPermissions(['material.requisitions.issue']);
+    $requisition = MaterialRequisition::query()->create([
+        'code' => 'MR-500001',
+        'production_order_id' => ProductionOrder::factory()->create()->id,
+        'created_by_id' => $actor->id,
+    ]);
+
+    $response = bearer($actor)->postJson("/api/v1/materials/requisitions/{$requisition->id}/issue", [
+        'items' => [[
+            'id' => 1,
+            'warehouse_id' => 1,
+            'location_id' => 1,
+            'quantity' => 1.0001,
+        ]],
+    ])->assertUnprocessable();
+
+    expect($response->json('data.errors')['items.0.quantity'])->toBe(['发料数量最多保留 3 位小数']);
 });
 
 it('requires the matching requisition permission', function (string $method, string $uri) {

@@ -91,7 +91,10 @@ class MaterialRequisitionService
                 $item->update(['issued_quantity' => $this->decimal($this->milli($item->issued_quantity) + $quantity)]);
             }
 
-            $requisition->update(['status' => MaterialRequisition::ISSUED]);
+            $complete = $items->fresh()->every(
+                fn (MaterialRequisitionItem $item): bool => $this->milli($item->issued_quantity) === $this->milli($item->requested_quantity),
+            );
+            $requisition->update(['status' => $complete ? MaterialRequisition::ISSUED : MaterialRequisition::PENDING]);
 
             return $this->markOverRequirement($requisition);
         });
@@ -135,10 +138,9 @@ class MaterialRequisitionService
         $required = $this->requiredByMaterial($requisition->productionOrder);
 
         $requisition->items->each(function (MaterialRequisitionItem $item) use ($issued, $required): void {
-            $item->setAttribute(
-                'over_requirement',
-                ($issued[$item->material_id] ?? 0) > ($required[$item->material_id] ?? 0),
-            );
+            $item->update([
+                'over_requirement' => ($issued[$item->material_id] ?? 0) > ($required[$item->material_id] ?? 0),
+            ]);
         });
 
         return $requisition;
@@ -208,7 +210,9 @@ class MaterialRequisitionService
 
     private function milli(mixed $value): int
     {
-        return (int) round((float) $value * 1000);
+        $normalized = number_format((float) $value, 3, '.', '');
+
+        return (int) bcmul($normalized, '1000', 0);
     }
 
     private function decimal(int $milli): string

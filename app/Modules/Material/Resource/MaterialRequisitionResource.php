@@ -36,9 +36,9 @@ class MaterialRequisitionResource extends JsonResource
                     'name' => $item->material->name,
                     'unit' => $item->material->unit,
                 ] : null,
-                'requested_quantity' => $item->requested_quantity,
-                'issued_quantity' => $item->issued_quantity,
-                'over_requirement' => (bool) ($item->over_requirement ?? false),
+                'requested_quantity' => (float) $item->requested_quantity,
+                'issued_quantity' => (float) $item->issued_quantity,
+                'over_requirement' => $item->over_requirement,
             ])->all()),
             'created_at' => $this->created_at,
         ];
