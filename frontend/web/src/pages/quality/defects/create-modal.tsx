@@ -18,6 +18,7 @@ export default function CreateDefectModal({
     const [orderKeyword, setOrderKeyword] = useState('');
     const debouncedKeyword = useDebouncedValue(orderKeyword);
     const orderId = Form.useWatch<number | undefined>('production_order_id', form);
+    const batchId = Form.useWatch<number | undefined>('production_batch_id', form);
     const orders = useQuery({
         queryKey: ['quality.defects', 'order-options', debouncedKeyword],
         queryFn: () => getDefectOptions(undefined, debouncedKeyword),
@@ -27,6 +28,7 @@ export default function CreateDefectModal({
         queryFn: () => getDefectOptions(orderId),
         enabled: orderId !== undefined,
     });
+    const selectedBatch = orderOptions.data?.batches.find((batch) => batch.id === batchId);
 
     return (
         <Modal
@@ -125,7 +127,12 @@ export default function CreateDefectModal({
                     label="不良数量"
                     rules={[{ required: true, message: '请填写不良数量' }]}
                 >
-                    <InputNumber className="w-full" min={0.001} precision={3} />
+                    <InputNumber
+                        className="w-full"
+                        min={0.001}
+                        max={selectedBatch?.quantity}
+                        precision={3}
+                    />
                 </Form.Item>
                 <Form.Item name="remark" label="备注">
                     <Input.TextArea rows={2} maxLength={255} />

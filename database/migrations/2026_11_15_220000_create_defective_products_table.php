@@ -28,7 +28,6 @@ return new class extends Migration
             $table->timestamp('updated_at')->nullable()->comment('更新时间');
 
             $table->index(['production_order_id', 'status']);
-            $table->index('status');
         });
     }
 

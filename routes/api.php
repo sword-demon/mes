@@ -63,7 +63,7 @@ Route::middleware(['auth:sanctum', 'active'])->group(function (): void {
             ->middleware('permission:quality.inspections.record')->name('inspection-tasks.images.store');
 
         Route::get('/defective-products/options', [DefectiveProductController::class, 'options'])
-            ->middleware('permission:quality.defects.index')->name('defective-products.options');
+            ->middleware('permission:quality.defects.index|quality.defects.create')->name('defective-products.options');
         Route::get('/defective-products', [DefectiveProductController::class, 'index'])
             ->middleware('permission:quality.defects.index')->name('defective-products.index');
         Route::post('/defective-products', [DefectiveProductController::class, 'store'])

@@ -4,16 +4,10 @@ import type { DefectDisposition } from '@/api/quality';
 
 export type DispositionMode = 'rework' | 'scrap' | 'recheck';
 
-const TITLES: Record<DispositionMode, string> = {
-    rework: '返工处理',
-    scrap: '报废处理',
-    recheck: '复检判定',
-};
-
-const OK_TEXTS: Record<DispositionMode, string> = {
-    rework: '生成返工单',
-    scrap: '确认报废',
-    recheck: '提交复检',
+const MODES: Record<DispositionMode, { title: string; okText: string }> = {
+    rework: { title: '返工处理', okText: '生成返工单' },
+    scrap: { title: '报废处理', okText: '确认报废' },
+    recheck: { title: '复检判定', okText: '提交复检' },
 };
 
 export default function DispositionModal({
@@ -34,8 +28,8 @@ export default function DispositionModal({
     return (
         <Modal
             open
-            title={`${TITLES[mode]} · ${defect.production_order.code}`}
-            okText={OK_TEXTS[mode]}
+            title={`${MODES[mode].title} · ${defect.production_order.code}`}
+            okText={MODES[mode].okText}
             confirmLoading={saving}
             onCancel={onClose}
             onOk={() => form.submit()}

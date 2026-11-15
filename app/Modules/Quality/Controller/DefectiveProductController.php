@@ -71,9 +71,8 @@ class DefectiveProductController extends Controller
                 'product' => ['id' => $order->product->id, 'code' => $order->product->code, 'name' => $order->product->name],
             ]);
         $order = is_string($orderId) && $orderId !== '' ? ProductionOrder::query()->find($orderId) : null;
-        $operations = RouteOperation::query()
-            ->when($order !== null, fn (Builder $query) => $query->where('route_id', $order->route_id))
-            ->when($order === null, fn (Builder $query) => $query->whereRaw('1 = 0'))
+        $operations = $order === null ? collect() : RouteOperation::query()
+            ->where('route_id', $order->route_id)
             ->with('process')
             ->orderBy('sequence')
             ->get()
@@ -82,9 +81,8 @@ class DefectiveProductController extends Controller
                 'sequence' => $operation->sequence,
                 'process' => ['id' => $operation->process->id, 'name' => $operation->process->name],
             ]);
-        $batches = ProductionBatch::query()
-            ->when($order !== null, fn (Builder $query) => $query->where('production_order_id', $order->id))
-            ->when($order === null, fn (Builder $query) => $query->whereRaw('1 = 0'))
+        $batches = $order === null ? collect() : ProductionBatch::query()
+            ->where('production_order_id', $order->id)
             ->orderBy('code')
             ->get()
             ->map(fn (ProductionBatch $batch): array => [

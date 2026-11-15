@@ -88,7 +88,7 @@ it('registers a defect against its order, operation, batch and defect code', fun
 it('rejects a defect whose operation or batch belongs to another order', function () {
     [$order, , , $code] = defectCase();
     $ownOperation = RouteOperation::factory()->create(['route_id' => $order->route_id, 'sequence' => 2]);
-    $ownBatch = ProductionBatch::factory()->create(['production_order_id' => $order->id]);
+    $ownBatch = ProductionBatch::factory()->create(['production_order_id' => $order->id, 'quantity' => 10]);
     [, $otherOperation, $otherBatch] = defectCase();
     $actor = defectActor();
     $url = '/api/v1/quality/defective-products';
@@ -113,13 +113,25 @@ it('rejects a disabled defect code and a non-positive quantity', function () {
 
     bearer($actor)->postJson($url, defectPayload($order, $operation, $batch, $disabled))
         ->assertUnprocessable()
-        ->assertJsonPath('message', '缺陷代码不存在或已停用');
+        ->assertJsonValidationErrors('defect_code_id', 'data.errors')
+        ->assertJsonPath('data.errors.defect_code_id.0', '缺陷代码不存在或已停用');
 
     bearer($actor)->postJson($url, [
         ...defectPayload($order, $operation, $batch, $disabled),
         'defect_code_id' => DefectCode::factory()->create()->id,
         'quantity' => 0,
     ])->assertUnprocessable()->assertJsonValidationErrors('quantity', 'data.errors');
+});
+
+it('rejects a defect quantity larger than its production batch', function () {
+    [$order, $operation, $batch, $code] = defectCase();
+    $actor = defectActor();
+
+    bearer($actor)->postJson('/api/v1/quality/defective-products', [
+        ...defectPayload($order, $operation, $batch, $code),
+        'quantity' => 11,
+    ])->assertUnprocessable()
+        ->assertJsonPath('message', '不良数量不能大于批次数量');
 });
 
 it('returns registration options scoped to the selected order', function () {
@@ -275,4 +287,34 @@ it('separates registration from disposition permissions', function () {
     bearer(userWithPermissions([], 'nobody'))
         ->getJson('/api/v1/quality/defective-products/options')
         ->assertForbidden();
+});
+
+it('protects every defect endpoint and lets create-only users load options', function () {
+    [$order, $operation, $batch, $code] = defectCase();
+
+    $this->getJson('/api/v1/quality/defective-products')->assertUnauthorized();
+    $this->getJson('/api/v1/quality/defective-products/options')->assertUnauthorized();
+    $this->postJson('/api/v1/quality/defective-products', [])->assertUnauthorized();
+    $this->postJson('/api/v1/quality/defective-products/1/start')->assertUnauthorized();
+    $this->postJson('/api/v1/quality/defective-products/1/rework', [])->assertUnauthorized();
+    $this->postJson('/api/v1/quality/defective-products/1/scrap', [])->assertUnauthorized();
+    $this->postJson('/api/v1/quality/defective-products/1/recheck', [])->assertUnauthorized();
+
+    $creator = userWithPermissions([
+        'quality.defects.create',
+    ], 'creator');
+    bearer($creator)->getJson("/api/v1/quality/defective-products/options?production_order_id={$order->id}")
+        ->assertOk()
+        ->assertJsonPath('data.orders.0.id', $order->id);
+
+    $actor = defectActor();
+    $id = registerDefect($actor, defectPayload($order, $operation, $batch, $code));
+    $stranger = userWithPermissions([], 'stranger');
+
+    bearer($stranger)->getJson('/api/v1/quality/defective-products')->assertForbidden();
+    bearer($stranger)->getJson('/api/v1/quality/defective-products/options')->assertForbidden();
+    bearer($stranger)->postJson("/api/v1/quality/defective-products/{$id}/start")->assertForbidden();
+    bearer($stranger)->postJson("/api/v1/quality/defective-products/{$id}/rework", ['reason' => '返工'])->assertForbidden();
+    bearer($stranger)->postJson("/api/v1/quality/defective-products/{$id}/scrap", ['reason' => '报废', 'quantity' => 3])->assertForbidden();
+    bearer($stranger)->postJson("/api/v1/quality/defective-products/{$id}/recheck", ['passed' => true])->assertForbidden();
 });

@@ -39,7 +39,7 @@ export default function DefectsPage() {
     const [action, setAction] = useState<{ defect: DefectiveProduct; mode: DispositionMode } | null>(null);
 
     const options = useQuery({
-        queryKey: ['quality.defects', 'order-options'],
+        queryKey: ['quality.defects', 'order-options', ''],
         queryFn: () => getDefectOptions(),
         enabled: canRead,
     });
@@ -223,15 +223,19 @@ export default function DefectsPage() {
                                         开始处理
                                     </Button>
                                 )}
-                                {defect.status === 'processing' && canRework && (
-                                    <Button size="small" type="link" onClick={() => setAction({ defect, mode: 'rework' })}>
-                                        返工
-                                    </Button>
-                                )}
-                                {defect.status === 'processing' && canScrap && (
-                                    <Button size="small" type="link" danger onClick={() => setAction({ defect, mode: 'scrap' })}>
-                                        报废
-                                    </Button>
+                                {defect.status === 'processing' && (
+                                    <>
+                                        {canRework && (
+                                            <Button size="small" type="link" onClick={() => setAction({ defect, mode: 'rework' })}>
+                                                返工
+                                            </Button>
+                                        )}
+                                        {canScrap && (
+                                            <Button size="small" type="link" danger onClick={() => setAction({ defect, mode: 'scrap' })}>
+                                                报废
+                                            </Button>
+                                        )}
+                                    </>
                                 )}
                                 {defect.status === 'pending_recheck' && canRecheck && (
                                     <Button size="small" type="link" onClick={() => setAction({ defect, mode: 'recheck' })}>

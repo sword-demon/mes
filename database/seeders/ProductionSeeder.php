@@ -8,6 +8,7 @@ use App\Modules\Organization\Model\ProductionLine;
 use App\Modules\Organization\Model\Team;
 use App\Modules\Process\Model\ProcessRoute;
 use App\Modules\Process\Model\RouteOperation;
+use App\Modules\Production\Model\ProductionBatch;
 use App\Modules\Production\Model\ProductionDispatch;
 use App\Modules\Production\Model\ProductionOrder;
 use App\Modules\Production\Model\ProductionTask;
@@ -108,6 +109,15 @@ class ProductionSeeder extends Seeder
                     'planned_start_at' => Carbon::now()->addDays($orderDefinition['start_days']),
                     'planned_end_at' => Carbon::now()->addDays($orderDefinition['end_days']),
                     'status' => $orderDefinition['status'],
+                ],
+            );
+
+            ProductionBatch::query()->updateOrCreate(
+                ['code' => $order->code.'-L01'],
+                [
+                    'production_order_id' => $order->id,
+                    'quantity' => $orderDefinition['planned_quantity'],
+                    'remark' => '演示批次',
                 ],
             );
 

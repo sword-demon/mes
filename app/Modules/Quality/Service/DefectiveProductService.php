@@ -51,6 +51,13 @@ class DefectiveProductService
                 throw new ApiException('批次不属于该生产订单', 422);
             }
 
+            $quantity = number_format((float) $data['quantity'], 3, '.', '');
+            $batchQuantity = number_format((float) $batch->quantity, 3, '.', '');
+
+            if (bccomp($quantity, $batchQuantity, 3) > 0) {
+                throw new ApiException('不良数量不能大于批次数量', 422);
+            }
+
             $defectCode = DefectCode::query()
                 ->whereKey((int) $data['defect_code_id'])
                 ->where('status', true)
@@ -65,7 +72,7 @@ class DefectiveProductService
                 'route_operation_id' => $operation->id,
                 'production_batch_id' => $batch->id,
                 'defect_code_id' => $defectCode->id,
-                'quantity' => (string) $data['quantity'],
+                'quantity' => $quantity,
                 'remark' => $data['remark'] ?? null,
                 'status' => DefectiveProduct::PENDING,
             ])->load(self::RELATIONS);
