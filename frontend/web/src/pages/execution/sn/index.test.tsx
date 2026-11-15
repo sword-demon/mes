@@ -2,7 +2,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { App as AntdApp } from 'antd';
 import { act } from 'react';
 import { createRoot } from 'react-dom/client';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import ProductSnPage from './index';
 import { http } from '@/api/client';
 import { useAuthStore } from '@/stores/auth';
@@ -52,6 +52,15 @@ const productSn = {
     created_at: '2026-11-15T08:00:00Z',
 };
 
+const label = {
+    sn: productSn.sn,
+    product_code: 'P001',
+    product_name: '智能电表',
+    production_order: 'PO-DEMO-001',
+    production_batch: 'PO-DEMO-001-L01',
+    generated_at: '2026-11-15T08:00:00Z',
+};
+
 async function renderPage() {
     const container = document.createElement('div');
     document.body.append(container);
@@ -83,6 +92,14 @@ describe('SN 管理页', () => {
 
             if (config.url === '/production/sns/options') {
                 data = { orders: [], employees: [] };
+            }
+
+            if (config.url === `/production/sns/${productSn.sn}/label`) {
+                data = { sn: productSn, label };
+            }
+
+            if (config.url === `/production/sns/${productSn.sn}/print`) {
+                data = productSn;
             }
 
             return {
@@ -134,5 +151,50 @@ describe('SN 管理页', () => {
         expect(document.body.textContent).toContain('绑定');
         expect(document.body.textContent).toContain('标签');
         expect(document.body.textContent).toContain('作废');
+    });
+
+    it('loads the printable label when the operator asks for it', async () => {
+        const print = vi.fn();
+        window.print = print;
+        useAuthStore.setState({
+            token: 'token',
+            user: currentUserFixture({
+                permissions: ['production.sns.index', 'button.production.sns.print'],
+            }),
+        });
+
+        await renderPage();
+
+        const trigger = Array.from(document.querySelectorAll('button')).find(
+            (button) => button.textContent === '标签',
+        );
+
+        expect(trigger).toBeDefined();
+
+        await act(async () => {
+            trigger?.click();
+        });
+        await act(async () => {
+            await new Promise((resolve) => setTimeout(resolve, 0));
+        });
+
+        expect(document.body.textContent).toContain('SN 标签');
+        expect(document.body.textContent).toContain('智能电表');
+        expect(document.body.textContent).toContain('PO-DEMO-001-L01');
+
+        const printButton = Array.from(document.querySelectorAll('button')).find(
+            (button) => button.textContent?.replace(/\s/g, '') === '打印',
+        );
+
+        expect(printButton).toBeDefined();
+
+        await act(async () => {
+            printButton?.click();
+        });
+        await act(async () => {
+            await new Promise((resolve) => setTimeout(resolve, 50));
+        });
+
+        expect(print).toHaveBeenCalled();
     });
 });
