@@ -403,10 +403,35 @@ it('lists returnable quantities for a requisition after earlier returns', functi
         ->assertJsonPath('data.0.issued_quantity', 5)
         ->assertJsonPath('data.0.approved_returned_quantity', 1)
         ->assertJsonPath('data.0.pending_quantity', 2)
-        ->assertJsonPath('data.0.returnable_quantity', 4);
+        ->assertJsonPath('data.0.returnable_quantity', 2);
 });
 
-it('rechecks the approved total when approving multiple pending returns', function () {
+it('counts pending returns against the returnable quantity', function () {
+    $actor = userWithPermissions(['material.returns.create']);
+    $requisition = MaterialRequisition::query()->create([
+        'code' => 'MR-600015',
+        'production_order_id' => ProductionOrder::factory()->create()->id,
+        'created_by_id' => $actor->id,
+    ]);
+    $item = $requisition->items()->create([
+        'material_id' => Material::factory()->create()->id,
+        'requested_quantity' => 5,
+        'issued_quantity' => 5,
+    ]);
+
+    bearer($actor)->postJson('/api/v1/materials/returns', [
+        'requisition_id' => $requisition->id,
+        'items' => [['requisition_item_id' => $item->id, 'quantity' => 3]],
+    ])->assertOk();
+
+    bearer($actor)->postJson('/api/v1/materials/returns', [
+        'requisition_id' => $requisition->id,
+        'items' => [['requisition_item_id' => $item->id, 'quantity' => 3]],
+    ])->assertStatus(422)
+        ->assertJsonPath('message', '退料数量超过可退数量');
+});
+
+it('rechecks the approved total when approving an overbooked pending return', function () {
     $actor = userWithPermissions(['material.returns.create', 'material.returns.audit']);
     [$warehouse, $location] = inventoryLocation();
     $material = Material::factory()->create(['batch_managed' => false]);
@@ -430,22 +455,34 @@ it('rechecks the approved total when approving multiple pending returns', functi
         'requisition_id' => $requisition->id,
         'items' => [['requisition_item_id' => $item->id, 'quantity' => 3]],
     ])->assertOk()->json('data');
-    $second = bearer($actor)->postJson('/api/v1/materials/returns', [
-        'requisition_id' => $requisition->id,
-        'items' => [['requisition_item_id' => $item->id, 'quantity' => 3]],
-    ])->assertOk()->json('data');
 
-    $payload = fn (array $return): array => [
+    bearer($actor)->postJson(
+        "/api/v1/materials/returns/{$first['id']}/approve",
+        [
+            'items' => [[
+                'id' => $first['items'][0]['id'],
+                'warehouse_id' => $warehouse->id,
+                'location_id' => $location->id,
+            ]],
+        ],
+    )->assertOk();
+
+    // Create now rejects this overbooking, so simulate a legacy/concurrent row.
+    $second = MaterialReturn::query()->create([
+        'code' => 'RT-600012',
+        'requisition_id' => $requisition->id,
+        'production_order_id' => $requisition->production_order_id,
+        'created_by_id' => $actor->id,
+    ]);
+    $secondItem = $second->items()->create(['requisition_item_id' => $item->id, 'quantity' => 3]);
+
+    bearer($actor)->postJson("/api/v1/materials/returns/{$second->id}/approve", [
         'items' => [[
-            'id' => $return['items'][0]['id'],
+            'id' => $secondItem->id,
             'warehouse_id' => $warehouse->id,
             'location_id' => $location->id,
         ]],
-    ];
-
-    bearer($actor)->postJson("/api/v1/materials/returns/{$first['id']}/approve", $payload($first))->assertOk();
-
-    bearer($actor)->postJson("/api/v1/materials/returns/{$second['id']}/approve", $payload($second))
+    ])
         ->assertStatus(422)
         ->assertJsonPath('message', '退料数量超过可退数量');
 
@@ -560,6 +597,81 @@ it('filters returns by order, material and date', function () {
         ->assertJsonPath('data.items.0.items.0.material.code', 'M001');
 });
 
+it('cancels a pending return and releases its quota', function () {
+    $actor = userWithPermissions(['material.returns.create']);
+    $requisition = MaterialRequisition::query()->create([
+        'code' => 'MR-600016',
+        'production_order_id' => ProductionOrder::factory()->create()->id,
+        'created_by_id' => $actor->id,
+    ]);
+    $item = $requisition->items()->create([
+        'material_id' => Material::factory()->create()->id,
+        'requested_quantity' => 5,
+        'issued_quantity' => 5,
+    ]);
+    $created = bearer($actor)->postJson('/api/v1/materials/returns', [
+        'requisition_id' => $requisition->id,
+        'items' => [['requisition_item_id' => $item->id, 'quantity' => 5]],
+    ])->assertOk()->json('data');
+
+    bearer($actor)->deleteJson("/api/v1/materials/returns/{$created['id']}")
+        ->assertOk()
+        ->assertJsonPath('data.status', 'cancelled')
+        ->assertJsonPath('data.status_label', '已撤销');
+
+    bearer($actor)->getJson('/api/v1/materials/returns/suggestions?requisition_id='.$requisition->id)
+        ->assertOk()
+        ->assertJsonPath('data.0.pending_quantity', 0)
+        ->assertJsonPath('data.0.returnable_quantity', 5);
+
+    bearer($actor)->postJson('/api/v1/materials/returns', [
+        'requisition_id' => $requisition->id,
+        'items' => [['requisition_item_id' => $item->id, 'quantity' => 5]],
+    ])->assertOk();
+});
+
+it('rejects cancelling a return that is no longer pending', function () {
+    $actor = userWithPermissions(['material.returns.create']);
+    $order = ProductionOrder::factory()->create();
+    $requisition = MaterialRequisition::query()->create([
+        'code' => 'MR-600017',
+        'production_order_id' => $order->id,
+        'created_by_id' => $actor->id,
+    ]);
+    $return = MaterialReturn::query()->create([
+        'code' => 'RT-600013',
+        'requisition_id' => $requisition->id,
+        'production_order_id' => $order->id,
+        'status' => MaterialReturn::APPROVED,
+        'created_by_id' => $actor->id,
+    ]);
+
+    bearer($actor)->deleteJson("/api/v1/materials/returns/{$return->id}")
+        ->assertStatus(422)
+        ->assertJsonPath('message', '退料单不是待审核状态，不能撤销');
+});
+
+it('rejects cancelling another user return', function () {
+    $creator = userWithPermissions([], 'return_creator');
+    $actor = userWithPermissions(['material.returns.create']);
+    $order = ProductionOrder::factory()->create();
+    $requisition = MaterialRequisition::query()->create([
+        'code' => 'MR-600018',
+        'production_order_id' => $order->id,
+        'created_by_id' => $creator->id,
+    ]);
+    $return = MaterialReturn::query()->create([
+        'code' => 'RT-600014',
+        'requisition_id' => $requisition->id,
+        'production_order_id' => $order->id,
+        'created_by_id' => $creator->id,
+    ]);
+
+    bearer($actor)->deleteJson("/api/v1/materials/returns/{$return->id}")
+        ->assertForbidden()
+        ->assertJsonPath('message', '只能撤销自己创建的退料单');
+});
+
 it('requires the matching return permission', function (string $method, string $uri) {
     $actor = userWithPermissions([]);
     $order = ProductionOrder::factory()->create();
@@ -606,6 +718,7 @@ it('requires the matching return permission', function (string $method, string $
     ['GET', '/api/v1/materials/returns/suggestions?requisition_id={requisition_id}'],
     ['POST', '/api/v1/materials/returns'],
     ['POST', '/api/v1/materials/returns/{id}/approve'],
+    ['DELETE', '/api/v1/materials/returns/{id}'],
 ]);
 
 it('requires authentication for return endpoints', function (string $method, string $uri) {
@@ -617,4 +730,5 @@ it('requires authentication for return endpoints', function (string $method, str
     ['GET', '/api/v1/materials/returns/suggestions?requisition_id=1'],
     ['POST', '/api/v1/materials/returns'],
     ['POST', '/api/v1/materials/returns/{id}/approve'],
+    ['DELETE', '/api/v1/materials/returns/{id}'],
 ]);

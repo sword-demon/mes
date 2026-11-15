@@ -276,6 +276,8 @@ Route::middleware(['auth:sanctum', 'active'])->group(function (): void {
             ->middleware('permission:material.returns.create')->name('returns.store');
         Route::post('/returns/{materialReturn}/approve', [MaterialReturnController::class, 'approve'])
             ->middleware('permission:material.returns.audit')->name('returns.approve');
+        Route::delete('/returns/{materialReturn}', [MaterialReturnController::class, 'cancel'])
+            ->middleware('permission:material.returns.create')->name('returns.cancel');
     });
 
     Route::prefix('inventory')->name('api.inventory.')->group(function (): void {

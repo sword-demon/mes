@@ -24,9 +24,10 @@ export type MaterialReturn = {
     requisition?: { id: number; code: string };
     production_order_id: number;
     production_order?: { id: number; code: string };
-    status: 'pending' | 'approved';
+    status: 'pending' | 'approved' | 'cancelled';
     status_label: string;
     remark: string | null;
+    created_by_id: number;
     items: MaterialReturnItem[];
     approved_by: { id: number; name: string } | null;
     approved_at: string | null;
@@ -47,7 +48,7 @@ export type ReturnParams = {
     per_page?: number;
     production_order_id?: number;
     material_id?: number;
-    status?: 'pending' | 'approved';
+    status?: 'pending' | 'approved' | 'cancelled';
     date_from?: string;
     date_to?: string;
 };
@@ -83,4 +84,8 @@ export function createReturn(payload: ReturnPayload) {
 
 export function approveReturn(id: number, payload: ApproveReturnPayload) {
     return api.post<MaterialReturn>(`/materials/returns/${id}/approve`, payload);
+}
+
+export function cancelReturn(id: number) {
+    return api.delete<MaterialReturn>(`/materials/returns/${id}`);
 }

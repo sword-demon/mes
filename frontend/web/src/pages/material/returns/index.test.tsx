@@ -35,6 +35,7 @@ const materialReturn = {
     status: 'pending',
     status_label: '待审核',
     remark: null,
+    created_by_id: 1,
     items: [{
         id: 21,
         requisition_item_id: 31,
@@ -88,6 +89,7 @@ it('lists returns and hides auditing without the audit permission', async () => 
     expect(document.body.textContent).toContain('RT-100001');
     expect(document.body.textContent).toContain('MR-100001');
     expect(document.body.textContent).toContain('创建退料单');
+    expect([...document.querySelectorAll('button')].some((button) => button.textContent?.includes('撤销'))).toBe(true);
     expect([...document.querySelectorAll('button')].some((button) => button.textContent?.includes('审核'))).toBe(false);
 });
 
@@ -95,5 +97,6 @@ it('shows auditing for the audit permission', async () => {
     await render(['material.returns.index', 'button.material.returns.audit']);
 
     expect(document.body.textContent).toContain('待审核');
+    expect([...document.querySelectorAll('button')].some((button) => button.textContent?.includes('撤销'))).toBe(false);
     expect([...document.querySelectorAll('button')].some((button) => button.textContent?.includes('审核'))).toBe(true);
 });

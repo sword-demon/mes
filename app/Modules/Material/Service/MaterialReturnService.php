@@ -40,7 +40,7 @@ class MaterialReturnService
                     'issued_quantity' => Quantity::toFloat($issued),
                     'approved_returned_quantity' => Quantity::toFloat($approvedQuantity),
                     'pending_quantity' => Quantity::toFloat($pendingQuantity),
-                    'returnable_quantity' => Quantity::toFloat(max(0, $issued - $approvedQuantity)),
+                    'returnable_quantity' => Quantity::toFloat(max(0, $issued - $approvedQuantity - $pendingQuantity)),
                 ];
             })
             ->filter(fn (array $item): bool => $item['returnable_quantity'] > 0)
@@ -73,7 +73,9 @@ class MaterialReturnService
                     throw new ApiException('退料明细不属于该领料单', 422);
                 }
 
-                $returnable = Quantity::toMilli($item->issued_quantity) - ($returned['approved'][$item->id] ?? 0);
+                $returnable = Quantity::toMilli($item->issued_quantity)
+                    - ($returned['approved'][$item->id] ?? 0)
+                    - ($returned['pending'][$item->id] ?? 0);
 
                 if (Quantity::toMilli($row['quantity']) > $returnable) {
                     throw new ApiException('退料数量超过可退数量', 422);
@@ -108,7 +110,7 @@ class MaterialReturnService
                 ->whereIn('id', $items->pluck('requisition_item_id'))
                 ->lockForUpdate()
                 ->get();
-            $returned = $this->returnedByItem($items->pluck('requisition_item_id')->all())['approved'];
+            $returned = $this->returnedByItem($items->pluck('requisition_item_id')->all());
 
             if (count($data['items']) !== $items->count()) {
                 throw new ApiException('请为每条退料明细指定退回库位', 422);
@@ -122,7 +124,10 @@ class MaterialReturnService
                 }
 
                 $requisitionItem = $requisitionItems->firstWhere('id', $item->requisition_item_id);
-                $returnable = Quantity::toMilli($requisitionItem->issued_quantity) - ($returned[$requisitionItem->id] ?? 0);
+                $pendingOthers = ($returned['pending'][$requisitionItem->id] ?? 0) - Quantity::toMilli($item->quantity);
+                $returnable = Quantity::toMilli($requisitionItem->issued_quantity)
+                    - ($returned['approved'][$requisitionItem->id] ?? 0)
+                    - max(0, $pendingOthers);
 
                 if (Quantity::toMilli($item->quantity) > $returnable) {
                     throw new ApiException('退料数量超过可退数量', 422);
@@ -144,6 +149,28 @@ class MaterialReturnService
                 'approved_by_id' => $userId,
                 'approved_at' => now(),
             ]);
+
+            return $this->loadReturn($materialReturn);
+        });
+    }
+
+    /**
+     * @throws ApiException
+     */
+    public function cancel(MaterialReturn $materialReturn, int $userId): MaterialReturn
+    {
+        return DB::transaction(function () use ($materialReturn, $userId): MaterialReturn {
+            $materialReturn = MaterialReturn::query()->lockForUpdate()->findOrFail($materialReturn->id);
+
+            if ($materialReturn->status !== MaterialReturn::PENDING) {
+                throw new ApiException('退料单不是待审核状态，不能撤销', 422);
+            }
+
+            if ($materialReturn->created_by_id !== $userId) {
+                throw new ApiException('只能撤销自己创建的退料单', 403, status: 403);
+            }
+
+            $materialReturn->update(['status' => MaterialReturn::CANCELLED]);
 
             return $this->loadReturn($materialReturn);
         });

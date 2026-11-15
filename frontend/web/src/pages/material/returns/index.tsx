@@ -8,6 +8,7 @@ import {
     Input,
     InputNumber,
     Modal,
+    Popconfirm,
     Select,
     Space,
     Table,
@@ -25,6 +26,7 @@ import { listOrders } from '@/api/production';
 import { listRequisitions } from '@/api/requisitions';
 import {
     approveReturn,
+    cancelReturn,
     createReturn,
     listReturns,
     returnSuggestions,
@@ -198,6 +200,8 @@ function ApproveModal({ materialReturn, onClose }: { materialReturn: MaterialRet
 }
 
 export default function MaterialReturns() {
+    const { message } = App.useApp();
+    const client = useQueryClient();
     const user = useAuthStore((state) => state.user);
     const [page, setPage] = useState(1);
     const [orderId, setOrderId] = useState<number>();
@@ -214,6 +218,14 @@ export default function MaterialReturns() {
             date_to: dates?.[1].format('YYYY-MM-DD'),
         }),
         enabled: can(user, 'material.returns.index'),
+    });
+    const cancel = useMutation({
+        mutationFn: cancelReturn,
+        onSuccess: async () => {
+            await client.invalidateQueries({ queryKey: ['material.returns'] });
+            message.success('退料单已撤销');
+        },
+        onError: (error) => message.error(error instanceof ApiRequestError ? error.message : '撤销失败'),
     });
 
     if (!can(user, 'material.returns.index')) {
@@ -257,12 +269,21 @@ export default function MaterialReturns() {
                     { title: '生产订单', render: (_, record) => record.production_order?.code },
                     { title: '原领料单', render: (_, record) => record.requisition?.code },
                     { title: '物料', render: (_, record) => record.items.map((item) => `${item.material?.code} ${item.quantity}`).join('、') },
-                    { title: '状态', dataIndex: 'status', render: (_, record) => <Tag color={record.status === 'approved' ? 'green' : 'gold'}>{record.status_label}</Tag> },
+                    { title: '状态', dataIndex: 'status', render: (_, record) => <Tag color={record.status === 'approved' ? 'green' : record.status === 'cancelled' ? 'default' : 'gold'}>{record.status_label}</Tag> },
                     { title: '创建时间', dataIndex: 'created_at', render: (value) => dayjs(value).format('YYYY-MM-DD HH:mm') },
                     {
                         title: '操作',
-                        render: (_, record) => record.status === 'pending' && can(user, 'button.material.returns.audit') && (
-                            <Button type="link" onClick={() => setApproving(record)}>审核</Button>
+                        render: (_, record) => (
+                            <Space>
+                                {record.status === 'pending' && record.created_by_id === user?.id && can(user, 'button.material.returns.create') && (
+                                    <Popconfirm title="撤销该退料单？" okText="撤销" cancelText="取消" onConfirm={() => cancel.mutate(record.id)}>
+                                        <Button type="link" danger>撤销</Button>
+                                    </Popconfirm>
+                                )}
+                                {record.status === 'pending' && can(user, 'button.material.returns.audit') && (
+                                    <Button type="link" onClick={() => setApproving(record)}>审核</Button>
+                                )}
+                            </Space>
                         ),
                     },
                 ]}

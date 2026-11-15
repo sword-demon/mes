@@ -72,4 +72,11 @@ class MaterialReturnController extends Controller
             $this->returns->approve($materialReturn, $request->validated(), $request->user()->id),
         ));
     }
+
+    public function cancel(Request $request, MaterialReturn $materialReturn): JsonResponse
+    {
+        return ApiResponse::success(MaterialReturnResource::make(
+            $this->returns->cancel($materialReturn, $request->user()->id),
+        ));
+    }
 }

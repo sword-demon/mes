@@ -32,6 +32,8 @@ class MaterialReturn extends Model
 
     public const string APPROVED = 'approved';
 
+    public const string CANCELLED = 'cancelled';
+
     /**
      * @var array<string, mixed>
      */
@@ -81,7 +83,11 @@ class MaterialReturn extends Model
 
     public function statusLabel(): string
     {
-        return $this->status === self::APPROVED ? '已审核' : '待审核';
+        return match ($this->status) {
+            self::APPROVED => '已审核',
+            self::CANCELLED => '已撤销',
+            default => '待审核',
+        };
     }
 
     /**

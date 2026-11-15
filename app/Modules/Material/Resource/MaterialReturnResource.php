@@ -33,6 +33,7 @@ class MaterialReturnResource extends JsonResource
             'status' => $this->status,
             'status_label' => $this->statusLabel(),
             'remark' => $this->remark,
+            'created_by_id' => $this->created_by_id,
             'items' => $this->whenLoaded('items', fn () => $this->items->map(function (MaterialReturnItem $item): array {
                 $requisitionItem = $item->relationLoaded('requisitionItem') ? $item->requisitionItem : null;
 
