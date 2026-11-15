@@ -11,6 +11,7 @@ import MaterialInventory from '@/pages/material/inventory';
 import MaterialInventoryAlerts from '@/pages/material/inventory-alerts';
 import MaterialOutbound from '@/pages/material/outbound';
 import MaterialRequisitions from '@/pages/material/requisitions';
+import MaterialReturns from '@/pages/material/returns';
 import ProductionLines from '@/pages/basic-data/production-lines';
 import Products from '@/pages/basic-data/products';
 import Teams from '@/pages/basic-data/teams';
@@ -52,6 +53,7 @@ const pages: Record<string, () => ReactNode> = {
     '/material/inbound': MaterialInbound,
     '/material/outbound': MaterialOutbound,
     '/material/requisitions': MaterialRequisitions,
+    '/material/returns': MaterialReturns,
     '/basic-data/products': Products,
     '/production/orders': ProductionOrders,
     '/production/tasks': ProductionTasks,

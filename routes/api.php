@@ -6,6 +6,7 @@ use App\Modules\Inventory\Controller\InventoryAlertController;
 use App\Modules\Inventory\Controller\InventoryController;
 use App\Modules\Material\Controller\MaterialController;
 use App\Modules\Material\Controller\MaterialRequisitionController;
+use App\Modules\Material\Controller\MaterialReturnController;
 use App\Modules\Organization\Controller\EmployeeController;
 use App\Modules\Organization\Controller\FactoryController;
 use App\Modules\Organization\Controller\ProductionLineController;
@@ -266,6 +267,15 @@ Route::middleware(['auth:sanctum', 'active'])->group(function (): void {
             ->middleware('permission:material.requisitions.create')->name('requisitions.store');
         Route::post('/requisitions/{requisition}/issue', [MaterialRequisitionController::class, 'issue'])
             ->middleware('permission:material.requisitions.issue')->name('requisitions.issue');
+
+        Route::get('/returns', [MaterialReturnController::class, 'index'])
+            ->middleware('permission:material.returns.index')->name('returns.index');
+        Route::get('/returns/suggestions', [MaterialReturnController::class, 'suggestions'])
+            ->middleware('permission:material.returns.create')->name('returns.suggestions');
+        Route::post('/returns', [MaterialReturnController::class, 'store'])
+            ->middleware('permission:material.returns.create')->name('returns.store');
+        Route::post('/returns/{materialReturn}/approve', [MaterialReturnController::class, 'approve'])
+            ->middleware('permission:material.returns.audit')->name('returns.approve');
     });
 
     Route::prefix('inventory')->name('api.inventory.')->group(function (): void {
@@ -278,7 +288,7 @@ Route::middleware(['auth:sanctum', 'active'])->group(function (): void {
         Route::post('/alerts/{alert}/close', [InventoryAlertController::class, 'close'])
             ->middleware('permission:inventory.alerts.close')->name('alerts.close');
         Route::get('/options', [InventoryController::class, 'options'])
-            ->middleware('permission:inventory.index|inventory.inbound|inventory.outbound|inventory.adjust')->name('options');
+            ->middleware('permission:inventory.index|inventory.inbound|inventory.outbound|inventory.adjust|material.returns.audit')->name('options');
         Route::get('/transactions', [InventoryController::class, 'transactions'])
             ->middleware('permission:inventory.index|inventory.inbound|inventory.outbound|inventory.adjust')
             ->name('transactions.index');
