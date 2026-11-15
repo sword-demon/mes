@@ -21,6 +21,7 @@ class DatabaseSeeder extends Seeder
             ProductSeeder::class,
             ProcessSeeder::class,
             ProductionSeeder::class,
+            QualitySeeder::class,
         ]);
     }
 }

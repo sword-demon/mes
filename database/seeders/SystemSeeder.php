@@ -83,6 +83,12 @@ class SystemSeeder extends Seeder
      * API permissions keyed by permission code.
      */
     private const API_PERMISSIONS = [
+        'quality.standards.index' => '检验标准列表',
+        'quality.standards.create' => '新增检验标准',
+        'quality.standards.update' => '编辑与停用检验标准',
+        'quality.defect-codes.index' => '缺陷代码列表',
+        'quality.defect-codes.create' => '新增缺陷代码',
+        'quality.defect-codes.update' => '编辑与停用缺陷代码',
         'basic.factories.index' => '工厂列表',
         'basic.factories.create' => '新增工厂',
         'basic.factories.update' => '编辑工厂',
@@ -213,7 +219,7 @@ class SystemSeeder extends Seeder
         'process_engineer' => ['name' => '工艺工程师', 'menus' => ['dashboard', 'basic', 'process'], 'api' => ['basic.materials.create', 'basic.materials.update', 'basic.boms.create', 'basic.boms.update', 'basic.boms.submit', 'basic.processes.create', 'basic.processes.update', 'process.routes.index', 'process.routes.create', 'process.routes.update', 'process.routes.submit'], 'scope' => 'factory'],
         'workshop_director' => ['name' => '车间主任', 'menus' => ['dashboard', 'production', 'execution', 'quality'], 'api' => ['basic.teams.index', 'basic.employees.index', 'production.tasks.index', 'production.dispatches.index', 'production.dispatches.create', 'production.dispatches.mine', 'production.reports.index', 'production.reports.create', 'production.reports.reverse', 'production.flows.index', 'production.flows.start', 'production.flows.complete', 'production.flows.submit', 'production.flows.receive', 'production.flows.exception', 'production.flows.rework', 'production.sns.index', 'production.sns.create', 'production.sns.bind', 'production.sns.print'], 'scope' => 'line'],
         'production_operator' => ['name' => '生产操作员', 'menus' => ['dashboard', 'production', 'execution'], 'api' => ['production.dispatches.mine', 'production.reports.index', 'production.reports.create', 'production.reports.reverse', 'production.flows.index', 'production.flows.start', 'production.flows.complete', 'production.flows.exception', 'production.flows.rework', 'production.sns.index', 'production.sns.create', 'production.sns.bind', 'production.sns.print'], 'scope' => 'line'],
-        'quality_inspector' => ['name' => '质检员', 'menus' => ['dashboard', 'quality', 'traceability'], 'api' => ['production.flows.index', 'production.flows.inspect'], 'scope' => 'line'],
+        'quality_inspector' => ['name' => '质检员', 'menus' => ['dashboard', 'quality', 'traceability'], 'api' => ['production.flows.index', 'production.flows.inspect', 'quality.standards.index', 'quality.standards.create', 'quality.standards.update', 'quality.defect-codes.index', 'quality.defect-codes.create', 'quality.defect-codes.update'], 'scope' => 'line'],
         'warehouse_manager' => ['name' => '仓库管理员', 'menus' => ['dashboard', 'material', 'basic', 'execution', 'traceability'], 'api' => ['production.sns.index', 'production.sns.create', 'production.sns.bind', 'production.sns.print', 'production.sns.void'], 'scope' => 'factory'],
         'equipment_manager' => ['name' => '设备管理员', 'menus' => ['dashboard', 'equipment'], 'scope' => 'factory'],
     ];

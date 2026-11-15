@@ -29,6 +29,7 @@ export type ResourceField = {
     required?: boolean;
     options?: { label: string; value: number | string }[];
     loading?: boolean;
+    min?: number;
 };
 
 type Entity = { id: number; status: boolean };
@@ -136,7 +137,7 @@ export default function ResourcePage<T extends Entity, P extends object>({
 
     function fieldControl(field: ResourceField): ReactNode {
         if (field.type === 'number') {
-            return <InputNumber min={0} className="w-full" />;
+            return <InputNumber min={field.min ?? 0} className="w-full" />;
         }
 
         if (field.type === 'switch') {

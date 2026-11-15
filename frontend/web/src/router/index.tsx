@@ -18,6 +18,7 @@ import ProductionDispatches from '@/pages/production/dispatch';
 import ProductionReports from '@/pages/production/reports';
 import ProductionTasks from '@/pages/production/tasks';
 import Users from '@/pages/system/users';
+import QualityStandards from '@/pages/quality/standards';
 import { useAuthStore } from '@/stores/auth';
 import { findMenu, firstMenuPath } from '@/utils/permission';
 
@@ -45,6 +46,7 @@ const pages: Record<string, () => ReactNode> = {
     '/production/reports': ProductionReports,
     '/execution/sn': ProductSns,
     '/system/users': Users,
+    '/quality/standards': QualityStandards,
 };
 
 /**
