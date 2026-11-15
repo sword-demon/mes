@@ -13,6 +13,7 @@ import {
     Typography,
 } from 'antd';
 import { useState } from 'react';
+import { listEmployees } from '@/api/basic-data';
 import {
     assignUserRoles,
     createUser,
@@ -52,6 +53,11 @@ export default function Users() {
         // Only the role field consumes this list, so skip the request when the
         // field is hidden rather than firing one the API rejects with 403.
         enabled: editing !== null && can(currentUser, 'button.system.users.assign-roles'),
+    });
+    const employees = useQuery({
+        queryKey: ['basic.employees', 'options'],
+        queryFn: () => listEmployees({ status: true, per_page: 100 }),
+        enabled: editing !== null,
     });
 
     const close = () => setEditing(null);
@@ -107,6 +113,7 @@ export default function Users() {
                   email: editing.user.email,
                   username: editing.user.username,
                   phone: editing.user.phone,
+                  employee_id: editing.user.employee_id,
                   status: editing.user.status,
                   role_ids: editing.user.roles?.map((role) => role.id) ?? [],
               }
@@ -218,6 +225,18 @@ export default function Users() {
                     </Form.Item>
                     <Form.Item name="phone" label="手机号">
                         <Input />
+                    </Form.Item>
+                    <Form.Item name="employee_id" label="关联员工档案">
+                        <Select
+                            allowClear
+                            showSearch
+                            optionFilterProp="label"
+                            loading={employees.isLoading}
+                            options={(employees.data?.items ?? []).map((employee) => ({
+                                value: employee.id,
+                                label: `${employee.employee_no} ${employee.name}`,
+                            }))}
+                        />
                     </Form.Item>
                     {editing?.mode === 'create' && (
                         <Form.Item

@@ -18,7 +18,10 @@ class MeController extends Controller
      */
     public function show(Request $request): JsonResponse
     {
-        $user = $request->user()->load(['roles' => fn ($query) => $query->where('status', true)]);
+        $user = $request->user()->load([
+            'roles' => fn ($query) => $query->where('status', true),
+            'employee',
+        ]);
         $permissions = $this->access->permissionCodes($user);
 
         return ApiResponse::success([

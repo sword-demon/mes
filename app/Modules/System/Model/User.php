@@ -3,6 +3,7 @@
 namespace App\Modules\System\Model;
 
 // use Illuminate\Contracts\Auth\MustVerifyEmail;
+use App\Modules\Organization\Model\Employee;
 use Database\Factories\UserFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\Hidden;
@@ -23,6 +24,7 @@ use Laravel\Sanctum\HasApiTokens;
  * @property string $email
  * @property string|null $phone
  * @property int|null $department_id
+ * @property int|null $employee_id
  * @property string|null $position
  * @property Carbon|null $email_verified_at
  * @property string $password
@@ -31,7 +33,7 @@ use Laravel\Sanctum\HasApiTokens;
  * @property Carbon|null $created_at
  * @property Carbon|null $updated_at
  */
-#[Fillable(['username', 'name', 'email', 'phone', 'department_id', 'position', 'password', 'status'])]
+#[Fillable(['username', 'name', 'email', 'phone', 'department_id', 'employee_id', 'position', 'password', 'status'])]
 #[Hidden(['password', 'remember_token'])]
 #[UseFactory(UserFactory::class)]
 #[Table('sys_users')]
@@ -73,6 +75,14 @@ class User extends Authenticatable
     public function department(): BelongsTo
     {
         return $this->belongsTo(Department::class, 'department_id');
+    }
+
+    /**
+     * @return BelongsTo<Employee, $this>
+     */
+    public function employee(): BelongsTo
+    {
+        return $this->belongsTo(Employee::class, 'employee_id');
     }
 
     /**

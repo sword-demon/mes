@@ -8,6 +8,7 @@ use App\Modules\Organization\Model\ProductionLine;
 use App\Modules\Organization\Model\Team;
 use App\Modules\Organization\Model\Workshop;
 use App\Modules\System\Model\Department;
+use App\Modules\System\Model\User;
 use Illuminate\Database\Seeder;
 
 class OrganizationSeeder extends Seeder
@@ -117,6 +118,30 @@ class OrganizationSeeder extends Seeder
                     'status' => true,
                 ],
             );
+        }
+
+        $links = [
+            'workshop@mes.test' => 'EMP001',
+            'operator1@mes.test' => 'EMP002',
+            'operator2@mes.test' => 'EMP003',
+            'operator3@mes.test' => 'EMP004',
+            'operator4@mes.test' => 'EMP005',
+            'operator5@mes.test' => 'EMP006',
+            'operator6@mes.test' => 'EMP008',
+            'operator7@mes.test' => 'EMP009',
+            'operator8@mes.test' => 'EMP010',
+        ];
+        $employees = Employee::query()->whereIn('employee_no', array_values($links))->get()->keyBy('employee_no');
+
+        foreach ($links as $email => $employeeNo) {
+            $employee = $employees->get($employeeNo);
+
+            if ($employee !== null) {
+                User::query()->where('email', $email)->update([
+                    'employee_id' => $employee->id,
+                    'name' => $employee->name,
+                ]);
+            }
         }
     }
 }

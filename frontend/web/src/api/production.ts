@@ -136,6 +136,62 @@ export type ProductionTaskAssignment = {
     owner_id: number;
 };
 
+export type ProductionDispatch = {
+    id: number;
+    code: string;
+    production_task_id: number;
+    route_operation_id: number;
+    employee_id: number;
+    team_id: number;
+    dispatched_at: string;
+    production_task?: {
+        id: number;
+        code: string;
+        production_order_id: number;
+        planned_quantity: string;
+        produced_quantity: string;
+        progress_percent: number;
+        planned_start_at: string;
+        planned_end_at: string | null;
+        status: ProductionTaskStatus;
+        status_label: string;
+    };
+    production_order?: { id: number; code: string };
+    route_operation?: {
+        id: number;
+        sequence: number;
+        process: { id: number; code: string; name: string };
+    };
+    employee?: { id: number; employee_no: string; name: string };
+    team?: NamedRef;
+};
+
+export type ProductionDispatchParams = {
+    page?: number;
+    per_page?: number;
+    keyword?: string;
+    production_task_id?: number;
+    production_order_id?: number;
+    employee_id?: number;
+    start_date?: string;
+    end_date?: string;
+};
+
+export type ProductionDispatchPayload = {
+    production_task_id: number;
+    route_operation_id: number;
+    employee_id: number;
+    team_id: number;
+    dispatched_at?: string;
+};
+
+export type TaskRouteOperation = {
+    id: number;
+    route_id: number;
+    sequence: number;
+    process: { id: number; code: string; name: string };
+};
+
 export type ApprovedBom = {
     id: number;
     code: string;
@@ -180,6 +236,22 @@ export function assignTask(id: number, payload: ProductionTaskAssignment) {
 
 export function transitionTask(id: number, action: 'pause' | 'resume' | 'complete') {
     return api.post<ProductionTask>(`/production/tasks/${id}/${action}`);
+}
+
+export function listDispatches(params: ProductionDispatchParams = {}) {
+    return api.get<Paginated<ProductionDispatch>>('/production/dispatches', params);
+}
+
+export function listMyDispatches(params: { page?: number; per_page?: number } = {}) {
+    return api.get<Paginated<ProductionDispatch>>('/production/dispatches/mine', params);
+}
+
+export function createDispatch(payload: ProductionDispatchPayload) {
+    return api.post<ProductionDispatch>('/production/dispatches', payload);
+}
+
+export function listTaskOperations(taskId: number) {
+    return api.get<TaskRouteOperation[]>(`/production/tasks/${taskId}/operations`);
 }
 
 export function listApprovedBoms() {

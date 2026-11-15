@@ -13,6 +13,7 @@ use App\Modules\Process\Controller\ProcessRouteController;
 use App\Modules\Process\Controller\RouteOperationController;
 use App\Modules\Product\Controller\ProductController;
 use App\Modules\Product\Controller\ProductVersionController;
+use App\Modules\Production\Controller\ProductionDispatchController;
 use App\Modules\Production\Controller\ProductionOrderController;
 use App\Modules\Production\Controller\ProductionTaskController;
 use App\Modules\System\Controller\AccessTokenController;
@@ -244,5 +245,14 @@ Route::middleware(['auth:sanctum', 'active'])->group(function (): void {
             ->middleware('permission:production.tasks.resume')->name('tasks.resume');
         Route::post('/tasks/{task}/complete', [ProductionTaskController::class, 'complete'])
             ->middleware('permission:production.tasks.complete')->name('tasks.complete');
+
+        Route::get('/dispatches', [ProductionDispatchController::class, 'index'])
+            ->middleware('permission:production.dispatches.index')->name('dispatches.index');
+        Route::get('/dispatches/mine', [ProductionDispatchController::class, 'mine'])
+            ->middleware('permission:production.dispatches.mine')->name('dispatches.mine');
+        Route::post('/dispatches', [ProductionDispatchController::class, 'store'])
+            ->middleware('permission:production.dispatches.create')->name('dispatches.store');
+        Route::get('/tasks/{task}/operations', [ProductionDispatchController::class, 'operations'])
+            ->middleware('permission:production.dispatches.create')->name('tasks.operations');
     });
 });

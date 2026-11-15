@@ -20,6 +20,7 @@ class DatabaseSeeder extends Seeder
             MaterialSeeder::class,
             ProductSeeder::class,
             ProcessSeeder::class,
+            ProductionSeeder::class,
         ]);
     }
 }

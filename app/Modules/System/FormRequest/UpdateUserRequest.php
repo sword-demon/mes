@@ -40,6 +40,7 @@ class UpdateUserRequest extends FormRequest
             ],
             'phone' => ['nullable', 'string', 'max:32'],
             'department_id' => ['nullable', 'integer', Rule::exists('sys_departments', 'id')],
+            'employee_id' => ['nullable', 'integer', Rule::exists('mes_employees', 'id')],
             'position' => ['nullable', 'string', 'max:64'],
             'status' => ['sometimes', 'boolean'],
         ];

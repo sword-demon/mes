@@ -12,12 +12,14 @@ export type User = {
     email: string;
     phone: string | null;
     department_id: number | null;
+    employee_id: number | null;
     position: string | null;
     status: boolean;
     email_verified_at: string | null;
     created_at: string;
     updated_at: string;
     roles?: Role[];
+    employee?: { id: number; employee_no: string; name: string } | null;
 };
 
 export type Role = {

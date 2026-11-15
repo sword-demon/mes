@@ -7,6 +7,7 @@ export type UserPayload = {
     email: string;
     password: string;
     phone?: string | null;
+    employee_id?: number | null;
     status?: boolean;
     role_ids?: number[];
 };
