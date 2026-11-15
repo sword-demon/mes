@@ -5,6 +5,7 @@ namespace App\Modules\Production\Model;
 use App\Modules\Organization\Model\Employee;
 use App\Modules\Organization\Model\Team;
 use App\Modules\Process\Model\RouteOperation;
+use App\Modules\Quality\Model\InspectionTask;
 use Database\Factories\ProcessRecordFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\Table;
@@ -12,6 +13,7 @@ use Illuminate\Database\Eloquent\Attributes\UseFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Support\Carbon;
 
 /**
@@ -34,6 +36,7 @@ use Illuminate\Support\Carbon;
  * @property string|null $rework_reason
  * @property Carbon|null $rework_at
  * @property int $rework_count
+ * @property int $inspection_cycle
  * @property Carbon|null $created_at
  * @property Carbon|null $updated_at
  */
@@ -56,6 +59,7 @@ use Illuminate\Support\Carbon;
     'rework_reason',
     'rework_at',
     'rework_count',
+    'inspection_cycle',
 ])]
 #[Table('mes_process_records')]
 #[UseFactory(ProcessRecordFactory::class)]
@@ -96,11 +100,18 @@ class ProcessRecord extends Model
     protected $attributes = [
         'status' => self::PENDING,
         'rework_count' => 0,
+        'inspection_cycle' => 0,
     ];
 
     public function statusLabel(): string
     {
         return self::STATUS_LABELS[$this->status] ?? $this->status;
+    }
+
+    /** @return HasMany<InspectionTask, $this> */
+    public function inspectionTasks(): HasMany
+    {
+        return $this->hasMany(InspectionTask::class, 'process_record_id');
     }
 
     public function requiresInspection(): bool
@@ -149,6 +160,7 @@ class ProcessRecord extends Model
             'sequence' => 'integer',
             'equipment_id' => 'integer',
             'rework_count' => 'integer',
+            'inspection_cycle' => 'integer',
             'started_at' => 'datetime',
             'completed_at' => 'datetime',
             'inspected_at' => 'datetime',

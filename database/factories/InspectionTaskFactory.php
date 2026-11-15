@@ -16,6 +16,7 @@ class InspectionTaskFactory extends Factory
             'production_order_id' => ProductionOrder::factory(),
             'process_record_id' => null,
             'route_operation_id' => null,
+            'inspection_cycle' => 0,
             'inspection_type' => InspectionTask::OQC,
             'result' => null,
             'inspector_id' => null,

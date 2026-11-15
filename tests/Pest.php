@@ -84,5 +84,9 @@ function superAdmin(): User
 
 function bearer(User $user): TestCase
 {
+    // The auth guard caches the resolved user across test requests; switching
+    // actors inside one test must start from a clean guard.
+    app('auth')->forgetGuards();
+
     return test()->withToken($user->createToken('web')->plainTextToken);
 }

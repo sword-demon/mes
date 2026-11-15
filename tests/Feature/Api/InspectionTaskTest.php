@@ -1,10 +1,12 @@
 <?php
 
+use App\Modules\Organization\Model\Employee;
 use App\Modules\Process\Model\Process;
 use App\Modules\Process\Model\RouteOperation;
 use App\Modules\Production\Model\ProcessRecord;
 use App\Modules\Production\Model\ProductionOrder;
 use App\Modules\Production\Model\ProductionTask;
+use App\Modules\Production\Service\ProcessRecordService;
 use App\Modules\Quality\Model\InspectionItem;
 use App\Modules\Quality\Model\InspectionTask;
 use App\Modules\System\Model\User;
@@ -55,6 +57,7 @@ function createInspectionTask(User $actor, array $data): int
 
 it('creates an IPQC task for a process record awaiting inspection', function () {
     [$order, $record] = inspectionCase();
+    InspectionItem::factory()->create();
     $actor = inspectionActor();
 
     bearer($actor)->postJson('/api/v1/quality/inspection-tasks', [
@@ -76,6 +79,7 @@ it('creates an IPQC task for a process record awaiting inspection', function () 
 it('creates an OQC task at order level without a process record', function () {
     [$order, , $operation] = inspectionCase();
     [, , $otherOperation] = inspectionCase();
+    InspectionItem::factory()->create();
     $actor = inspectionActor();
 
     bearer($actor)->postJson('/api/v1/quality/inspection-tasks', [
@@ -214,10 +218,9 @@ it('allows re-inspection of the same operation after rework', function () {
         'remark' => '焊点虚焊',
     ])->assertOk()->assertJsonPath('data.status', 'failed');
 
-    ProcessRecord::query()->whereKey($record->id)->update([
-        'status' => ProcessRecord::INSPECTING,
-        'completed_at' => now()->addMinute(),
-    ]);
+    $employee = Employee::factory()->create();
+    app(ProcessRecordService::class)->start($record->fresh(), ['employee_id' => $employee->id]);
+    app(ProcessRecordService::class)->complete($record->fresh());
 
     $second = createInspectionTask($actor, [
         'production_order_id' => $order->id,
@@ -232,10 +235,89 @@ it('allows re-inspection of the same operation after rework', function () {
         ->and($record->fresh()->status)->toBe(ProcessRecord::INSPECTED);
 });
 
-it('rejects items without a standard and duplicate measurements', function () {
+it('derives a rework reason from the failed measurements', function () {
+    [$order, $record] = inspectionCase();
+    $item = InspectionItem::factory()->create(['code' => 'TEMP', 'name' => '工作温度']);
+    $actor = inspectionActor();
+    $id = createInspectionTask($actor, [
+        'production_order_id' => $order->id,
+        'inspection_type' => 'ipqc',
+        'process_record_id' => $record->id,
+    ]);
+
+    bearer($actor)->postJson("/api/v1/quality/inspection-tasks/{$id}/record", [
+        'items' => [['inspection_item_id' => $item->id, 'measured_value' => 5.3]],
+    ])->assertOk()->assertJsonPath('data.status', 'failed');
+
+    expect($record->fresh()->rework_reason)
+        ->toContain('检验不合格：工作温度=5.300')
+        ->toContain('4.800~5.200');
+});
+
+it('rejects a stale pending task after the process enters a new inspection cycle', function () {
+    [$order, $record] = inspectionCase();
+    $item = InspectionItem::factory()->create(['code' => 'STALE', 'name' => '焊点强度']);
+    $actor = inspectionActor();
+    $stale = createInspectionTask($actor, [
+        'production_order_id' => $order->id,
+        'inspection_type' => 'ipqc',
+        'process_record_id' => $record->id,
+    ]);
+    $employee = Employee::factory()->create();
+
+    app(ProcessRecordService::class)->exception($record, '设备异常');
+    app(ProcessRecordService::class)->start($record->fresh(), ['employee_id' => $employee->id]);
+    app(ProcessRecordService::class)->complete($record->fresh());
+
+    createInspectionTask($actor, [
+        'production_order_id' => $order->id,
+        'inspection_type' => 'ipqc',
+        'process_record_id' => $record->id,
+    ]);
+
+    bearer($actor)->getJson('/api/v1/quality/inspection-tasks?result=pending')
+        ->assertOk()
+        ->assertJsonPath('data.items.0.status', 'expired')
+        ->assertJsonPath('data.items.0.result_label', '已过期');
+
+    bearer($actor)->postJson("/api/v1/quality/inspection-tasks/{$stale}/record", [
+        'items' => [['inspection_item_id' => $item->id, 'measured_value' => 5]],
+    ])->assertUnprocessable()->assertJsonPath('message', '检验任务已过期，请按当前工序轮次重新检验');
+});
+
+it('snapshots the enabled inspection items when the task is created', function () {
+    [$order, $record] = inspectionCase();
+    $first = InspectionItem::factory()->create(['code' => 'FIRST', 'name' => '首项']);
+    $actor = inspectionActor();
+    $id = createInspectionTask($actor, [
+        'production_order_id' => $order->id,
+        'inspection_type' => 'ipqc',
+        'process_record_id' => $record->id,
+    ]);
+
+    InspectionItem::factory()->create(['code' => 'LATE', 'name' => '后加项']);
+
+    bearer($actor)->postJson("/api/v1/quality/inspection-tasks/{$id}/record", [
+        'items' => [['inspection_item_id' => $first->id, 'measured_value' => 5]],
+    ])->assertOk()
+        ->assertJsonPath('data.status', 'passed')
+        ->assertJsonCount(1, 'data.required_items')
+        ->assertJsonPath('data.required_items.0.name', '首项');
+});
+
+it('refuses to create a task when no inspection item is enabled', function () {
+    [$order, $record] = inspectionCase();
+
+    bearer(inspectionActor())->postJson('/api/v1/quality/inspection-tasks', [
+        'production_order_id' => $order->id,
+        'inspection_type' => 'ipqc',
+        'process_record_id' => $record->id,
+    ])->assertUnprocessable()->assertJsonPath('message', '没有启用的检验项目，不能创建检验任务');
+});
+
+it('rejects missing items and duplicate measurements', function () {
     [$order, $record] = inspectionCase();
     $item = InspectionItem::factory()->create();
-    $item->standard()->delete();
     $actor = inspectionActor();
     $id = createInspectionTask($actor, [
         'production_order_id' => $order->id,
@@ -251,10 +333,34 @@ it('rejects items without a standard and duplicate measurements', function () {
         ['inspection_item_id' => $item->id, 'measured_value' => 5],
         ['inspection_item_id' => $item->id, 'measured_value' => 6],
     ]])->assertUnprocessable()->assertJsonValidationErrors('items.1.inspection_item_id', 'data.errors');
+});
 
-    bearer($actor)->postJson($url, ['items' => [
+it('refuses to create a task when an enabled item has no standard', function () {
+    [$order, $record] = inspectionCase();
+    $item = InspectionItem::factory()->create();
+    $item->standard()->delete();
+
+    bearer(inspectionActor())->postJson('/api/v1/quality/inspection-tasks', [
+        'production_order_id' => $order->id,
+        'inspection_type' => 'ipqc',
+        'process_record_id' => $record->id,
+    ])->assertUnprocessable()->assertJsonPath('message', "检验项目「{$item->name}」未维护标准，不能创建检验任务");
+});
+
+it('refuses to judge when a required item lost its standard', function () {
+    [$order, $record] = inspectionCase();
+    $item = InspectionItem::factory()->create();
+    $actor = inspectionActor();
+    $id = createInspectionTask($actor, [
+        'production_order_id' => $order->id,
+        'inspection_type' => 'ipqc',
+        'process_record_id' => $record->id,
+    ]);
+    $item->standard()->delete();
+
+    bearer($actor)->postJson("/api/v1/quality/inspection-tasks/{$id}/record", ['items' => [
         ['inspection_item_id' => $item->id, 'measured_value' => 5],
-    ]])->assertUnprocessable()->assertJsonPath('message', '检验项目「工作电压」未维护标准，不能判定');
+    ]])->assertUnprocessable()->assertJsonPath('message', "检验项目「{$item->name}」未维护标准，不能判定");
 });
 
 it('requires every enabled inspection item to be measured', function () {
@@ -282,6 +388,7 @@ it('requires every enabled inspection item to be measured', function () {
 
 it('blocks a second pending task for the same inspection cycle', function () {
     [$order, $record] = inspectionCase();
+    InspectionItem::factory()->create();
     $actor = inspectionActor();
     $payload = [
         'production_order_id' => $order->id,
@@ -357,11 +464,34 @@ it('filters tasks and records by order, operation, result and time', function ()
         'start_date' => now()->subDays(2)->toDateString(),
         'end_date' => now()->subDays(2)->toDateString(),
     ]))->assertOk()->assertJsonCount(1, 'data.items')->assertJsonPath('data.items.0.id', $pendingId);
+    bearer($actor)->getJson($base.http_build_query(['keyword' => $order->code]))
+        ->assertOk()->assertJsonCount(2, 'data.items');
+    bearer($actor)->getJson($base.http_build_query(['keyword' => 'NOT-EXISTS']))
+        ->assertOk()->assertJsonCount(0, 'data.items');
+});
+
+it('records an OQC judgement without touching a process record', function () {
+    [$order, $record, $operation] = inspectionCase();
+    $item = InspectionItem::factory()->create();
+    $actor = inspectionActor();
+    $id = createInspectionTask($actor, [
+        'production_order_id' => $order->id,
+        'inspection_type' => 'oqc',
+        'route_operation_id' => $operation->id,
+    ]);
+
+    bearer($actor)->postJson("/api/v1/quality/inspection-tasks/{$id}/record", [
+        'items' => [['inspection_item_id' => $item->id, 'measured_value' => 5.3]],
+        'remark' => '出货超差',
+    ])->assertOk()->assertJsonPath('data.status', 'failed');
+
+    expect($record->fresh()->status)->toBe(ProcessRecord::INSPECTING);
 });
 
 it('uploads inspection images', function () {
     Storage::fake('public');
     [$order, , $operation] = inspectionCase();
+    InspectionItem::factory()->create();
     $actor = inspectionActor();
     $id = createInspectionTask($actor, [
         'production_order_id' => $order->id,
@@ -369,6 +499,12 @@ it('uploads inspection images', function () {
         'route_operation_id' => $operation->id,
     ]);
     $url = "/api/v1/quality/inspection-tasks/{$id}";
+
+    bearer($actor)->post("{$url}/images", [])->assertUnprocessable()
+        ->assertJsonValidationErrors('images', 'data.errors');
+    bearer($actor)->post("{$url}/images", [
+        'images' => array_map(fn (int $index) => UploadedFile::fake()->image("e{$index}.jpg", 10, 10), range(1, 6)),
+    ])->assertUnprocessable()->assertJsonValidationErrors('images', 'data.errors');
 
     bearer($actor)->post("{$url}/images", [
         'images' => [UploadedFile::fake()->create('notes.txt', 1, 'text/plain')],
@@ -398,6 +534,7 @@ it('returns a task with no operation instead of failing the list', function () {
 
 it('offers orders and inspectable process records for the create form', function () {
     [$order, $record] = inspectionCase();
+    InspectionItem::factory()->create();
     $actor = inspectionActor();
 
     $url = '/api/v1/quality/inspection-tasks/options?';
@@ -420,21 +557,46 @@ it('offers orders and inspectable process records for the create form', function
         ->assertOk()
         ->assertJsonCount(0, 'data.process_records')
         ->assertJsonPath('data.operations.0.id', $record->route_operation_id);
+
+    ProductionOrder::factory()->create(['code' => 'PO-SEARCH-999']);
+
+    bearer($actor)->getJson($url.http_build_query(['keyword' => 'PO-SEARCH']))
+        ->assertOk()
+        ->assertJsonCount(1, 'data.orders')
+        ->assertJsonPath('data.orders.0.code', 'PO-SEARCH-999');
 });
 
-it('protects every inspection endpoint', function () {
+it('protects every inspection endpoint and separates create from record', function () {
     [$order, $record] = inspectionCase();
+    InspectionItem::factory()->create();
+
     $this->getJson('/api/v1/quality/inspection-tasks')->assertUnauthorized();
+    $this->getJson('/api/v1/quality/inspection-tasks/options')->assertUnauthorized();
     $this->postJson('/api/v1/quality/inspection-tasks', [])->assertUnauthorized();
+    $this->postJson('/api/v1/quality/inspection-tasks/1/record', [])->assertUnauthorized();
+    $this->post('/api/v1/quality/inspection-tasks/1/images', [])->assertUnauthorized();
 
-    $stranger = userWithPermissions([]);
+    $creator = userWithPermissions(['quality.inspections.index', 'quality.inspections.create'], 'creator');
+    $recorder = userWithPermissions(['quality.inspections.index', 'quality.inspections.record'], 'recorder');
+    $taskId = createInspectionTask($creator, [
+        'production_order_id' => $order->id,
+        'inspection_type' => 'ipqc',
+        'process_record_id' => $record->id,
+    ]);
+    $taskUrl = "/api/v1/quality/inspection-tasks/{$taskId}";
 
-    bearer($stranger)->getJson('/api/v1/quality/inspection-tasks')->assertForbidden();
-    bearer($stranger)->postJson('/api/v1/quality/inspection-tasks', [
+    bearer($creator)->postJson("{$taskUrl}/record", [])->assertForbidden();
+    bearer($creator)->post("{$taskUrl}/images", [])->assertForbidden();
+
+    bearer($recorder)->postJson('/api/v1/quality/inspection-tasks', [
         'production_order_id' => $order->id,
         'inspection_type' => 'ipqc',
         'process_record_id' => $record->id,
     ])->assertForbidden();
+
+    $stranger = userWithPermissions([], 'stranger');
+    bearer($stranger)->getJson('/api/v1/quality/inspection-tasks')->assertForbidden();
+    bearer($stranger)->getJson('/api/v1/quality/inspection-tasks/options')->assertForbidden();
 });
 
 it('validates the create payload', function () {

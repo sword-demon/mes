@@ -10,6 +10,7 @@ use App\Modules\Production\Model\ProductionTask;
 use App\Modules\Production\Model\ProductSn;
 use App\Modules\Production\Service\ProductionTaskService;
 use App\Modules\Production\Service\ProductSnService;
+use App\Modules\Quality\Model\InspectionItem;
 
 /**
  * Splits a released order into one task whose route carries one operation per
@@ -223,15 +224,24 @@ it('treats the lowest route sequence as the first operation', function () {
 
 it('gates submission of an inspection process behind a passed inspection', function () {
     [, $records, $employee] = flowTask([true]);
+    $item = InspectionItem::factory()->create(['code' => 'WELD', 'name' => '焊点强度']);
     $actor = userWithPermissions([
         'production.flows.start',
         'production.flows.complete',
-        'production.flows.inspect',
         'production.flows.submit',
         'production.flows.receive',
+        'quality.inspections.index',
+        'quality.inspections.create',
+        'quality.inspections.record',
     ]);
     $record = $records->first();
     $url = "/api/v1/production/process-records/{$record->id}";
+    $taskUrl = '/api/v1/quality/inspection-tasks';
+    $taskPayload = [
+        'production_order_id' => $record->productionTask->production_order_id,
+        'inspection_type' => 'ipqc',
+        'process_record_id' => $record->id,
+    ];
 
     bearer($actor)->postJson("{$url}/start", ['employee_id' => $employee->id])->assertOk();
     bearer($actor)->postJson("{$url}/complete")
@@ -242,23 +252,25 @@ it('gates submission of an inspection process behind a passed inspection', funct
         ->assertUnprocessable()
         ->assertJsonPath('message', '需检验工序尚未检验通过，不能提交下道');
 
-    bearer($actor)->postJson("{$url}/inspect", ['passed' => false])
-        ->assertUnprocessable()
-        ->assertJsonValidationErrors('reason', 'data.errors');
+    $first = bearer($actor)->postJson($taskUrl, $taskPayload)->assertOk()->json('data.id');
+    bearer($actor)->postJson("{$taskUrl}/{$first}/record", [
+        'items' => [['inspection_item_id' => $item->id, 'measured_value' => 5.3]],
+        'remark' => '焊点虚焊',
+    ])->assertOk()->assertJsonPath('data.status', 'failed');
 
-    bearer($actor)->postJson("{$url}/inspect", ['passed' => false, 'reason' => '焊点虚焊'])
-        ->assertOk()
-        ->assertJsonPath('data.status', ProcessRecord::REWORKING)
-        ->assertJsonPath('data.rework_reason', '焊点虚焊')
-        ->assertJsonPath('data.rework_count', 1);
+    $record->refresh();
+
+    expect($record->status)->toBe(ProcessRecord::REWORKING)
+        ->and($record->rework_reason)->toBe('焊点虚焊')
+        ->and($record->rework_count)->toBe(1);
 
     bearer($actor)->postJson("{$url}/start", ['employee_id' => $employee->id])->assertOk();
     bearer($actor)->postJson("{$url}/complete")->assertOk();
 
-    bearer($actor)->postJson("{$url}/inspect", ['passed' => true])
-        ->assertOk()
-        ->assertJsonPath('data.status', ProcessRecord::INSPECTED)
-        ->assertJsonPath('data.status_label', '检验通过');
+    $second = bearer($actor)->postJson($taskUrl, $taskPayload)->assertOk()->json('data.id');
+    bearer($actor)->postJson("{$taskUrl}/{$second}/record", [
+        'items' => [['inspection_item_id' => $item->id, 'measured_value' => 5]],
+    ])->assertOk()->assertJsonPath('data.status', 'passed');
     bearer($actor)->postJson("{$url}/submit")
         ->assertOk()
         ->assertJsonPath('data.status', ProcessRecord::PENDING_TRANSFER);
@@ -272,6 +284,14 @@ it('gates submission of an inspection process behind a passed inspection', funct
     expect($record->inspected_at)->not->toBeNull()
         ->and($record->submitted_at)->not->toBeNull()
         ->and($record->received_at)->not->toBeNull();
+});
+
+it('no longer exposes direct inspection without measured values', function () {
+    [, $records] = flowTask([true]);
+
+    bearer(superAdmin())->postJson("/api/v1/production/process-records/{$records->first()->id}/inspect", [
+        'passed' => true,
+    ])->assertNotFound();
 });
 
 it('records an exception only when a reason is given', function () {
@@ -401,7 +421,7 @@ it('requires the matching permission for every flow endpoint', function () {
         ->assertForbidden()
         ->assertJsonPath('code', 403);
 
-    foreach (['start', 'complete', 'inspect', 'submit', 'receive', 'exception', 'rework'] as $action) {
+    foreach (['start', 'complete', 'submit', 'receive', 'exception', 'rework'] as $action) {
         bearer($actor)->postJson("{$url}/{$action}")
             ->assertForbidden()
             ->assertJsonPath('code', 403);

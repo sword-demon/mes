@@ -1,7 +1,9 @@
 import { useQuery } from '@tanstack/react-query';
 import { Form, Input, Modal, Radio, Select } from 'antd';
+import { useState } from 'react';
 import { getInspectionOptions } from '@/api/quality';
 import type { InspectionTaskPayload } from '@/api/quality';
+import { useDebouncedValue } from '@/hooks/use-debounced-value';
 
 export default function CreateInspectionModal({
     saving,
@@ -13,15 +15,17 @@ export default function CreateInspectionModal({
     onClose: () => void;
 }) {
     const [form] = Form.useForm();
+    const [orderKeyword, setOrderKeyword] = useState('');
+    const debouncedKeyword = useDebouncedValue(orderKeyword);
     const orderId = Form.useWatch<number | undefined>('production_order_id', form);
     const type = Form.useWatch<string | undefined>('inspection_type', form);
     const isIpqc = (type ?? 'ipqc') === 'ipqc';
     const orders = useQuery({
-        queryKey: ['quality.inspections', 'options'],
-        queryFn: () => getInspectionOptions(),
+        queryKey: ['quality.inspections', 'order-options', debouncedKeyword],
+        queryFn: () => getInspectionOptions(undefined, debouncedKeyword),
     });
     const orderOptions = useQuery({
-        queryKey: ['quality.inspections', 'options', orderId],
+        queryKey: ['quality.inspections', 'order-detail', orderId],
         queryFn: () => getInspectionOptions(orderId),
         enabled: orderId !== undefined,
     });
@@ -59,7 +63,8 @@ export default function CreateInspectionModal({
                 >
                     <Select
                         showSearch
-                        optionFilterProp="label"
+                        filterOption={false}
+                        onSearch={setOrderKeyword}
                         loading={orders.isLoading}
                         options={(orders.data?.orders ?? []).map((order) => ({
                             value: order.id,

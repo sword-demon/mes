@@ -320,8 +320,6 @@ Route::middleware(['auth:sanctum', 'active'])->group(function (): void {
             ->middleware('permission:production.flows.start')->name('process-records.start');
         Route::post('/process-records/{record}/complete', [ProcessRecordController::class, 'complete'])
             ->middleware('permission:production.flows.complete')->name('process-records.complete');
-        Route::post('/process-records/{record}/inspect', [ProcessRecordController::class, 'inspect'])
-            ->middleware('permission:production.flows.inspect')->name('process-records.inspect');
         Route::post('/process-records/{record}/submit', [ProcessRecordController::class, 'submit'])
             ->middleware('permission:production.flows.submit')->name('process-records.submit');
         Route::post('/process-records/{record}/receive', [ProcessRecordController::class, 'receive'])

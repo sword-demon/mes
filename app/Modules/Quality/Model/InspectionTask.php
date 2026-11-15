@@ -13,6 +13,7 @@ use Illuminate\Database\Eloquent\Attributes\UseFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Support\Carbon;
 
@@ -21,6 +22,7 @@ use Illuminate\Support\Carbon;
  * @property int $production_order_id
  * @property int|null $process_record_id
  * @property int|null $route_operation_id
+ * @property int $inspection_cycle
  * @property string $inspection_type
  * @property string|null $result
  * @property int|null $inspector_id
@@ -33,6 +35,7 @@ use Illuminate\Support\Carbon;
     'production_order_id',
     'process_record_id',
     'route_operation_id',
+    'inspection_cycle',
     'inspection_type',
     'result',
     'inspector_id',
@@ -56,6 +59,8 @@ class InspectionTask extends Model
 
     public const string FAILED = 'failed';
 
+    public const string EXPIRED = 'expired';
+
     public const array TYPE_LABELS = [
         self::IPQC => 'IPQC 过程检验',
         self::OQC => 'OQC 出货检验',
@@ -65,6 +70,7 @@ class InspectionTask extends Model
         self::PENDING => '待检验',
         self::PASSED => '合格',
         self::FAILED => '不合格',
+        self::EXPIRED => '已过期',
     ];
 
     public function status(): string
@@ -113,9 +119,19 @@ class InspectionTask extends Model
         return $this->hasMany(InspectionImage::class)->orderBy('id');
     }
 
+    /** @return BelongsToMany<InspectionItem, $this> */
+    public function requiredItems(): BelongsToMany
+    {
+        return $this->belongsToMany(InspectionItem::class, 'mes_inspection_task_items', 'inspection_task_id', 'inspection_item_id')
+            ->withTimestamps();
+    }
+
     /** @return array<string, string> */
     protected function casts(): array
     {
-        return ['inspected_at' => 'datetime'];
+        return [
+            'inspection_cycle' => 'integer',
+            'inspected_at' => 'datetime',
+        ];
     }
 }

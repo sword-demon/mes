@@ -5,7 +5,6 @@ namespace App\Modules\Production\Controller;
 use App\Core\Services\EntityService;
 use App\Http\Controllers\Controller;
 use App\Http\Responses\ApiResponse;
-use App\Modules\Production\FormRequest\InspectProcessRecordRequest;
 use App\Modules\Production\FormRequest\ReasonProcessRecordRequest;
 use App\Modules\Production\FormRequest\StartProcessRecordRequest;
 use App\Modules\Production\Model\ProcessRecord;
@@ -74,18 +73,6 @@ class ProcessRecordController extends Controller
     public function complete(ProcessRecord $record): JsonResponse
     {
         return $this->respond($this->records->complete($record));
-    }
-
-    public function inspect(InspectProcessRecordRequest $request, ProcessRecord $record): JsonResponse
-    {
-        $data = $request->validated();
-        $reason = $data['reason'] ?? null;
-
-        return $this->respond($this->records->inspect(
-            $record,
-            (bool) $data['passed'],
-            $reason === null ? null : (string) $reason,
-        ));
     }
 
     public function submit(ProcessRecord $record): JsonResponse

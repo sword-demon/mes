@@ -33,9 +33,11 @@ export const INSPECTION_RESULTS = [
     { value: 'pending', label: '待检验', color: 'default' },
     { value: 'passed', label: '合格', color: 'green' },
     { value: 'failed', label: '不合格', color: 'red' },
+    { value: 'expired', label: '已过期', color: 'default' },
 ] as const;
 
 export type InspectionStatus = (typeof INSPECTION_RESULTS)[number]['value'];
+export type InspectionResultFilter = Exclude<InspectionStatus, 'expired'>;
 
 export type InspectionOrderRef = {
     id: number;
@@ -68,6 +70,16 @@ export type InspectionTaskItem = {
     passed: boolean;
 };
 
+export type InspectionRequiredItem = {
+    id: number;
+    code: string;
+    name: string;
+    unit: string;
+    standard_value: string;
+    min_value: string;
+    max_value: string;
+};
+
 export type InspectionImage = { id: number; original_name: string | null; url: string };
 
 export type InspectionTask = {
@@ -87,6 +99,7 @@ export type InspectionTask = {
         process: { id: number; code: string; name: string };
     } | null;
     process_record: InspectionProcessRecordRef | null;
+    required_items: InspectionRequiredItem[];
     items: InspectionTaskItem[];
     images: InspectionImage[];
     created_at: string;
@@ -100,7 +113,7 @@ export type InspectionTaskParams = {
     production_order_id?: number;
     route_operation_id?: number;
     inspection_type?: InspectionType;
-    result?: InspectionStatus;
+    result?: InspectionResultFilter;
     judged?: 1;
     start_date?: string;
     end_date?: string;
@@ -153,9 +166,10 @@ export function listInspectionTasks(params: InspectionTaskParams = {}) {
     return api.get<Paginated<InspectionTask>>('/quality/inspection-tasks', params);
 }
 
-export function getInspectionOptions(productionOrderId?: number) {
+export function getInspectionOptions(productionOrderId?: number, keyword?: string) {
     return api.get<InspectionOptions>('/quality/inspection-tasks/options', {
         production_order_id: productionOrderId,
+        keyword,
     });
 }
 

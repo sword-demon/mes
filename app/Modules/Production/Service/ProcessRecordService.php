@@ -121,6 +121,9 @@ class ProcessRecordService
                 'status' => $requiresInspection ? ProcessRecord::INSPECTING : ProcessRecord::PENDING_TRANSFER,
                 'completed_at' => now(),
                 'submitted_at' => $requiresInspection ? $locked->submitted_at : now(),
+                'inspection_cycle' => $requiresInspection
+                    ? $locked->inspection_cycle + 1
+                    : $locked->inspection_cycle,
             ]);
 
             return $locked;

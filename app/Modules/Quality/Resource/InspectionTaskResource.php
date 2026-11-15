@@ -13,13 +13,24 @@ class InspectionTaskResource extends JsonResource
     /** @return array<string, mixed> */
     public function toArray(Request $request): array
     {
+        $status = $this->result;
+
+        if ($status === null
+            && $this->inspection_type === InspectionTask::IPQC
+            && $this->processRecord !== null
+            && $this->inspection_cycle !== $this->processRecord->inspection_cycle) {
+            $status = InspectionTask::EXPIRED;
+        }
+
+        $status ??= InspectionTask::PENDING;
+
         return [
             'id' => $this->id,
             'inspection_type' => $this->inspection_type,
             'inspection_type_label' => InspectionTask::TYPE_LABELS[$this->inspection_type],
             'result' => $this->result,
-            'status' => $this->status(),
-            'result_label' => $this->statusLabel(),
+            'status' => $status,
+            'result_label' => InspectionTask::RESULT_LABELS[$status],
             'inspector' => $this->whenLoaded('inspector', fn () => $this->inspector === null ? null : [
                 'id' => $this->inspector->id,
                 'name' => $this->inspector->name,
@@ -59,6 +70,15 @@ class InspectionTaskResource extends JsonResource
                 'min_value' => $result->min_value,
                 'max_value' => $result->max_value,
                 'passed' => $result->passed,
+            ])),
+            'required_items' => $this->whenLoaded('requiredItems', fn () => $this->requiredItems->map(fn ($item) => [
+                'id' => $item->id,
+                'code' => $item->code,
+                'name' => $item->name,
+                'unit' => $item->unit,
+                'standard_value' => $item->standard?->standard_value,
+                'min_value' => $item->standard?->min_value,
+                'max_value' => $item->standard?->max_value,
             ])),
             'images' => $this->whenLoaded('images', fn () => $this->images->map(fn ($image) => [
                 'id' => $image->id,

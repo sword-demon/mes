@@ -4,6 +4,7 @@ import dayjs from 'dayjs';
 import type { Dayjs } from 'dayjs';
 import { useState } from 'react';
 import Can from '@/components/can';
+import { useDebouncedValue } from '@/hooks/use-debounced-value';
 import {
     createInspectionTask,
     getInspectionOptions,
@@ -15,6 +16,7 @@ import {
 } from '@/api/quality';
 import type {
     InspectionRecordPayload,
+    InspectionResultFilter,
     InspectionStatus,
     InspectionTask,
     InspectionTaskPayload,
@@ -38,22 +40,24 @@ export default function InspectionsPage({ recordsOnly = false }: { recordsOnly?:
     const canRead = can(user, 'quality.inspections.index');
     const canRecord = can(user, 'button.quality.inspections.record');
     const [page, setPage] = useState(1);
+    const [orderKeyword, setOrderKeyword] = useState('');
+    const debouncedKeyword = useDebouncedValue(orderKeyword);
     const [orderId, setOrderId] = useState<number>();
     const [operationId, setOperationId] = useState<number>();
     const [type, setType] = useState<InspectionType>();
-    const [result, setResult] = useState<InspectionStatus>();
+    const [result, setResult] = useState<InspectionResultFilter>();
     const [range, setRange] = useState<[Dayjs, Dayjs]>();
     const [creating, setCreating] = useState(false);
     const [recording, setRecording] = useState<InspectionTask | null>(null);
     const [detail, setDetail] = useState<InspectionTask | null>(null);
 
     const options = useQuery({
-        queryKey: ['quality.inspections', 'options'],
-        queryFn: () => getInspectionOptions(),
+        queryKey: ['quality.inspections', 'order-options', debouncedKeyword],
+        queryFn: () => getInspectionOptions(undefined, debouncedKeyword),
         enabled: canRead,
     });
     const operationOptions = useQuery({
-        queryKey: ['quality.inspections', 'options', orderId],
+        queryKey: ['quality.inspections', 'order-detail', orderId],
         queryFn: () => getInspectionOptions(orderId),
         enabled: canRead && orderId !== undefined,
     });
@@ -110,8 +114,8 @@ export default function InspectionsPage({ recordsOnly = false }: { recordsOnly?:
     }
 
     const resultOptions = recordsOnly
-        ? INSPECTION_RESULTS.filter((item) => item.value !== 'pending')
-        : INSPECTION_RESULTS;
+        ? INSPECTION_RESULTS.filter((item) => item.value !== 'pending' && item.value !== 'expired')
+        : INSPECTION_RESULTS.filter((item) => item.value !== 'expired');
 
     return (
         <>
@@ -135,7 +139,8 @@ export default function InspectionsPage({ recordsOnly = false }: { recordsOnly?:
                 <Select
                     allowClear
                     showSearch
-                    optionFilterProp="label"
+                    filterOption={false}
+                    onSearch={setOrderKeyword}
                     placeholder="生产订单"
                     style={{ width: 220 }}
                     loading={options.isLoading}

@@ -58,8 +58,8 @@ class InspectionTaskService
 
                 $hasPending = InspectionTask::query()
                     ->where('process_record_id', $record->id)
+                    ->where('inspection_cycle', $record->inspection_cycle)
                     ->whereNull('result')
-                    ->where('created_at', '>', $record->completed_at ?? $record->created_at)
                     ->exists();
 
                 if ($hasPending) {
@@ -78,13 +78,33 @@ class InspectionTaskService
                 }
             }
 
-            return InspectionTask::query()->create([
+            $requiredItems = InspectionItem::query()
+                ->where('status', true)
+                ->with('standard')
+                ->orderBy('id')
+                ->get();
+
+            if ($requiredItems->isEmpty()) {
+                throw new ApiException('没有启用的检验项目，不能创建检验任务', 422);
+            }
+
+            $missingStandard = $requiredItems->first(fn (InspectionItem $item): bool => $item->standard === null);
+
+            if ($missingStandard !== null) {
+                throw new ApiException("检验项目「{$missingStandard->name}」未维护标准，不能创建检验任务", 422);
+            }
+
+            $task = InspectionTask::query()->create([
                 'production_order_id' => (int) $data['production_order_id'],
                 'process_record_id' => $record?->id,
                 'route_operation_id' => $operation->id,
+                'inspection_cycle' => $record === null ? 0 : $record->inspection_cycle,
                 'inspection_type' => $type,
                 'remark' => $data['remark'] ?? null,
             ]);
+            $task->requiredItems()->sync($requiredItems->modelKeys());
+
+            return $task;
         });
     }
 
@@ -105,35 +125,69 @@ class InspectionTaskService
                 throw new ApiException('检验任务已判定，不能重复提交', 422);
             }
 
+            $record = null;
+
+            if ($locked->inspection_type === InspectionTask::IPQC && $locked->process_record_id !== null) {
+                $record = ProcessRecord::query()
+                    ->lockForUpdate()
+                    ->whereKey($locked->process_record_id)
+                    ->firstOrFail();
+
+                if ($locked->inspection_cycle !== $record->inspection_cycle) {
+                    throw new ApiException('检验任务已过期，请按当前工序轮次重新检验', 422);
+                }
+            }
+
             $measurements = [];
 
             foreach ($data['items'] as $measurement) {
-                $measurements[(int) $measurement['inspection_item_id']] = (float) $measurement['measured_value'];
+                $measurements[(int) $measurement['inspection_item_id']] = (string) $measurement['measured_value'];
             }
 
-            // Without a per-process item mapping, every enabled item is the
-            // inspection set; a partial submission would let one good reading
-            // pass the whole task.
-            $enabled = InspectionItem::query()->where('status', true)->with('standard')->get();
-            $enabledItems = $enabled->keyBy('id');
+            // The task captures its inspection set at creation, so later
+            // standard edits cannot silently widen or narrow the judgement.
+            $requiredItems = $locked->requiredItems()->with('standard')->get();
+
+            if ($requiredItems->isEmpty()) {
+                throw new ApiException('检验任务未配置检验项目，不能判定', 422);
+            }
+
+            $requiredByItem = $requiredItems->keyBy('id');
             $rows = [];
+            $failures = [];
             $allPassed = true;
 
             foreach ($measurements as $itemId => $measured) {
-                $item = $enabledItems->get($itemId);
+                $item = $requiredByItem->get($itemId);
 
                 if ($item === null) {
-                    throw new ApiException('检验项目不存在或已停用，不能判定', 422);
+                    throw new ApiException('检验项目不在本任务范围内，不能判定', 422);
                 }
 
                 if ($item->standard === null) {
                     throw new ApiException("检验项目「{$item->name}」未维护标准，不能判定", 422);
                 }
 
-                $minimum = (float) $item->standard->min_value;
-                $maximum = (float) $item->standard->max_value;
-                $passed = $measured >= $minimum && $measured <= $maximum;
+                $minimum = (string) $item->standard->min_value;
+                $maximum = (string) $item->standard->max_value;
+
+                if (! is_numeric($measured) || ! is_numeric($minimum) || ! is_numeric($maximum)) {
+                    throw new ApiException('实测值或标准值不是有效数字，不能判定', 422);
+                }
+
+                $passed = bccomp($measured, $minimum, 3) >= 0
+                    && bccomp($measured, $maximum, 3) <= 0;
                 $allPassed = $allPassed && $passed;
+
+                if (! $passed) {
+                    $failures[] = sprintf(
+                        '%s=%s（%s~%s）',
+                        $item->name,
+                        number_format((float) $measured, 3, '.', ''),
+                        $item->standard->min_value,
+                        $item->standard->max_value,
+                    );
+                }
 
                 $rows[] = [
                     'inspection_item_id' => $item->id,
@@ -145,7 +199,7 @@ class InspectionTaskService
                 ];
             }
 
-            $missing = $enabled->first(fn (InspectionItem $item): bool => ! array_key_exists($item->id, $measurements));
+            $missing = $requiredItems->first(fn (InspectionItem $item): bool => ! array_key_exists($item->id, $measurements));
 
             if ($missing !== null) {
                 throw new ApiException("检验项目「{$missing->name}」未录入实测值", 422);
@@ -163,13 +217,11 @@ class InspectionTaskService
             ]);
             $locked->results()->createMany($rows);
 
-            if ($locked->inspection_type === InspectionTask::IPQC && $locked->process_record_id !== null) {
-                $record = ProcessRecord::query()->whereKey($locked->process_record_id)->firstOrFail();
-
+            if ($record !== null) {
                 $this->processRecords->inspect(
                     $record,
                     $allPassed,
-                    $allPassed ? null : ($remark ?? '检验项目超差'),
+                    $allPassed ? null : ($remark ?? mb_substr('检验不合格：'.implode('；', $failures), 0, 255)),
                 );
             }
 
@@ -209,6 +261,7 @@ class InspectionTaskService
         'processRecord.routeOperation.process',
         'inspector',
         'results.inspectionItem',
+        'requiredItems.standard',
         'images',
     ];
 }

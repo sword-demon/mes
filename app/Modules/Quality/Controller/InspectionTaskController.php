@@ -17,7 +17,6 @@ use App\Modules\Quality\Service\InspectionTaskService;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\DB;
 
 class InspectionTaskController extends Controller
 {
@@ -78,8 +77,10 @@ class InspectionTaskController extends Controller
     public function options(Request $request): JsonResponse
     {
         $orderId = $request->query('production_order_id');
+        $keyword = $request->query('keyword');
         $orders = ProductionOrder::query()
             ->with('product')
+            ->when(is_string($keyword) && $keyword !== '', fn (Builder $query) => $query->where('code', 'like', "%{$keyword}%"))
             ->orderByDesc('id')
             ->limit(100)
             ->get()
@@ -102,26 +103,20 @@ class InspectionTaskController extends Controller
                 'process' => ['id' => $operation->process->id, 'name' => $operation->process->name],
             ]);
         $records = ProcessRecord::query()
-            ->with('routeOperation.process')
+            ->with([
+                'routeOperation.process',
+                'inspectionTasks' => fn ($query) => $query->whereNull('result'),
+            ])
             ->when($hasOrder, fn (Builder $query) => $query->whereHas(
                 'productionTask',
                 fn (Builder $task) => $task->where('production_order_id', $orderId),
             ))
             ->when(! $hasOrder, fn (Builder $query) => $query->whereRaw('1 = 0'))
             ->where('status', ProcessRecord::INSPECTING)
-            ->whereNotExists(function ($query): void {
-                $query->select(DB::raw(1))
-                    ->from('mes_inspection_tasks')
-                    ->whereColumn('mes_inspection_tasks.process_record_id', 'mes_process_records.id')
-                    ->whereNull('mes_inspection_tasks.result')
-                    ->whereColumn(
-                        'mes_inspection_tasks.created_at',
-                        '>',
-                        DB::raw('COALESCE(mes_process_records.completed_at, mes_process_records.created_at)'),
-                    );
-            })
             ->orderBy('sequence')
             ->get()
+            ->reject(fn (ProcessRecord $record): bool => $record->inspectionTasks
+                ->contains('inspection_cycle', $record->inspection_cycle))
             ->map(fn (ProcessRecord $record): array => [
                 'id' => $record->id,
                 'sequence' => $record->sequence,

@@ -1,7 +1,5 @@
-import { useQuery } from '@tanstack/react-query';
 import { Alert, App, Empty, Input, InputNumber, Modal, Table, Tag, Typography } from 'antd';
 import { useState } from 'react';
-import { listInspectionItems } from '@/api/quality';
 import type { InspectionRecordPayload, InspectionTask } from '@/api/quality';
 import { operationLabel } from './label';
 
@@ -23,17 +21,13 @@ export default function RecordInspectionModal({
     const { message } = App.useApp();
     const [values, setValues] = useState<Record<number, number | null>>({});
     const [remark, setRemark] = useState('');
-    const items = useQuery({
-        queryKey: ['quality.standards', 'enabled'],
-        queryFn: () => listInspectionItems({ status: true, per_page: 100 }),
-    });
-    const rows = items.data?.items ?? [];
+    const rows = task.required_items;
 
     const submit = () => {
         const missing = rows.filter((item) => values[item.id] === undefined || values[item.id] === null);
 
         if (rows.length === 0) {
-            message.warning('请先在检验标准中维护启用的检验项目');
+            message.warning('该检验任务没有可录入的检验项目');
             return;
         }
 
@@ -61,15 +55,14 @@ export default function RecordInspectionModal({
             onCancel={onClose}
             onOk={submit}
         >
-            {rows.length === 0 && !items.isLoading ? (
-                <Empty description="没有启用的检验项目" />
+            {rows.length === 0 ? (
+                <Empty description="该任务没有检验项目" />
             ) : (
                 <>
                     <Table
                         size="small"
                         rowKey="id"
                         pagination={false}
-                        loading={items.isLoading}
                         dataSource={rows}
                         columns={[
                             { title: '检验项目', dataIndex: 'name' },
