@@ -1,5 +1,4 @@
 import { Form, Input, InputNumber, Modal, Select, Typography } from 'antd';
-import { useState } from 'react';
 import type {
     Inventory,
     InventoryAdjustPayload,
@@ -9,7 +8,7 @@ import type {
     InventoryOptions,
 } from '@/api/inventory';
 
-const META: Record<InventoryBusinessType, { title: string; okText: string }> = {
+const MOVEMENT_META: Record<InventoryBusinessType, { title: string; okText: string }> = {
     inbound: { title: '入库', okText: '确认入库' },
     outbound: { title: '出库', okText: '确认出库' },
     adjustment: { title: '库存调整', okText: '确认调整' },
@@ -44,10 +43,8 @@ export default function MovementModal({
     const [form] = Form.useForm<FormValues>();
     const warehouseId = Form.useWatch<number | undefined>('warehouse_id', form);
     const materialId = Form.useWatch<number | undefined>('material_id', form);
-    const [warehouse, setWarehouse] = useState<number | undefined>(
-        record?.location?.warehouse?.id,
-    );
-    const locationOptions = options.warehouses.find((item) => item.id === warehouse)?.locations ?? [];
+    const selectedWarehouseId = warehouseId ?? record?.location?.warehouse?.id;
+    const locationOptions = options.warehouses.find((item) => item.id === selectedWarehouseId)?.locations ?? [];
     const material: InventoryMaterialRef | undefined = options.materials.find(
         (item) => item.id === materialId,
     );
@@ -56,8 +53,8 @@ export default function MovementModal({
     return (
         <Modal
             open
-            title={META[type].title}
-            okText={META[type].okText}
+            title={MOVEMENT_META[type].title}
+            okText={MOVEMENT_META[type].okText}
             confirmLoading={saving}
             onCancel={onClose}
             onOk={() => form.submit()}
@@ -76,7 +73,6 @@ export default function MovementModal({
                     : undefined}
                 onValuesChange={(changed) => {
                     if ('warehouse_id' in changed) {
-                        setWarehouse(changed.warehouse_id);
                         form.setFieldValue('location_id', undefined);
                     }
                 }}
@@ -119,8 +115,8 @@ export default function MovementModal({
                     rules={[{ required: true, message: '请选择库位' }]}
                 >
                     <Select
-                        disabled={record !== undefined || warehouseId === undefined}
-                        placeholder={warehouseId === undefined ? '请先选择仓库' : '请选择库位'}
+                        disabled={record !== undefined || selectedWarehouseId === undefined}
+                        placeholder={selectedWarehouseId === undefined ? '请先选择仓库' : '请选择库位'}
                         options={locationOptions.map((item) => ({
                             value: item.id,
                             label: selectLabel(item),

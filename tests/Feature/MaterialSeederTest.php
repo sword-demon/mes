@@ -28,11 +28,11 @@ test('the material seeder seeds warehouses, locations, inventory and a ledger wh
 
     $inventories = Inventory::query()->with('location.warehouse')->get();
 
-    expect($inventories)->not->toBeEmpty()
-        ->and(Warehouse::query()->count())->toBeGreaterThanOrEqual(2)
-        ->and(StorageLocation::query()->count())->toBeGreaterThanOrEqual(2)
-        ->and($inventories->pluck('location.warehouse_id')->unique()->count())->toBeGreaterThanOrEqual(2)
-        ->and($inventories->pluck('location.code')->unique()->count())->toBeGreaterThanOrEqual(2);
+    expect($inventories)->toHaveCount(10)
+        ->and(Warehouse::query()->count())->toBe(4)
+        ->and(StorageLocation::query()->count())->toBe(10)
+        ->and($inventories->pluck('location.warehouse_id')->unique()->count())->toBe(4)
+        ->and($inventories->pluck('location_id')->unique()->count())->toBe(10);
 
     foreach ($inventories as $inventory) {
         $net = (float) InventoryTransaction::query()
@@ -44,10 +44,9 @@ test('the material seeder seeds warehouses, locations, inventory and a ledger wh
     }
 
     $count = $inventories->count();
-    $transactions = InventoryTransaction::query()->count();
 
     $this->seed(MaterialSeeder::class);
 
     expect(Inventory::query()->count())->toBe($count)
-        ->and(InventoryTransaction::query()->count())->toBe($transactions);
+        ->and(InventoryTransaction::query()->count())->toBe(10);
 });

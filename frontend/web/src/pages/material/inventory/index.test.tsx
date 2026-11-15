@@ -112,7 +112,7 @@ it('lists stock with quantities and only offers movement actions the user holds'
     expect(document.body.textContent).toContain('冷轧钢板');
     expect(document.body.textContent).toContain('原料仓');
     expect(document.body.textContent).toContain('A-01');
-    expect(document.body.textContent).toContain('90');
+    expect([...document.querySelectorAll('td')].map((cell) => cell.textContent)).toContain('90');
     expect(buttons).toContain('入库');
     expect(buttons).not.toContain('出库');
     expect(buttons).not.toContain('库存调整');
@@ -124,7 +124,7 @@ it('shows the ledger on the transactions tab', async () => {
 
     await act(async () => {
         (tab as HTMLElement).click();
-        await new Promise((resolve) => setTimeout(resolve, 30));
+        await new Promise((resolve) => setTimeout(resolve, 100));
     });
 
     expect(document.body.textContent).toContain('PO-001');

@@ -21,9 +21,9 @@ class InventoryService
      *
      * @throws ApiException
      */
-    public function inbound(array $data): Inventory
+    public function inbound(array $data, ?int $operatorId = null): Inventory
     {
-        return $this->apply($data, InventoryTransaction::INBOUND);
+        return $this->apply($data, InventoryTransaction::INBOUND, $operatorId);
     }
 
     /**
@@ -31,9 +31,9 @@ class InventoryService
      *
      * @throws ApiException
      */
-    public function outbound(array $data): Inventory
+    public function outbound(array $data, ?int $operatorId = null): Inventory
     {
-        return $this->apply($data, InventoryTransaction::OUTBOUND);
+        return $this->apply($data, InventoryTransaction::OUTBOUND, $operatorId);
     }
 
     /**
@@ -44,9 +44,9 @@ class InventoryService
      *
      * @throws ApiException
      */
-    public function adjust(array $data): Inventory
+    public function adjust(array $data, ?int $operatorId = null): Inventory
     {
-        return $this->apply($data, InventoryTransaction::ADJUSTMENT);
+        return $this->apply($data, InventoryTransaction::ADJUSTMENT, $operatorId);
     }
 
     /**
@@ -58,9 +58,9 @@ class InventoryService
      *
      * @throws ApiException
      */
-    private function apply(array $data, string $businessType): Inventory
+    private function apply(array $data, string $businessType, ?int $operatorId): Inventory
     {
-        return DB::transaction(function () use ($data, $businessType): Inventory {
+        return DB::transaction(function () use ($data, $businessType, $operatorId): Inventory {
             $material = Material::query()->whereKey($data['material_id'])->first();
 
             if ($material === null || ! $material->status) {
@@ -108,6 +108,10 @@ class InventoryService
                 throw new ApiException('库存数量超过上限', 422);
             }
 
+            if ($businessType === InventoryTransaction::ADJUSTMENT && $after === $before) {
+                throw new ApiException('调整后库存与当前库存一致', 422);
+            }
+
             $inventory->update(['current_quantity' => $this->decimal($after)]);
 
             InventoryTransaction::query()->create([
@@ -119,6 +123,7 @@ class InventoryService
                 'after_quantity' => $this->decimal($after),
                 'reference_no' => $data['reference_no'] ?? null,
                 'remark' => $data['remark'] ?? null,
+                'created_by_id' => $operatorId,
             ]);
 
             return $inventory;

@@ -14,6 +14,10 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Support\Carbon;
 
 /**
+ * PRD 6.5 names the table mes_inventory; the repo pluralizes table names.
+ * Frozen quantity is a reservation state, not a stock movement, so ledger rows
+ * track only current_quantity.
+ *
  * @property int $id
  * @property int $material_id
  * @property int $location_id

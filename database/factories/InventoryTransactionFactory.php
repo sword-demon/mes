@@ -27,6 +27,7 @@ class InventoryTransactionFactory extends EloquentFactory
             'after_quantity' => 10,
             'reference_no' => null,
             'remark' => null,
+            'created_by_id' => null,
         ];
     }
 }

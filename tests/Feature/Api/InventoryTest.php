@@ -61,7 +61,7 @@ it('filters inventory by warehouse, location, material and batch and exposes ava
         ->assertJsonPath('data.items.0.material.code', 'M001');
 });
 
-it('searches inventory by material code and rejects the list without permission', function () {
+it('searches inventory by material code', function () {
     [, $location] = inventoryLocation();
     $material = Material::factory()->create(['code' => 'M001', 'name' => '冷轧钢板']);
     Inventory::factory()->create(['material_id' => $material->id, 'location_id' => $location->id]);
@@ -70,13 +70,15 @@ it('searches inventory by material code and rejects the list without permission'
         ->assertOk()
         ->assertJsonCount(1, 'data.items')
         ->assertJsonPath('data.items.0.material.code', 'M001');
+});
 
+it('rejects the inventory list without permission', function () {
     bearer(userWithPermissions([], 'tester_denied'))->getJson('/api/v1/inventory')
         ->assertForbidden()
         ->assertJsonPath('code', 403);
 });
 
-it('rejects every inventory endpoint without its own permission', function () {
+it('denies inventory access without a grant', function (string $endpoint) {
     [, $location] = inventoryLocation();
     $material = Material::factory()->create(['batch_managed' => false]);
     $payload = [
@@ -85,20 +87,18 @@ it('rejects every inventory endpoint without its own permission', function () {
         'location_id' => $location->id,
         'quantity' => 10,
     ];
+    $actor = userWithPermissions([], 'tester_'.$endpoint);
 
-    bearer(userWithPermissions([], 'tester_inbound'))->postJson('/api/v1/inventory/inbound', $payload)
-        ->assertForbidden();
-    bearer(userWithPermissions([], 'tester_outbound'))->postJson('/api/v1/inventory/outbound', $payload)
-        ->assertForbidden();
-    bearer(userWithPermissions([], 'tester_adjust'))->postJson('/api/v1/inventory/adjust', [
-        ...$payload,
-        'current_quantity' => 10,
-    ])->assertForbidden();
-    bearer(userWithPermissions([], 'tester_transactions'))->getJson('/api/v1/inventory/transactions')
-        ->assertForbidden();
-    bearer(userWithPermissions([], 'tester_options'))->getJson('/api/v1/inventory/options')
-        ->assertForbidden();
-});
+    $response = match ($endpoint) {
+        'inbound' => bearer($actor)->postJson('/api/v1/inventory/inbound', $payload),
+        'outbound' => bearer($actor)->postJson('/api/v1/inventory/outbound', $payload),
+        'adjust' => bearer($actor)->postJson('/api/v1/inventory/adjust', [...$payload, 'current_quantity' => 10]),
+        'transactions' => bearer($actor)->getJson('/api/v1/inventory/transactions'),
+        'options' => bearer($actor)->getJson('/api/v1/inventory/options'),
+    };
+
+    $response->assertForbidden()->assertJsonPath('code', 403);
+})->with(['inbound', 'outbound', 'adjust', 'transactions', 'options']);
 
 it('serves inventory options with enabled materials and warehouse locations', function () {
     $actor = userWithPermissions(['inventory.inbound']);
@@ -170,6 +170,7 @@ it('creates an inventory row and an inbound transaction', function () {
     $this->assertDatabaseHas('mes_inventory_transactions', [
         'inventory_id' => $inventory->id,
         'material_id' => $material->id,
+        'created_by_id' => $actor->id,
         'business_type' => InventoryTransaction::INBOUND,
         'quantity' => 120.5,
         'before_quantity' => 0,
@@ -269,7 +270,7 @@ it('validates the required movement fields and quantity precision', function () 
         ->assertJsonValidationErrors('quantity', 'data.errors');
 });
 
-it('rejects an outbound beyond available stock and deducts stock at the limit', function () {
+it('rejects an outbound beyond available stock', function () {
     $actor = userWithPermissions(['inventory.outbound']);
     [, $location] = inventoryLocation();
     $material = Material::factory()->create(['batch_managed' => false]);
@@ -291,6 +292,23 @@ it('rejects an outbound beyond available stock and deducts stock at the limit', 
 
     expect((float) $inventory->refresh()->current_quantity)->toBe(100.0)
         ->and(InventoryTransaction::query()->count())->toBe(0);
+});
+
+it('deducts stock up to the available limit', function () {
+    $actor = userWithPermissions(['inventory.outbound']);
+    [, $location] = inventoryLocation();
+    $material = Material::factory()->create(['batch_managed' => false]);
+    $inventory = Inventory::factory()->create([
+        'material_id' => $material->id,
+        'location_id' => $location->id,
+        'current_quantity' => 100,
+        'frozen_quantity' => 20,
+    ]);
+    $payload = [
+        'material_id' => $material->id,
+        'warehouse_id' => $location->warehouse_id,
+        'location_id' => $location->id,
+    ];
 
     bearer($actor)->postJson('/api/v1/inventory/outbound', [...$payload, 'quantity' => 80])
         ->assertOk()
@@ -307,7 +325,7 @@ it('rejects an outbound beyond available stock and deducts stock at the limit', 
     ]);
 });
 
-it('adjusts stock to a target and refuses to go below the frozen quantity', function () {
+it('adjusts stock to a target', function () {
     $actor = userWithPermissions(['inventory.adjust']);
     [, $location] = inventoryLocation();
     $material = Material::factory()->create(['batch_managed' => false]);
@@ -336,10 +354,47 @@ it('adjusts stock to a target and refuses to go below the frozen quantity', func
         'before_quantity' => 100,
         'after_quantity' => 60,
     ]);
+});
+
+it('refuses an adjustment below the frozen quantity', function () {
+    $actor = userWithPermissions(['inventory.adjust']);
+    [, $location] = inventoryLocation();
+    $material = Material::factory()->create(['batch_managed' => false]);
+    $inventory = Inventory::factory()->create([
+        'material_id' => $material->id,
+        'location_id' => $location->id,
+        'current_quantity' => 100,
+        'frozen_quantity' => 20,
+    ]);
+    $payload = [
+        'material_id' => $material->id,
+        'warehouse_id' => $location->warehouse_id,
+        'location_id' => $location->id,
+        'batch_no' => $inventory->batch_no,
+    ];
 
     bearer($actor)->postJson('/api/v1/inventory/adjust', [...$payload, 'current_quantity' => 10])
         ->assertUnprocessable()
         ->assertJsonPath('message', '库存调整不能低于冻结数量');
+});
+
+it('rejects a stock adjustment that would not change the quantity', function () {
+    $actor = userWithPermissions(['inventory.adjust']);
+    [, $location] = inventoryLocation();
+    $material = Material::factory()->create(['batch_managed' => false]);
+    Inventory::factory()->create([
+        'material_id' => $material->id,
+        'location_id' => $location->id,
+        'current_quantity' => 100,
+    ]);
+
+    bearer($actor)->postJson('/api/v1/inventory/adjust', [
+        'material_id' => $material->id,
+        'warehouse_id' => $location->warehouse_id,
+        'location_id' => $location->id,
+        'current_quantity' => 100,
+    ])->assertUnprocessable()
+        ->assertJsonPath('message', '调整后库存与当前库存一致');
 });
 
 it('lists inventory transactions filtered by material', function () {
@@ -354,6 +409,7 @@ it('lists inventory transactions filtered by material', function () {
     InventoryTransaction::factory()->create([
         'inventory_id' => $inventory->id,
         'material_id' => $material->id,
+        'created_by_id' => $actor->id,
         'business_type' => InventoryTransaction::INBOUND,
         'quantity' => 100,
         'before_quantity' => 0,
@@ -379,6 +435,7 @@ it('lists inventory transactions filtered by material', function () {
         ->assertJsonPath('data.items.0.quantity', 100)
         ->assertJsonPath('data.items.0.before_quantity', 0)
         ->assertJsonPath('data.items.0.after_quantity', 100)
+        ->assertJsonPath('data.items.0.created_by.id', $actor->id)
         ->assertJsonPath('data.items.1.business_type', InventoryTransaction::OUTBOUND)
         ->assertJsonPath('data.items.1.quantity', -50)
         ->assertJsonPath('data.items.1.inventory.location.code', $location->code);

@@ -27,10 +27,10 @@ import MovementModal from './movement-modal';
 
 export type InventoryPageMode = 'stock' | 'inbound' | 'outbound';
 
-const TYPE_META: Record<InventoryBusinessType, { color: string; label: string }> = {
-    inbound: { color: 'green', label: '入库' },
-    outbound: { color: 'orange', label: '出库' },
-    adjustment: { color: 'purple', label: '库存调整' },
+const BUSINESS_TYPE_COLORS: Record<InventoryBusinessType, string> = {
+    inbound: 'green',
+    outbound: 'orange',
+    adjustment: 'purple',
 };
 
 const TITLES: Record<InventoryPageMode, { title: string; description: string }> = {
@@ -126,7 +126,7 @@ export default function InventoryPage({ mode = 'stock' }: { mode?: InventoryPage
         {
             title: '物料',
             render: (_, record) => (
-                <Space direction="vertical" size={0}>
+                <Space orientation="vertical" size={0}>
                     <Typography.Text>{record.material?.code} {record.material?.name}</Typography.Text>
                     <Typography.Text type="secondary">{record.material?.unit}</Typography.Text>
                 </Space>
@@ -135,7 +135,7 @@ export default function InventoryPage({ mode = 'stock' }: { mode?: InventoryPage
         {
             title: '仓库 / 库位',
             render: (_, record) => (
-                <Space direction="vertical" size={0}>
+                <Space orientation="vertical" size={0}>
                     <Typography.Text>{record.location?.warehouse?.name ?? '—'}</Typography.Text>
                     <Typography.Text type="secondary">{record.location?.code ?? '—'}</Typography.Text>
                 </Space>
@@ -207,9 +207,9 @@ export default function InventoryPage({ mode = 'stock' }: { mode?: InventoryPage
             title: '业务类型',
             width: 110,
             render: (_, record) => {
-                const meta = TYPE_META[record.business_type];
+                const color = BUSINESS_TYPE_COLORS[record.business_type];
 
-                return <Tag color={meta.color}>{record.business_type_label || meta.label}</Tag>;
+                return <Tag color={color}>{record.business_type_label}</Tag>;
             },
         },
         {

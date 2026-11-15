@@ -30,18 +30,10 @@ class InventoryResource extends JsonResource
                 'name' => $this->material->name,
                 'unit' => $this->material->unit,
             ]),
-            'location' => $this->whenLoaded('location', fn () => [
-                'id' => $this->location->id,
-                'code' => $this->location->code,
-                'name' => $this->location->name,
-                'warehouse' => $this->location->relationLoaded('warehouse') && $this->location->warehouse !== null
-                    ? [
-                        'id' => $this->location->warehouse->id,
-                        'code' => $this->location->warehouse->code,
-                        'name' => $this->location->warehouse->name,
-                    ]
-                    : null,
-            ]),
+            'location' => $this->whenLoaded(
+                'location',
+                fn () => StorageLocationResource::make($this->location)->resolve(),
+            ),
             'created_at' => $this->created_at,
             'updated_at' => $this->updated_at,
         ];

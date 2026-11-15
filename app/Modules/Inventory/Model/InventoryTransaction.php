@@ -3,6 +3,7 @@
 namespace App\Modules\Inventory\Model;
 
 use App\Modules\Material\Model\Material;
+use App\Modules\System\Model\User;
 use Database\Factories\InventoryTransactionFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\Table;
@@ -22,6 +23,7 @@ use Illuminate\Support\Carbon;
  * @property float $after_quantity
  * @property string|null $reference_no
  * @property string|null $remark
+ * @property int|null $created_by_id
  * @property Carbon|null $created_at
  * @property Carbon|null $updated_at
  */
@@ -34,6 +36,7 @@ use Illuminate\Support\Carbon;
     'after_quantity',
     'reference_no',
     'remark',
+    'created_by_id',
 ])]
 #[Table('mes_inventory_transactions')]
 #[UseFactory(InventoryTransactionFactory::class)]
@@ -77,6 +80,14 @@ class InventoryTransaction extends Model
     }
 
     /**
+     * @return BelongsTo<User, $this>
+     */
+    public function createdBy(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'created_by_id');
+    }
+
+    /**
      * @return array<string, string>
      */
     protected function casts(): array
@@ -87,6 +98,7 @@ class InventoryTransaction extends Model
             'quantity' => 'float',
             'before_quantity' => 'float',
             'after_quantity' => 'float',
+            'created_by_id' => 'integer',
         ];
     }
 }

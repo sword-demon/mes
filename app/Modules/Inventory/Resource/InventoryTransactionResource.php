@@ -27,6 +27,10 @@ class InventoryTransactionResource extends JsonResource
             'after_quantity' => $this->after_quantity,
             'reference_no' => $this->reference_no,
             'remark' => $this->remark,
+            'created_by' => $this->whenLoaded('createdBy', fn () => $this->createdBy === null ? null : [
+                'id' => $this->createdBy->id,
+                'name' => $this->createdBy->name,
+            ]),
             'material' => $this->whenLoaded('material', fn () => [
                 'id' => $this->material->id,
                 'code' => $this->material->code,
@@ -36,18 +40,7 @@ class InventoryTransactionResource extends JsonResource
             'inventory' => $this->whenLoaded('inventory', fn () => [
                 'id' => $this->inventory->id,
                 'location' => $this->inventory->relationLoaded('location') && $this->inventory->location !== null
-                    ? [
-                        'id' => $this->inventory->location->id,
-                        'code' => $this->inventory->location->code,
-                        'name' => $this->inventory->location->name,
-                        'warehouse' => $this->inventory->location->relationLoaded('warehouse') && $this->inventory->location->warehouse !== null
-                            ? [
-                                'id' => $this->inventory->location->warehouse->id,
-                                'code' => $this->inventory->location->warehouse->code,
-                                'name' => $this->inventory->location->warehouse->name,
-                            ]
-                            : null,
-                    ]
+                    ? StorageLocationResource::make($this->inventory->location)->resolve()
                     : null,
                 'batch_no' => $this->inventory->batch_no,
             ]),

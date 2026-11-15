@@ -76,7 +76,7 @@ class InventoryController extends Controller
         $batchNo = $request->query('batch_no');
 
         $query = InventoryTransaction::query()
-            ->with(['material', 'inventory.location.warehouse'])
+            ->with(['material', 'createdBy', 'inventory.location.warehouse'])
             ->when(is_scalar($warehouseId), fn (Builder $query) => $query->whereHas(
                 'inventory.location',
                 fn (Builder $location) => $location->where('warehouse_id', $warehouseId),
@@ -111,7 +111,14 @@ class InventoryController extends Controller
             ->where('status', true)
             ->orderBy('id')
             ->limit(200)
-            ->get(['id', 'code', 'name', 'unit', 'batch_managed']);
+            ->get(['id', 'code', 'name', 'unit', 'batch_managed'])
+            ->map(fn (Material $material) => [
+                'id' => $material->id,
+                'code' => $material->code,
+                'name' => $material->name,
+                'unit' => $material->unit,
+                'batch_managed' => $material->batch_managed,
+            ]);
 
         $warehouses = Warehouse::query()
             ->with('locations')
@@ -143,21 +150,21 @@ class InventoryController extends Controller
     public function inbound(InventoryMovementRequest $request): JsonResponse
     {
         return ApiResponse::success(InventoryResource::make(
-            $this->inventory->inbound($request->validated())->load(['material', 'location.warehouse']),
+            $this->inventory->inbound($request->validated(), $request->user()?->id)->load(['material', 'location.warehouse']),
         ));
     }
 
     public function outbound(InventoryMovementRequest $request): JsonResponse
     {
         return ApiResponse::success(InventoryResource::make(
-            $this->inventory->outbound($request->validated())->load(['material', 'location.warehouse']),
+            $this->inventory->outbound($request->validated(), $request->user()?->id)->load(['material', 'location.warehouse']),
         ));
     }
 
     public function adjust(AdjustInventoryRequest $request): JsonResponse
     {
         return ApiResponse::success(InventoryResource::make(
-            $this->inventory->adjust($request->validated())->load(['material', 'location.warehouse']),
+            $this->inventory->adjust($request->validated(), $request->user()?->id)->load(['material', 'location.warehouse']),
         ));
     }
 }
