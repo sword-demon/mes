@@ -16,5 +16,14 @@ it('grants the warehouse manager access to the inventory alert page and actions'
     expect($access->allows($manager, 'page.material.inventory-alerts'))->toBeTrue()
         ->and($access->allows($manager, 'inventory.alerts.index'))->toBeTrue()
         ->and($access->allows($manager, 'inventory.alerts.confirm'))->toBeTrue()
-        ->and($access->allows($manager, 'inventory.alerts.close'))->toBeTrue();
+        ->and($access->allows($manager, 'inventory.alerts.close'))->toBeTrue()
+        ->and($access->allows($manager, 'material.requisitions.index'))->toBeTrue()
+        ->and($access->allows($manager, 'material.requisitions.issue'))->toBeTrue()
+        ->and($access->allows($manager, 'material.requisitions.create'))->toBeFalse();
+
+    $operator = User::factory()->create();
+    $operator->roles()->attach(Role::query()->where('code', 'production_operator')->firstOrFail());
+
+    expect($access->allows($operator, 'material.requisitions.create'))->toBeTrue()
+        ->and($access->allows($operator, 'material.requisitions.issue'))->toBeFalse();
 });

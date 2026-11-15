@@ -5,6 +5,7 @@ use App\Modules\Bom\Controller\BomItemController;
 use App\Modules\Inventory\Controller\InventoryAlertController;
 use App\Modules\Inventory\Controller\InventoryController;
 use App\Modules\Material\Controller\MaterialController;
+use App\Modules\Material\Controller\MaterialRequisitionController;
 use App\Modules\Organization\Controller\EmployeeController;
 use App\Modules\Organization\Controller\FactoryController;
 use App\Modules\Organization\Controller\ProductionLineController;
@@ -254,6 +255,17 @@ Route::middleware(['auth:sanctum', 'active'])->group(function (): void {
             Route::delete('/routes/{route}/operations/{operation}', [RouteOperationController::class, 'destroy'])
                 ->middleware('permission:process.routes.update')->name('routes.operations.destroy');
         });
+    });
+
+    Route::prefix('materials')->name('api.materials.')->group(function (): void {
+        Route::get('/requisitions', [MaterialRequisitionController::class, 'index'])
+            ->middleware('permission:material.requisitions.index')->name('requisitions.index');
+        Route::get('/requisitions/suggestions', [MaterialRequisitionController::class, 'suggestions'])
+            ->middleware('permission:material.requisitions.create')->name('requisitions.suggestions');
+        Route::post('/requisitions', [MaterialRequisitionController::class, 'store'])
+            ->middleware('permission:material.requisitions.create')->name('requisitions.store');
+        Route::post('/requisitions/{requisition}/issue', [MaterialRequisitionController::class, 'issue'])
+            ->middleware('permission:material.requisitions.issue')->name('requisitions.issue');
     });
 
     Route::prefix('inventory')->name('api.inventory.')->group(function (): void {

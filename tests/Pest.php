@@ -1,5 +1,7 @@
 <?php
 
+use App\Modules\Inventory\Model\StorageLocation;
+use App\Modules\Inventory\Model\Warehouse;
 use App\Modules\System\Model\Permission;
 use App\Modules\System\Model\Role;
 use App\Modules\System\Model\User;
@@ -80,6 +82,23 @@ function superAdmin(): User
     $user->roles()->attach(Role::factory()->create(['code' => Role::SUPER_ADMIN]));
 
     return $user;
+}
+
+/**
+ * @return array{0: Warehouse, 1: StorageLocation}
+ */
+function inventoryLocation(string $warehouseCode = 'WH01', string $locationCode = 'A-01'): array
+{
+    $warehouse = Warehouse::query()->firstOrCreate(
+        ['code' => $warehouseCode],
+        ['name' => '仓库 '.$warehouseCode, 'status' => true],
+    );
+    $location = StorageLocation::query()->firstOrCreate(
+        ['warehouse_id' => $warehouse->id, 'code' => $locationCode],
+        ['name' => '库位 '.$locationCode, 'status' => true],
+    );
+
+    return [$warehouse, $location];
 }
 
 function bearer(User $user): TestCase
