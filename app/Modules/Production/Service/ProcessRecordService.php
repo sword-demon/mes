@@ -109,6 +109,7 @@ class ProcessRecordService
         return DB::transaction(function () use ($record): ProcessRecord {
             $locked = ProcessRecord::query()->lockForUpdate()->whereKey($record->getKey())->firstOrFail();
             $this->ensureStatus($locked, ProcessRecord::PROCESSING, '完成加工');
+            $this->ensureSerialNumberUsable($locked);
             $requiresInspection = $locked->requiresInspection();
 
             $locked->update([
@@ -129,6 +130,7 @@ class ProcessRecordService
         return DB::transaction(function () use ($record, $passed, $reason): ProcessRecord {
             $locked = ProcessRecord::query()->lockForUpdate()->whereKey($record->getKey())->firstOrFail();
             $this->ensureStatus($locked, ProcessRecord::INSPECTING, '检验');
+            $this->ensureSerialNumberUsable($locked);
 
             if ($passed) {
                 $locked->update([
@@ -156,6 +158,7 @@ class ProcessRecordService
     {
         return DB::transaction(function () use ($record): ProcessRecord {
             $locked = ProcessRecord::query()->lockForUpdate()->whereKey($record->getKey())->firstOrFail();
+            $this->ensureSerialNumberUsable($locked);
 
             if ($locked->requiresInspection() && $locked->status !== ProcessRecord::INSPECTED) {
                 throw new ApiException('需检验工序尚未检验通过，不能提交下道', 422);
@@ -180,6 +183,7 @@ class ProcessRecordService
         return DB::transaction(function () use ($record): ProcessRecord {
             $locked = ProcessRecord::query()->lockForUpdate()->whereKey($record->getKey())->firstOrFail();
             $this->ensureStatus($locked, ProcessRecord::PENDING_TRANSFER, '接收流转');
+            $this->ensureSerialNumberUsable($locked);
 
             $locked->update([
                 'status' => ProcessRecord::TRANSFERRED,
@@ -303,6 +307,28 @@ class ProcessRecordService
 
         if ($productSn->production_order_id !== $task->production_order_id) {
             throw new ApiException('SN 不属于该生产订单', 422);
+        }
+    }
+
+    /**
+     * Voiding a unit after it has started must stop it at the next gate.
+     * Legacy executions without a ledger entry stay allowed.
+     *
+     * @throws ApiException
+     */
+    private function ensureSerialNumberUsable(ProcessRecord $record): void
+    {
+        if ($record->sn === null) {
+            return;
+        }
+
+        $voided = ProductSn::query()
+            ->where('sn', $record->sn)
+            ->where('status', ProductSn::VOIDED)
+            ->exists();
+
+        if ($voided) {
+            throw new ApiException('SN 已作废，不能继续工序流转', 422);
         }
     }
 

@@ -9,6 +9,7 @@ use App\Modules\Production\Model\ProductionOrder;
 use App\Modules\Production\Model\ProductionTask;
 use App\Modules\Production\Model\ProductSn;
 use App\Modules\Production\Service\ProductionTaskService;
+use App\Modules\Production\Service\ProductSnService;
 
 /**
  * Splits a released order into one task whose route carries one operation per
@@ -103,6 +104,24 @@ it('rejects a serial number that is unknown, voided or from another order', func
         ->assertStatus(422);
 
     expect($record->fresh()->status)->toBe(ProcessRecord::PENDING);
+});
+
+it('blocks forward flow once the serial number is voided', function () {
+    [$task, $records, $employee] = flowTask([false]);
+    $actor = userWithPermissions(['production.flows.start', 'production.flows.complete']);
+    $record = $records->first();
+    $sn = ProductSn::factory()->create(['production_order_id' => $task->production_order_id]);
+
+    bearer($actor)->postJson("/api/v1/production/process-records/{$record->id}/start", [
+        'employee_id' => $employee->id,
+        'sn' => $sn->sn,
+    ])->assertOk();
+
+    app(ProductSnService::class)->void($sn, '产品报废');
+
+    bearer($actor)->postJson("/api/v1/production/process-records/{$record->id}/complete")
+        ->assertStatus(422)
+        ->assertJsonPath('code', 422);
 });
 
 it('refuses to start a later operation before the previous one is transferred', function () {

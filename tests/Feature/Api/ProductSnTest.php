@@ -98,6 +98,19 @@ it('refuses to generate serial numbers for a draft order or beyond the planned q
     ])->assertStatus(422)
         ->assertJsonPath('code', 422);
 
+    foreach ([ProductionOrder::APPROVED, ProductionOrder::COMPLETED] as $status) {
+        $unreleased = ProductionOrder::factory()->create([
+            'status' => $status,
+            'planned_quantity' => 10,
+        ]);
+
+        bearer($actor)->postJson('/api/v1/production/sns', [
+            'production_order_id' => $unreleased->id,
+            'quantity' => 1,
+        ])->assertStatus(422)
+            ->assertJsonPath('code', 422);
+    }
+
     $released = ProductionOrder::factory()->create([
         'status' => ProductionOrder::RELEASED,
         'planned_quantity' => 3,
@@ -140,6 +153,17 @@ it('binds a material batch, equipment and operator to a serial number only once'
     ])->assertStatus(422);
 
     expect($sn->fresh()->material_batch_no)->toBe('MAT-LOT-001');
+});
+
+it('refuses to bind a disabled operator', function () {
+    $sn = ProductSn::factory()->create();
+    $disabled = Employee::factory()->create(['status' => false]);
+    $actor = userWithPermissions(snPermissions());
+
+    bearer($actor)->putJson("/api/v1/production/sns/{$sn->sn}/bind", [
+        'employee_id' => $disabled->id,
+    ])->assertStatus(422)
+        ->assertJsonPath('code', 422);
 });
 
 it('prints a label carrying the serial, product, order and batch', function () {
@@ -248,7 +272,28 @@ it('validates the generated quantity and the void reason', function () {
     ])->assertStatus(422)
         ->assertJsonValidationErrors('quantity', 'data.errors');
 
+    bearer($actor)->postJson('/api/v1/production/sns', [
+        'production_order_id' => $order->id,
+        'quantity' => 1001,
+    ])->assertStatus(422)
+        ->assertJsonValidationErrors('quantity', 'data.errors');
+
     bearer($actor)->postJson("/api/v1/production/sns/{$sn->sn}/void")
         ->assertStatus(422)
         ->assertJsonValidationErrors('reason', 'data.errors');
+});
+
+it('offers only generatable orders and active employees in the form options', function () {
+    $actor = userWithPermissions(snPermissions());
+    $released = ProductionOrder::factory()->create(['status' => ProductionOrder::RELEASED]);
+    ProductionOrder::factory()->create(['status' => ProductionOrder::APPROVED]);
+    $active = Employee::factory()->create(['status' => true]);
+    Employee::factory()->create(['status' => false]);
+
+    bearer($actor)->getJson('/api/v1/production/sns/options')
+        ->assertOk()
+        ->assertJsonCount(1, 'data.orders')
+        ->assertJsonPath('data.orders.0.id', $released->id)
+        ->assertJsonCount(1, 'data.employees')
+        ->assertJsonPath('data.employees.0.id', $active->id);
 });

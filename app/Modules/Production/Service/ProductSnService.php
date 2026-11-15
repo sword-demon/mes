@@ -145,12 +145,14 @@ class ProductSnService
         $order = ProductionOrder::query()->lockForUpdate()->whereKey($data['production_order_id'])->firstOrFail();
         $quantity = (int) $data['quantity'];
 
-        if (in_array($order->status, [ProductionOrder::CANCELLED, ProductionOrder::CLOSED], true)) {
-            throw new ApiException('已取消或已关闭的生产订单不能生成 SN', 422);
-        }
+        if (! in_array($order->status, self::GENERATABLE_ORDER_STATUSES, true)) {
+            $message = match ($order->status) {
+                ProductionOrder::DRAFT => '生产订单尚未审核下达，不能生成 SN',
+                ProductionOrder::CANCELLED, ProductionOrder::CLOSED => '已取消或已关闭的生产订单不能生成 SN',
+                default => '生产订单尚未下达或已完成，不能生成 SN',
+            };
 
-        if ($order->status === ProductionOrder::DRAFT) {
-            throw new ApiException('生产订单尚未审核下达，不能生成 SN', 422);
+            throw new ApiException($message, 422);
         }
 
         $issued = ProductSn::query()
