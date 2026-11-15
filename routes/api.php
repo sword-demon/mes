@@ -13,6 +13,7 @@ use App\Modules\Process\Controller\ProcessRouteController;
 use App\Modules\Process\Controller\RouteOperationController;
 use App\Modules\Product\Controller\ProductController;
 use App\Modules\Product\Controller\ProductVersionController;
+use App\Modules\Production\Controller\ProductionOrderController;
 use App\Modules\System\Controller\AccessTokenController;
 use App\Modules\System\Controller\DepartmentController;
 use App\Modules\System\Controller\MeController;
@@ -202,5 +203,32 @@ Route::middleware(['auth:sanctum', 'active'])->group(function (): void {
             Route::delete('/routes/{route}/operations/{operation}', [RouteOperationController::class, 'destroy'])
                 ->middleware('permission:process.routes.update')->name('routes.operations.destroy');
         });
+    });
+
+    Route::prefix('production')->name('api.production.')->group(function (): void {
+        Route::get('/orders', [ProductionOrderController::class, 'index'])
+            ->middleware('permission:production.orders.index')->name('orders.index');
+        Route::post('/orders', [ProductionOrderController::class, 'store'])
+            ->middleware('permission:production.orders.create')->name('orders.store');
+        Route::put('/orders/{order}', [ProductionOrderController::class, 'update'])
+            ->middleware('permission:production.orders.update')->name('orders.update');
+        Route::post('/orders/{order}/submit', [ProductionOrderController::class, 'submit'])
+            ->middleware('permission:production.orders.submit')->name('orders.submit');
+        Route::post('/orders/{order}/approve', [ProductionOrderController::class, 'approve'])
+            ->middleware('permission:production.orders.audit')->name('orders.approve');
+        Route::post('/orders/{order}/release', [ProductionOrderController::class, 'release'])
+            ->middleware('permission:production.orders.release')->name('orders.release');
+        Route::post('/orders/{order}/start', [ProductionOrderController::class, 'start'])
+            ->middleware('permission:production.orders.start')->name('orders.start');
+        Route::post('/orders/{order}/pause', [ProductionOrderController::class, 'pause'])
+            ->middleware('permission:production.orders.pause')->name('orders.pause');
+        Route::post('/orders/{order}/resume', [ProductionOrderController::class, 'resume'])
+            ->middleware('permission:production.orders.resume')->name('orders.resume');
+        Route::post('/orders/{order}/complete', [ProductionOrderController::class, 'complete'])
+            ->middleware('permission:production.orders.complete')->name('orders.complete');
+        Route::post('/orders/{order}/close', [ProductionOrderController::class, 'close'])
+            ->middleware('permission:production.orders.close')->name('orders.close');
+        Route::post('/orders/{order}/cancel', [ProductionOrderController::class, 'cancel'])
+            ->middleware('permission:production.orders.cancel')->name('orders.cancel');
     });
 });

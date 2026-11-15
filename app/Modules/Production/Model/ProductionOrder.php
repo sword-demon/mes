@@ -1,0 +1,207 @@
+<?php
+
+namespace App\Modules\Production\Model;
+
+use App\Core\Exceptions\ApiException;
+use App\Modules\Bom\Model\Bom;
+use App\Modules\Organization\Model\ProductionLine;
+use App\Modules\Process\Model\ProcessRoute;
+use App\Modules\Product\Model\Product;
+use App\Modules\Product\Model\ProductVersion;
+use Database\Factories\ProductionOrderFactory;
+use Illuminate\Database\Eloquent\Attributes\Fillable;
+use Illuminate\Database\Eloquent\Attributes\Table;
+use Illuminate\Database\Eloquent\Attributes\UseFactory;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Support\Carbon;
+
+/**
+ * @property int $id
+ * @property string $code
+ * @property int $product_id
+ * @property int $product_version_id
+ * @property int $bom_id
+ * @property int $route_id
+ * @property int $production_line_id
+ * @property string $bom_version
+ * @property string $route_version
+ * @property string $planned_quantity
+ * @property string $produced_quantity
+ * @property string $qualified_quantity
+ * @property string $defective_quantity
+ * @property Carbon $planned_start_at
+ * @property Carbon|null $planned_end_at
+ * @property string $status
+ * @property string|null $remark
+ * @property Carbon|null $created_at
+ * @property Carbon|null $updated_at
+ */
+#[Fillable([
+    'code',
+    'product_id',
+    'product_version_id',
+    'bom_id',
+    'route_id',
+    'production_line_id',
+    'bom_version',
+    'route_version',
+    'planned_quantity',
+    'planned_start_at',
+    'planned_end_at',
+    'status',
+    'remark',
+])]
+#[Table('mes_production_orders')]
+#[UseFactory(ProductionOrderFactory::class)]
+class ProductionOrder extends Model
+{
+    /** @use HasFactory<ProductionOrderFactory> */
+    use HasFactory;
+
+    public const string DRAFT = 'draft';
+
+    public const string PENDING = 'pending';
+
+    public const string APPROVED = 'approved';
+
+    public const string RELEASED = 'released';
+
+    public const string IN_PROGRESS = 'in_progress';
+
+    public const string PAUSED = 'paused';
+
+    public const string COMPLETED = 'completed';
+
+    public const string CLOSED = 'closed';
+
+    public const string CANCELLED = 'cancelled';
+
+    /**
+     * The only legal moves; pause and resume share the in-progress state.
+     *
+     * @var array<string, array<int, string>>
+     */
+    public const array TRANSITIONS = [
+        self::DRAFT => [self::PENDING, self::CANCELLED],
+        self::PENDING => [self::APPROVED, self::CANCELLED],
+        self::APPROVED => [self::RELEASED, self::CANCELLED],
+        self::RELEASED => [self::IN_PROGRESS, self::CANCELLED],
+        self::IN_PROGRESS => [self::PAUSED, self::COMPLETED, self::CANCELLED],
+        self::PAUSED => [self::IN_PROGRESS, self::CANCELLED],
+        self::COMPLETED => [self::CLOSED],
+        self::CLOSED => [],
+        self::CANCELLED => [],
+    ];
+
+    public const array STATUS_LABELS = [
+        self::DRAFT => '草稿',
+        self::PENDING => '待审核',
+        self::APPROVED => '已审核',
+        self::RELEASED => '已下达',
+        self::IN_PROGRESS => '生产中',
+        self::PAUSED => '已暂停',
+        self::COMPLETED => '已完成',
+        self::CLOSED => '已关闭',
+        self::CANCELLED => '已取消',
+    ];
+
+    /**
+     * Mirrors the column defaults so freshly built models expose them.
+     *
+     * @var array<string, mixed>
+     */
+    protected $attributes = [
+        'status' => self::DRAFT,
+        'produced_quantity' => 0,
+        'qualified_quantity' => 0,
+        'defective_quantity' => 0,
+    ];
+
+    public function statusLabel(): string
+    {
+        return self::STATUS_LABELS[$this->status] ?? $this->status;
+    }
+
+    /**
+     * Only a draft may still change; submitting locks the order.
+     *
+     * @throws ApiException
+     */
+    public function ensureEditable(): void
+    {
+        if ($this->status === self::DRAFT) {
+            return;
+        }
+
+        throw new ApiException('生产订单已提交，不可修改', 403, status: 403);
+    }
+
+    /**
+     * @throws ApiException
+     */
+    public function transitionTo(string $target, string $action): void
+    {
+        if (! in_array($target, self::TRANSITIONS[$this->status] ?? [], true)) {
+            throw new ApiException("生产订单当前状态为「{$this->statusLabel()}」，不能{$action}", 422);
+        }
+
+        $this->update(['status' => $target]);
+    }
+
+    /**
+     * @return BelongsTo<Product, $this>
+     */
+    public function product(): BelongsTo
+    {
+        return $this->belongsTo(Product::class, 'product_id');
+    }
+
+    /**
+     * @return BelongsTo<ProductVersion, $this>
+     */
+    public function productVersion(): BelongsTo
+    {
+        return $this->belongsTo(ProductVersion::class, 'product_version_id');
+    }
+
+    /**
+     * @return BelongsTo<Bom, $this>
+     */
+    public function bom(): BelongsTo
+    {
+        return $this->belongsTo(Bom::class, 'bom_id');
+    }
+
+    /**
+     * @return BelongsTo<ProcessRoute, $this>
+     */
+    public function route(): BelongsTo
+    {
+        return $this->belongsTo(ProcessRoute::class, 'route_id');
+    }
+
+    /**
+     * @return BelongsTo<ProductionLine, $this>
+     */
+    public function productionLine(): BelongsTo
+    {
+        return $this->belongsTo(ProductionLine::class, 'production_line_id');
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    protected function casts(): array
+    {
+        return [
+            'planned_quantity' => 'decimal:3',
+            'produced_quantity' => 'decimal:3',
+            'qualified_quantity' => 'decimal:3',
+            'defective_quantity' => 'decimal:3',
+            'planned_start_at' => 'datetime',
+            'planned_end_at' => 'datetime',
+        ];
+    }
+}

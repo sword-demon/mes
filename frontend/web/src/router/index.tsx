@@ -12,6 +12,7 @@ import Teams from '@/pages/basic-data/teams';
 import Workshops from '@/pages/basic-data/workshops';
 import Login from '@/pages/login';
 import Placeholder from '@/pages/placeholder';
+import ProductionOrders from '@/pages/production/orders';
 import Users from '@/pages/system/users';
 import { useAuthStore } from '@/stores/auth';
 import { findMenu, firstMenuPath } from '@/utils/permission';
@@ -34,6 +35,7 @@ const pages: Record<string, () => ReactNode> = {
     '/basic-data/employees': Employees,
     '/basic-data/materials': Materials,
     '/basic-data/products': Products,
+    '/production/orders': ProductionOrders,
     '/system/users': Users,
 };
 
