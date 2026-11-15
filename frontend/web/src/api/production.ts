@@ -15,6 +15,15 @@ export const PRODUCTION_ORDER_STATUSES = [
 
 export type ProductionOrderStatus = (typeof PRODUCTION_ORDER_STATUSES)[number]['value'];
 
+export const PRODUCTION_TASK_STATUSES = [
+    { value: 'pending', label: '待分配', color: 'default' },
+    { value: 'in_progress', label: '生产中', color: 'processing' },
+    { value: 'paused', label: '已暂停', color: 'orange' },
+    { value: 'completed', label: '已完成', color: 'green' },
+] as const;
+
+export type ProductionTaskStatus = (typeof PRODUCTION_TASK_STATUSES)[number]['value'];
+
 export type ProductionOrderAction =
     | 'submit'
     | 'approve'
@@ -77,6 +86,56 @@ export type ProductionOrderPayload = {
     remark?: string | null;
 };
 
+export type ProductionTask = {
+    id: number;
+    code: string;
+    production_order_id: number;
+    product_id: number;
+    route_id: number;
+    production_line_id: number | null;
+    team_id: number | null;
+    owner_id: number | null;
+    planned_quantity: string;
+    produced_quantity: string;
+    qualified_quantity: string;
+    defective_quantity: string;
+    progress_percent: number;
+    planned_start_at: string;
+    planned_end_at: string | null;
+    status: ProductionTaskStatus;
+    status_label: string;
+    production_order?: { id: number; code: string; status: ProductionOrderStatus };
+    product?: NamedRef;
+    route?: { id: number; code: string; version: string };
+    production_line?: NamedRef | null;
+    team?: NamedRef | null;
+    owner?: { id: number; employee_no: string; name: string } | null;
+};
+
+export type ProductionTaskParams = {
+    page?: number;
+    per_page?: number;
+    keyword?: string;
+    status?: ProductionTaskStatus;
+    production_order_id?: number;
+    production_line_id?: number;
+    team_id?: number;
+    start_date?: string;
+    end_date?: string;
+};
+
+export type ProductionTaskPayload = {
+    planned_quantity: number;
+    planned_start_at?: string | null;
+    planned_end_at?: string | null;
+};
+
+export type ProductionTaskAssignment = {
+    production_line_id: number;
+    team_id: number;
+    owner_id: number;
+};
+
 export type ApprovedBom = {
     id: number;
     code: string;
@@ -105,6 +164,22 @@ export function updateOrder(id: number, payload: Partial<ProductionOrderPayload>
 
 export function transitionOrder(id: number, action: ProductionOrderAction) {
     return api.post<ProductionOrder>(`/production/orders/${id}/${action}`);
+}
+
+export function listTasks(params: ProductionTaskParams = {}) {
+    return api.get<Paginated<ProductionTask>>('/production/tasks', params);
+}
+
+export function splitTask(orderId: number, payload: ProductionTaskPayload) {
+    return api.post<ProductionTask>(`/production/orders/${orderId}/tasks`, payload);
+}
+
+export function assignTask(id: number, payload: ProductionTaskAssignment) {
+    return api.put<ProductionTask>(`/production/tasks/${id}`, payload);
+}
+
+export function transitionTask(id: number, action: 'pause' | 'resume' | 'complete') {
+    return api.post<ProductionTask>(`/production/tasks/${id}/${action}`);
 }
 
 export function listApprovedBoms() {

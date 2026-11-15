@@ -14,6 +14,7 @@ use App\Modules\Process\Controller\RouteOperationController;
 use App\Modules\Product\Controller\ProductController;
 use App\Modules\Product\Controller\ProductVersionController;
 use App\Modules\Production\Controller\ProductionOrderController;
+use App\Modules\Production\Controller\ProductionTaskController;
 use App\Modules\System\Controller\AccessTokenController;
 use App\Modules\System\Controller\DepartmentController;
 use App\Modules\System\Controller\MeController;
@@ -230,5 +231,18 @@ Route::middleware(['auth:sanctum', 'active'])->group(function (): void {
             ->middleware('permission:production.orders.close')->name('orders.close');
         Route::post('/orders/{order}/cancel', [ProductionOrderController::class, 'cancel'])
             ->middleware('permission:production.orders.cancel')->name('orders.cancel');
+
+        Route::post('/orders/{order}/tasks', [ProductionTaskController::class, 'store'])
+            ->middleware('permission:production.tasks.create')->name('orders.tasks.store');
+        Route::get('/tasks', [ProductionTaskController::class, 'index'])
+            ->middleware('permission:production.tasks.index')->name('tasks.index');
+        Route::put('/tasks/{task}', [ProductionTaskController::class, 'update'])
+            ->middleware('permission:production.tasks.update')->name('tasks.update');
+        Route::post('/tasks/{task}/pause', [ProductionTaskController::class, 'pause'])
+            ->middleware('permission:production.tasks.pause')->name('tasks.pause');
+        Route::post('/tasks/{task}/resume', [ProductionTaskController::class, 'resume'])
+            ->middleware('permission:production.tasks.resume')->name('tasks.resume');
+        Route::post('/tasks/{task}/complete', [ProductionTaskController::class, 'complete'])
+            ->middleware('permission:production.tasks.complete')->name('tasks.complete');
     });
 });

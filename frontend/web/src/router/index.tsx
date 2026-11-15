@@ -13,6 +13,7 @@ import Workshops from '@/pages/basic-data/workshops';
 import Login from '@/pages/login';
 import Placeholder from '@/pages/placeholder';
 import ProductionOrders from '@/pages/production/orders';
+import ProductionTasks from '@/pages/production/tasks';
 import Users from '@/pages/system/users';
 import { useAuthStore } from '@/stores/auth';
 import { findMenu, firstMenuPath } from '@/utils/permission';
@@ -36,6 +37,7 @@ const pages: Record<string, () => ReactNode> = {
     '/basic-data/materials': Materials,
     '/basic-data/products': Products,
     '/production/orders': ProductionOrders,
+    '/production/tasks': ProductionTasks,
     '/system/users': Users,
 };
 
