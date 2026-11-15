@@ -326,3 +326,35 @@ it('refuses to submit a disabled route', function () {
         ->assertUnprocessable()
         ->assertJsonPath('message', '工艺路线已停用，不能提交审核');
 });
+
+it('defines usable routes on the server so orders cannot pick a draft or a retired step', function () {
+    $actor = userWithPermissions(['process.routes.index']);
+    $product = Product::factory()->create();
+    $usable = ProcessRoute::factory()->create([
+        'product_id' => $product->id,
+        'version' => 'V1.0',
+        'audit_status' => ProcessRoute::APPROVED,
+    ]);
+    ProcessRoute::factory()->create([
+        'product_id' => $product->id,
+        'version' => 'V2.0',
+        'audit_status' => ProcessRoute::PENDING,
+    ]);
+    ProcessRoute::factory()->create([
+        'product_id' => $product->id,
+        'version' => 'V3.0',
+        'audit_status' => ProcessRoute::APPROVED,
+        'status' => false,
+    ]);
+    $retired = ProcessRoute::factory()->create([
+        'product_id' => $product->id,
+        'version' => 'V4.0',
+        'audit_status' => ProcessRoute::APPROVED,
+    ]);
+    RouteOperation::factory()->create(['route_id' => $retired->id])->process()->update(['status' => false]);
+
+    bearer($actor)->getJson('/api/v1/process/routes?usable=1')
+        ->assertOk()
+        ->assertJsonCount(1, 'data.items')
+        ->assertJsonPath('data.items.0.id', $usable->id);
+});

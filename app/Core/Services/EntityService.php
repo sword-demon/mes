@@ -3,6 +3,7 @@
 namespace App\Core\Services;
 
 use App\Core\Exceptions\ApiException;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Pagination\LengthAwarePaginator;
 
@@ -35,12 +36,39 @@ class EntityService
         array $enabledRelations = [],
         array $filterColumns = [],
     ): LengthAwarePaginator {
+        return $this->paginateQuery(
+            $model::query()->with($with),
+            $filters,
+            $searchColumns,
+            $enabledRelations,
+            $filterColumns,
+        );
+    }
+
+    /**
+     * Paginate an already constrained query with the same filter and
+     * enablement rules as `paginate()`.
+     *
+     * @template TModel of Model
+     *
+     * @param  Builder<TModel>  $query
+     * @param  array<string, mixed>  $filters
+     * @param  array<int, string>  $searchColumns
+     * @param  array<int, string>  $enabledRelations
+     * @param  array<int, string>  $filterColumns  request keys filtered as exact column matches
+     * @return LengthAwarePaginator<int, TModel>
+     */
+    public function paginateQuery(
+        Builder $query,
+        array $filters,
+        array $searchColumns = ['code', 'name'],
+        array $enabledRelations = [],
+        array $filterColumns = [],
+    ): LengthAwarePaginator {
         // An unparsable `status` is ignored rather than silently read as false.
         $status = array_key_exists('status', $filters)
             ? filter_var($filters['status'], FILTER_VALIDATE_BOOLEAN, FILTER_NULL_ON_FAILURE)
             : null;
-
-        $query = $model::query()->with($with);
 
         foreach ($filterColumns as $column) {
             $query->when($filters[$column] ?? null, fn ($inner, $value) => $inner->where($column, $value));

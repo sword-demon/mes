@@ -8,6 +8,7 @@ use Database\Factories\ProcessRouteFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\Table;
 use Illuminate\Database\Eloquent\Attributes\UseFactory;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -61,6 +62,20 @@ class ProcessRoute extends Model
     public function isEditable(): bool
     {
         return $this->audit_status === self::DRAFT;
+    }
+
+    /**
+     * What an order may pin: approved, enabled, on an enabled product, with no
+     * retired step. Kept on the model so order validation and dropdowns agree.
+     *
+     * @param  Builder<self>  $query
+     */
+    public function scopeUsable(Builder $query): void
+    {
+        $query->where('audit_status', self::APPROVED)
+            ->where('status', true)
+            ->whereHas('product', fn (Builder $inner) => $inner->where('status', true))
+            ->whereDoesntHave('operations.process', fn (Builder $inner) => $inner->where('status', false));
     }
 
     /**

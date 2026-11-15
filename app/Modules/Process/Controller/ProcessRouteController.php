@@ -19,16 +19,21 @@ class ProcessRouteController extends Controller
 
     public function index(Request $request): JsonResponse
     {
+        $query = ProcessRoute::query()->with('product');
+
+        if ($request->boolean('usable')) {
+            $query->usable();
+        }
+
         return ApiResponse::paginated(
-            $this->entities->paginate(
-                ProcessRoute::class,
-                ['product'],
+            $this->entities->paginateQuery(
+                $query,
                 $request->only(['product_id', 'audit_status', 'status', 'keyword', 'per_page']),
                 ['code', 'version'],
                 // `status=1` feeds the dropdowns, so a route whose product or
                 // any of its processes was retired must not look selectable.
-                enabledRelations: ['product', 'operations.process'],
-                filterColumns: ['product_id', 'audit_status'],
+                ['product', 'operations.process'],
+                ['product_id', 'audit_status'],
             ),
             ProcessRouteResource::class,
         );
