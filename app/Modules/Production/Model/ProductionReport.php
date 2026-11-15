@@ -2,6 +2,7 @@
 
 namespace App\Modules\Production\Model;
 
+use App\Modules\Equipment\Model\Equipment;
 use App\Modules\Organization\Model\Employee;
 use App\Modules\Organization\Model\Team;
 use App\Modules\Process\Model\RouteOperation;
@@ -21,6 +22,7 @@ use Illuminate\Support\Carbon;
  * @property int $route_operation_id
  * @property int $employee_id
  * @property int|null $team_id
+ * @property int|null $equipment_id
  * @property string $quantity
  * @property string $qualified_quantity
  * @property string $defective_quantity
@@ -36,6 +38,7 @@ use Illuminate\Support\Carbon;
     'route_operation_id',
     'employee_id',
     'team_id',
+    'equipment_id',
     'quantity',
     'qualified_quantity',
     'defective_quantity',
@@ -114,6 +117,14 @@ class ProductionReport extends Model
     }
 
     /**
+     * @return BelongsTo<Equipment, $this>
+     */
+    public function equipment(): BelongsTo
+    {
+        return $this->belongsTo(Equipment::class, 'equipment_id');
+    }
+
+    /**
      * @return array<string, string>
      */
     protected function casts(): array
@@ -122,6 +133,7 @@ class ProductionReport extends Model
             'quantity' => 'decimal:3',
             'qualified_quantity' => 'decimal:3',
             'defective_quantity' => 'decimal:3',
+            'equipment_id' => 'integer',
             'reported_at' => 'datetime',
             'reversed_at' => 'datetime',
         ];

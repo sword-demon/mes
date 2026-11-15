@@ -3,6 +3,7 @@
 namespace App\Modules\Production\Service;
 
 use App\Core\Exceptions\ApiException;
+use App\Modules\Equipment\Model\Equipment;
 use App\Modules\Organization\Model\Employee;
 use App\Modules\Production\Model\ProductionBatch;
 use App\Modules\Production\Model\ProductionOrder;
@@ -74,6 +75,8 @@ class ProductSnService
             if ($employeeId !== null) {
                 $this->ensureActiveEmployee((int) $employeeId);
             }
+
+            $this->ensureAvailableEquipment($equipmentId);
 
             $locked->update(array_filter([
                 'material_batch_no' => $materialBatchNo,
@@ -171,6 +174,8 @@ class ProductSnService
             $this->ensureActiveEmployee((int) $employeeId);
         }
 
+        $this->ensureAvailableEquipment($data['equipment_id'] ?? null);
+
         $batch = ProductionBatch::query()->create([
             'code' => $this->nextBatchCode($order),
             'production_order_id' => $order->id,
@@ -225,6 +230,25 @@ class ProductSnService
         }
 
         return 'MES'.$day->format('Ymd').str_pad((string) $sequence, 6, '0', STR_PAD_LEFT);
+    }
+
+    /**
+     * @throws ApiException
+     */
+    private function ensureAvailableEquipment(mixed $equipmentId): void
+    {
+        if ($equipmentId === null) {
+            return;
+        }
+
+        $exists = Equipment::query()
+            ->available()
+            ->whereKey($equipmentId)
+            ->exists();
+
+        if (! $exists) {
+            throw new ApiException('设备不存在或当前不可用', 422);
+        }
     }
 
     /**

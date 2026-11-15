@@ -3,9 +3,11 @@
 namespace App\Modules\Production\Service;
 
 use App\Core\Exceptions\ApiException;
+use App\Modules\Equipment\Model\Equipment;
 use App\Modules\Organization\Model\Employee;
 use App\Modules\Process\Model\RouteOperation;
 use App\Modules\Production\Model\ProcessRecord;
+use App\Modules\Production\Model\ProductionOrder;
 use App\Modules\Production\Model\ProductionTask;
 use App\Modules\Production\Model\ProductSn;
 use Illuminate\Support\Facades\DB;
@@ -82,6 +84,28 @@ class ProcessRecordService
                 throw new ApiException('操作人员不存在或已停用，不能开始工序', 422);
             }
 
+            $equipmentId = $data['equipment_id'] ?? $locked->equipment_id;
+
+            if ($equipmentId !== null) {
+                $equipment = Equipment::query()
+                    ->available()
+                    ->whereKey($equipmentId)
+                    ->first();
+
+                if ($equipment === null) {
+                    throw new ApiException('设备不存在或当前不可用，不能开始工序', 422);
+                }
+
+                $orderLineId = $task->production_line_id
+                    ?? ProductionOrder::query()->whereKey($task->production_order_id)->value('production_line_id');
+
+                if ($orderLineId !== null && $equipment->production_line_id !== (int) $orderLineId) {
+                    throw new ApiException('设备不属于该生产任务的产线', 422);
+                }
+
+                $equipmentId = $equipment->id;
+            }
+
             $sn = $data['sn'] ?? $locked->sn;
 
             if ($locked->sn !== null && $sn !== null && $sn !== $locked->sn) {
@@ -97,7 +121,7 @@ class ProcessRecordService
                 'status' => ProcessRecord::PROCESSING,
                 'employee_id' => $employee->id,
                 'team_id' => $employee->team_id,
-                'equipment_id' => $data['equipment_id'] ?? $locked->equipment_id,
+                'equipment_id' => $equipmentId,
                 'sn' => $sn,
                 'started_at' => $locked->started_at ?? now(),
             ]);

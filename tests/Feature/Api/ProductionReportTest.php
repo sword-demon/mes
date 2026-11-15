@@ -1,6 +1,8 @@
 <?php
 
+use App\Modules\Equipment\Model\Equipment;
 use App\Modules\Organization\Model\Employee;
+use App\Modules\Organization\Model\ProductionLine;
 use App\Modules\Organization\Model\Team;
 use App\Modules\Process\Model\RouteOperation;
 use App\Modules\Production\Model\ProductionOrder;
@@ -174,6 +176,64 @@ it('refuses an operation from another route and a disabled operator', function (
     bearer($actor)->postJson('/api/v1/production/reports', reportPayload($task, $operation, $employee))
         ->assertUnprocessable()
         ->assertJsonPath('message', '作业人员不存在或已停用，不能报工');
+});
+
+it('associates a report with an available equipment', function () {
+    [$task, $operation, $employee] = reportReferences();
+    $lineId = ProductionOrder::query()->whereKey($task->production_order_id)->value('production_line_id');
+    $line = ProductionLine::query()->findOrFail($lineId);
+    $equipment = Equipment::factory()->create([
+        'production_line_id' => $line->id,
+        'workshop_id' => $line->workshop_id,
+        'status' => Equipment::RUNNING,
+    ]);
+    $actor = userWithPermissions(['production.reports.create']);
+
+    bearer($actor)->postJson('/api/v1/production/reports', [
+        ...reportPayload($task, $operation, $employee),
+        'equipment_id' => $equipment->id,
+    ])->assertOk()
+        ->assertJsonPath('data.equipment_id', $equipment->id)
+        ->assertJsonPath('data.equipment.code', $equipment->code)
+        ->assertJsonPath('data.equipment.status_label', '运行');
+
+    $this->assertDatabaseHas('mes_production_reports', [
+        'production_task_id' => $task->id,
+        'equipment_id' => $equipment->id,
+    ]);
+});
+
+it('refuses reporting on unavailable equipment', function () {
+    [$task, $operation, $employee] = reportReferences();
+    $equipment = Equipment::factory()->create(['status' => Equipment::OFFLINE]);
+    $actor = userWithPermissions(['production.reports.create']);
+
+    bearer($actor)->postJson('/api/v1/production/reports', [
+        ...reportPayload($task, $operation, $employee),
+        'equipment_id' => $equipment->id,
+    ])->assertStatus(422)
+        ->assertJsonPath('message', '设备不存在或当前不可用，不能报工');
+
+    expect(ProductionReport::query()->count())->toBe(0);
+});
+
+it('refuses reporting on equipment from another production line', function () {
+    [$task, $operation, $employee] = reportReferences();
+    $foreignLine = ProductionLine::factory()->create();
+    $equipment = Equipment::factory()->create([
+        'production_line_id' => $foreignLine->id,
+        'workshop_id' => $foreignLine->workshop_id,
+        'status' => Equipment::RUNNING,
+    ]);
+    $actor = userWithPermissions(['production.reports.create']);
+
+    bearer($actor)->postJson('/api/v1/production/reports', [
+        ...reportPayload($task, $operation, $employee),
+        'equipment_id' => $equipment->id,
+    ])->assertStatus(422)
+        ->assertJsonPath('message', '设备不属于该生产任务的产线');
+
+    expect(ProductionReport::query()->count())->toBe(0);
 });
 
 it('lists reports filtered by task, order and type', function () {

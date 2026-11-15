@@ -2,6 +2,7 @@
 
 use App\Modules\Bom\Controller\BomController;
 use App\Modules\Bom\Controller\BomItemController;
+use App\Modules\Equipment\Controller\EquipmentController;
 use App\Modules\Inventory\Controller\InventoryAlertController;
 use App\Modules\Inventory\Controller\InventoryController;
 use App\Modules\Material\Controller\MaterialController;
@@ -302,6 +303,18 @@ Route::middleware(['auth:sanctum', 'active'])->group(function (): void {
             ->middleware('permission:inventory.outbound')->name('outbound');
         Route::post('/adjust', [InventoryController::class, 'adjust'])
             ->middleware('permission:inventory.adjust')->name('adjust');
+    });
+
+    Route::prefix('equipments')->name('api.equipments.')->group(function (): void {
+        Route::get('/options', [EquipmentController::class, 'options'])
+            ->middleware('permission:equipment.ledger.index|production.reports.create|production.flows.start')
+            ->name('options');
+        Route::get('/', [EquipmentController::class, 'index'])
+            ->middleware('permission:equipment.ledger.index')->name('index');
+        Route::post('/', [EquipmentController::class, 'store'])
+            ->middleware('permission:equipment.ledger.create')->name('store');
+        Route::put('/{equipment}', [EquipmentController::class, 'update'])
+            ->middleware('permission:equipment.ledger.update')->name('update');
     });
 
     Route::prefix('production')->name('api.production.')->group(function (): void {

@@ -62,6 +62,10 @@ function CreateReportModal({
     const reportableTasks = options.data?.tasks ?? [];
     const selectedTask = reportableTasks.find((task) => task.id === taskId);
     const remaining = selectedTask ? Number(selectedTask.remaining_quantity) : undefined;
+    const equipmentOptions = (options.data?.equipments ?? []).filter(
+        (equipment) => selectedTask?.production_line_id == null
+            || equipment.production_line_id === selectedTask.production_line_id,
+    );
 
     return (
         <Modal
@@ -86,6 +90,7 @@ function CreateReportModal({
                         production_task_id: values.production_task_id,
                         route_operation_id: values.route_operation_id,
                         employee_id: values.employee_id,
+                        equipment_id: values.equipment_id,
                         quantity: values.quantity,
                         qualified_quantity: values.qualified_quantity,
                         defective_quantity: values.defective_quantity,
@@ -138,6 +143,19 @@ function CreateReportModal({
                         options={(options.data?.employees ?? []).map((employee) => ({
                             value: employee.id,
                             label: `${employee.employee_no} ${employee.name}`,
+                        }))}
+                    />
+                </Form.Item>
+                <Form.Item name="equipment_id" label="使用设备">
+                    <Select
+                        allowClear
+                        showSearch
+                        optionFilterProp="label"
+                        loading={options.isLoading}
+                        placeholder="可选，运行或待机设备"
+                        options={equipmentOptions.map((equipment) => ({
+                            value: equipment.id,
+                            label: `${equipment.code} ${equipment.name}（${equipment.status_label}）`,
                         }))}
                     />
                 </Form.Item>
@@ -358,6 +376,12 @@ export default function ProductionReports() {
                             record.employee
                                 ? `${record.employee.employee_no} ${record.employee.name}`
                                 : '-',
+                    },
+                    {
+                        title: '设备',
+                        width: 150,
+                        render: (_, record) =>
+                            record.equipment ? `${record.equipment.code} ${record.equipment.name}` : '-',
                     },
                     {
                         title: '报工数量',

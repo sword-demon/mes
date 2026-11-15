@@ -2,6 +2,7 @@
 
 namespace App\Modules\Production\Model;
 
+use App\Modules\Equipment\Model\Equipment;
 use App\Modules\Organization\Model\Employee;
 use Database\Factories\ProductSnFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
@@ -105,6 +106,14 @@ class ProductSn extends Model
     public function employee(): BelongsTo
     {
         return $this->belongsTo(Employee::class, 'employee_id');
+    }
+
+    /**
+     * @return BelongsTo<Equipment, $this>
+     */
+    public function equipment(): BelongsTo
+    {
+        return $this->belongsTo(Equipment::class, 'equipment_id');
     }
 
     /**

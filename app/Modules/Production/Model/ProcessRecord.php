@@ -2,6 +2,7 @@
 
 namespace App\Modules\Production\Model;
 
+use App\Modules\Equipment\Model\Equipment;
 use App\Modules\Organization\Model\Employee;
 use App\Modules\Organization\Model\Team;
 use App\Modules\Process\Model\RouteOperation;
@@ -149,6 +150,14 @@ class ProcessRecord extends Model
     public function team(): BelongsTo
     {
         return $this->belongsTo(Team::class, 'team_id');
+    }
+
+    /**
+     * @return BelongsTo<Equipment, $this>
+     */
+    public function equipment(): BelongsTo
+    {
+        return $this->belongsTo(Equipment::class, 'equipment_id');
     }
 
     /**

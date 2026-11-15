@@ -19,7 +19,7 @@ class StartProcessRecordRequest extends FormRequest
     {
         return [
             'employee_id' => ['nullable', 'integer', Rule::exists('mes_employees', 'id')],
-            'equipment_id' => ['nullable', 'integer', 'min:1'],
+            'equipment_id' => ['nullable', 'integer', Rule::exists('mes_equipments', 'id')],
             'sn' => ['nullable', 'string', 'max:64'],
         ];
     }

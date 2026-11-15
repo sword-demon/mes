@@ -22,6 +22,7 @@ class StoreProductionReportRequest extends FormRequest
             'production_task_id' => ['required', 'integer', Rule::exists('mes_production_tasks', 'id')],
             'route_operation_id' => ['required', 'integer', Rule::exists('mes_route_operations', 'id')],
             'employee_id' => ['required', 'integer', Rule::exists('mes_employees', 'id')],
+            'equipment_id' => ['nullable', 'integer', Rule::exists('mes_equipments', 'id')],
             'quantity' => ['required', 'numeric', 'decimal:0,3', 'gt:0', 'max:999999999.999'],
             'qualified_quantity' => ['required', 'numeric', 'decimal:0,3', 'min:0', 'max:999999999.999'],
             'defective_quantity' => ['required', 'numeric', 'decimal:0,3', 'min:0', 'max:999999999.999'],

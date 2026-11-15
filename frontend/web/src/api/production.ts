@@ -1,5 +1,6 @@
 import { api } from './client';
 import type { Paginated } from '@/types/api';
+import type { Equipment, EquipmentOption } from './equipment';
 
 export const PRODUCTION_ORDER_STATUSES = [
     { value: 'draft', label: '草稿', color: 'default' },
@@ -200,6 +201,7 @@ export type ProductionReport = {
     route_operation_id: number;
     employee_id: number;
     team_id: number | null;
+    equipment_id: number | null;
     quantity: string;
     qualified_quantity: string;
     defective_quantity: string;
@@ -226,6 +228,7 @@ export type ProductionReport = {
     };
     employee?: { id: number; employee_no: string; name: string };
     team?: NamedRef | null;
+    equipment?: Equipment | null;
 };
 
 export type ProductionReportParams = {
@@ -244,6 +247,7 @@ export type ProductionReportPayload = {
     production_task_id: number;
     route_operation_id: number;
     employee_id: number;
+    equipment_id?: number | null;
     quantity: number;
     qualified_quantity: number;
     defective_quantity: number;
@@ -260,8 +264,10 @@ export type ProductionReportOptions = {
         remaining_quantity: string;
         product: NamedRef | null;
         production_order: { id: number; code: string } | null;
+        production_line_id: number | null;
     }[];
     employees: { id: number; employee_no: string; name: string }[];
+    equipments: EquipmentOption[];
 };
 
 export const PRODUCT_SN_STATUSES = [

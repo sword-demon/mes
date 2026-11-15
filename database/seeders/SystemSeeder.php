@@ -146,6 +146,9 @@ class SystemSeeder extends Seeder
         'inventory.inbound' => '库存入库',
         'inventory.outbound' => '库存出库',
         'inventory.adjust' => '库存调整',
+        'equipment.ledger.index' => '设备台账列表',
+        'equipment.ledger.create' => '新增设备',
+        'equipment.ledger.update' => '编辑与停用设备',
         'material.requisitions.index' => '领料单列表',
         'material.requisitions.create' => '创建领料单',
         'material.requisitions.issue' => '仓库发料',
@@ -244,7 +247,7 @@ class SystemSeeder extends Seeder
         'quality_inspector' => ['name' => '质检员', 'menus' => ['dashboard', 'quality', 'traceability'], 'api' => ['production.flows.index', 'quality.standards.index', 'quality.defect-codes.index', 'quality.inspections.index', 'quality.inspections.create', 'quality.inspections.record', 'quality.defects.index', 'quality.defects.create', 'quality.defects.process', 'quality.defects.rework', 'quality.defects.scrap', 'quality.defects.recheck'], 'scope' => 'line'],
         'quality_manager' => ['name' => '质检主管', 'menus' => ['dashboard', 'quality', 'traceability'], 'api' => ['quality.standards.index', 'quality.standards.create', 'quality.standards.update', 'quality.defect-codes.index', 'quality.defect-codes.create', 'quality.defect-codes.update', 'quality.inspections.index', 'quality.inspections.create', 'quality.inspections.record', 'quality.defects.index', 'quality.defects.create', 'quality.defects.process', 'quality.defects.rework', 'quality.defects.scrap', 'quality.defects.recheck'], 'scope' => 'factory'],
         'warehouse_manager' => ['name' => '仓库管理员', 'menus' => ['dashboard', 'material', 'basic', 'execution', 'traceability'], 'api' => ['inventory.index', 'inventory.alerts.index', 'inventory.alerts.confirm', 'inventory.alerts.close', 'inventory.inbound', 'inventory.outbound', 'inventory.adjust', 'material.requisitions.index', 'material.requisitions.issue', 'material.returns.index', 'material.returns.audit', 'production.sns.index', 'production.sns.create', 'production.sns.bind', 'production.sns.print', 'production.sns.void'], 'scope' => 'factory'],
-        'equipment_manager' => ['name' => '设备管理员', 'menus' => ['dashboard', 'equipment'], 'scope' => 'factory'],
+        'equipment_manager' => ['name' => '设备管理员', 'menus' => ['dashboard', 'equipment'], 'api' => ['equipment.ledger.index', 'equipment.ledger.create', 'equipment.ledger.update'], 'scope' => 'factory'],
     ];
 
     public function run(): void

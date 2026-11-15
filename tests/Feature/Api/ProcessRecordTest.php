@@ -1,6 +1,8 @@
 <?php
 
+use App\Modules\Equipment\Model\Equipment;
 use App\Modules\Organization\Model\Employee;
+use App\Modules\Organization\Model\ProductionLine;
 use App\Modules\Organization\Model\Team;
 use App\Modules\Process\Model\Process;
 use App\Modules\Process\Model\RouteOperation;
@@ -60,6 +62,13 @@ it('starts an operation and records its operator, equipment and SN', function ()
     [$task, $records, $employee] = flowTask([false]);
     $actor = userWithPermissions(['production.flows.start']);
     $record = $records->first();
+    $lineId = ProductionOrder::query()->whereKey($task->production_order_id)->value('production_line_id');
+    $line = ProductionLine::query()->findOrFail($lineId);
+    $equipment = Equipment::factory()->create([
+        'production_line_id' => $line->id,
+        'workshop_id' => $line->workshop_id,
+        'status' => Equipment::RUNNING,
+    ]);
     $sn = ProductSn::factory()->create([
         'sn' => 'MES20261115000001',
         'production_order_id' => $task->production_order_id,
@@ -67,13 +76,14 @@ it('starts an operation and records its operator, equipment and SN', function ()
 
     bearer($actor)->postJson("/api/v1/production/process-records/{$record->id}/start", [
         'employee_id' => $employee->id,
-        'equipment_id' => 42,
+        'equipment_id' => $equipment->id,
         'sn' => $sn->sn,
     ])->assertOk()
         ->assertJsonPath('data.status', ProcessRecord::PROCESSING)
         ->assertJsonPath('data.status_label', '加工中')
         ->assertJsonPath('data.sn', 'MES20261115000001')
-        ->assertJsonPath('data.equipment_id', 42)
+        ->assertJsonPath('data.equipment_id', $equipment->id)
+        ->assertJsonPath('data.equipment.code', $equipment->code)
         ->assertJsonPath('data.employee.id', $employee->id)
         ->assertJsonPath('data.team.id', $employee->team_id)
         ->assertJsonPath('data.production_task.id', $task->id)
@@ -103,6 +113,41 @@ it('rejects a serial number that is unknown, voided or from another order', func
 
     bearer($actor)->postJson($url, ['employee_id' => $employee->id, 'sn' => 'MES20990101000001'])
         ->assertStatus(422);
+
+    expect($record->fresh()->status)->toBe(ProcessRecord::PENDING);
+});
+
+it('rejects starting an operation with unavailable equipment', function () {
+    [$task, $records, $employee] = flowTask([false]);
+    $actor = userWithPermissions(['production.flows.start']);
+    $record = $records->first();
+    $equipment = Equipment::factory()->create(['status' => Equipment::OFFLINE]);
+
+    bearer($actor)->postJson("/api/v1/production/process-records/{$record->id}/start", [
+        'employee_id' => $employee->id,
+        'equipment_id' => $equipment->id,
+    ])->assertStatus(422)
+        ->assertJsonPath('message', '设备不存在或当前不可用，不能开始工序');
+
+    expect($record->fresh()->status)->toBe(ProcessRecord::PENDING);
+});
+
+it('rejects starting an operation with equipment from another production line', function () {
+    [$task, $records, $employee] = flowTask([false]);
+    $actor = userWithPermissions(['production.flows.start']);
+    $record = $records->first();
+    $foreignLine = ProductionLine::factory()->create();
+    $equipment = Equipment::factory()->create([
+        'production_line_id' => $foreignLine->id,
+        'workshop_id' => $foreignLine->workshop_id,
+        'status' => Equipment::RUNNING,
+    ]);
+
+    bearer($actor)->postJson("/api/v1/production/process-records/{$record->id}/start", [
+        'employee_id' => $employee->id,
+        'equipment_id' => $equipment->id,
+    ])->assertStatus(422)
+        ->assertJsonPath('message', '设备不属于该生产任务的产线');
 
     expect($record->fresh()->status)->toBe(ProcessRecord::PENDING);
 });

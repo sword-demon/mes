@@ -2,6 +2,7 @@
 
 namespace App\Modules\Production\Resource;
 
+use App\Modules\Equipment\Resource\EquipmentResource;
 use App\Modules\Organization\Resource\Concerns\ProjectsNamedRef;
 use App\Modules\Production\Model\ProductSn;
 use Illuminate\Http\Request;
@@ -48,6 +49,9 @@ class ProductSnResource extends JsonResource
                 'employee_no' => $this->employee->employee_no,
                 'name' => $this->employee->name,
             ]),
+            'equipment' => $this->whenLoaded('equipment', fn () => $this->equipment === null
+                ? null
+                : EquipmentResource::make($this->equipment)->resolve()),
             'process_records' => $this->whenLoaded(
                 'processRecords',
                 fn () => ProcessRecordResource::collection($this->processRecords)->resolve(),

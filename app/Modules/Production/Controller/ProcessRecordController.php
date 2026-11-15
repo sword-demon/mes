@@ -21,6 +21,7 @@ class ProcessRecordController extends Controller
         'routeOperation.process',
         'employee',
         'team',
+        'equipment',
     ];
 
     public function __construct(

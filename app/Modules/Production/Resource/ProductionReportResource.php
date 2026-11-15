@@ -2,6 +2,7 @@
 
 namespace App\Modules\Production\Resource;
 
+use App\Modules\Equipment\Resource\EquipmentResource;
 use App\Modules\Organization\Resource\Concerns\ProjectsNamedRef;
 use App\Modules\Production\Model\ProductionReport;
 use Illuminate\Http\Request;
@@ -26,6 +27,7 @@ class ProductionReportResource extends JsonResource
             'route_operation_id' => $this->route_operation_id,
             'employee_id' => $this->employee_id,
             'team_id' => $this->team_id,
+            'equipment_id' => $this->equipment_id,
             'quantity' => $this->quantity,
             'qualified_quantity' => $this->qualified_quantity,
             'defective_quantity' => $this->defective_quantity,
@@ -59,6 +61,9 @@ class ProductionReportResource extends JsonResource
                 'name' => $this->employee->name,
             ]),
             'team' => $this->whenLoaded('team', fn () => $this->namedRef($this->team)),
+            'equipment' => $this->whenLoaded('equipment', fn () => $this->equipment === null
+                ? null
+                : EquipmentResource::make($this->equipment)->resolve()),
             'created_at' => $this->created_at,
             'updated_at' => $this->updated_at,
         ];

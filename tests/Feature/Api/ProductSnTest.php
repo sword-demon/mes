@@ -1,5 +1,6 @@
 <?php
 
+use App\Modules\Equipment\Model\Equipment;
 use App\Modules\Organization\Model\Employee;
 use App\Modules\Production\Model\ProcessRecord;
 use App\Modules\Production\Model\ProductionBatch;
@@ -128,15 +129,17 @@ it('refuses to generate serial numbers for a draft order or beyond the planned q
 it('binds a material batch, equipment and operator to a serial number only once', function () {
     $sn = ProductSn::factory()->create();
     $employee = Employee::factory()->create();
+    $equipment = Equipment::factory()->create(['status' => Equipment::RUNNING]);
     $actor = userWithPermissions(snPermissions());
 
     bearer($actor)->putJson("/api/v1/production/sns/{$sn->sn}/bind", [
         'material_batch_no' => 'MAT-LOT-001',
-        'equipment_id' => 7,
+        'equipment_id' => $equipment->id,
         'employee_id' => $employee->id,
     ])->assertOk()
         ->assertJsonPath('data.material_batch_no', 'MAT-LOT-001')
-        ->assertJsonPath('data.equipment_id', 7)
+        ->assertJsonPath('data.equipment_id', $equipment->id)
+        ->assertJsonPath('data.equipment.code', $equipment->code)
         ->assertJsonPath('data.employee.id', $employee->id);
 
     bearer($actor)->putJson("/api/v1/production/sns/{$sn->sn}/bind", [
@@ -145,7 +148,7 @@ it('binds a material batch, equipment and operator to a serial number only once'
         ->assertJsonPath('code', 422);
 
     bearer($actor)->putJson("/api/v1/production/sns/{$sn->sn}/bind", [
-        'equipment_id' => 7,
+        'equipment_id' => $equipment->id,
     ])->assertStatus(422);
 
     bearer($actor)->putJson("/api/v1/production/sns/{$sn->sn}/bind", [
@@ -164,6 +167,30 @@ it('refuses to bind a disabled operator', function () {
         'employee_id' => $disabled->id,
     ])->assertStatus(422)
         ->assertJsonPath('code', 422);
+});
+
+it('refuses to bind or generate with unavailable equipment', function () {
+    $sn = ProductSn::factory()->create();
+    $equipment = Equipment::factory()->create(['status' => Equipment::OFFLINE]);
+    $order = ProductionOrder::factory()->create([
+        'status' => ProductionOrder::RELEASED,
+        'planned_quantity' => 2,
+    ]);
+    $actor = userWithPermissions(snPermissions());
+
+    bearer($actor)->putJson("/api/v1/production/sns/{$sn->sn}/bind", [
+        'equipment_id' => $equipment->id,
+    ])->assertStatus(422)
+        ->assertJsonPath('message', '设备不存在或当前不可用');
+
+    bearer($actor)->postJson('/api/v1/production/sns', [
+        'production_order_id' => $order->id,
+        'quantity' => 1,
+        'equipment_id' => $equipment->id,
+    ])->assertStatus(422)
+        ->assertJsonPath('message', '设备不存在或当前不可用');
+
+    expect(ProductSn::query()->count())->toBe(1);
 });
 
 it('prints a label carrying the serial, product, order and batch', function () {
@@ -187,6 +214,7 @@ it('prints a label carrying the serial, product, order and batch', function () {
 
 it('voids a serial number with a reason and blocks further binding, printing or voiding', function () {
     $sn = ProductSn::factory()->create();
+    $equipment = Equipment::factory()->create(['status' => Equipment::RUNNING]);
     $actor = userWithPermissions(snPermissions());
 
     bearer($actor)->postJson("/api/v1/production/sns/{$sn->sn}/void", [
@@ -200,7 +228,7 @@ it('voids a serial number with a reason and blocks further binding, printing or 
     ])->assertStatus(422);
 
     bearer($actor)->putJson("/api/v1/production/sns/{$sn->sn}/bind", [
-        'equipment_id' => 3,
+        'equipment_id' => $equipment->id,
     ])->assertStatus(422);
 
     bearer($actor)->postJson("/api/v1/production/sns/{$sn->sn}/print")

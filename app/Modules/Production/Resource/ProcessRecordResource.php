@@ -2,6 +2,7 @@
 
 namespace App\Modules\Production\Resource;
 
+use App\Modules\Equipment\Resource\EquipmentResource;
 use App\Modules\Production\Model\ProcessRecord;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
@@ -67,6 +68,9 @@ class ProcessRecordResource extends JsonResource
                 'code' => $this->team->code,
                 'name' => $this->team->name,
             ]),
+            'equipment' => $this->whenLoaded('equipment', fn () => $this->equipment === null
+                ? null
+                : EquipmentResource::make($this->equipment)->resolve()),
             'created_at' => $this->created_at,
             'updated_at' => $this->updated_at,
         ];

@@ -35,6 +35,7 @@ const report = {
     route_operation_id: 7,
     employee_id: 5,
     team_id: 4,
+    equipment_id: null,
     quantity: '12.000',
     qualified_quantity: '10.000',
     defective_quantity: '2.000',
@@ -92,7 +93,7 @@ describe('生产报工页', () => {
             }
 
             if (config.url === '/production/reports/options') {
-                data = { tasks: [], employees: [] };
+                data = { tasks: [], employees: [], equipments: [] };
             }
 
             return {

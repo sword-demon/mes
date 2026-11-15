@@ -20,7 +20,7 @@ class StoreProductSnRequest extends FormRequest
         return [
             'production_order_id' => ['required', 'integer', Rule::exists('mes_production_orders', 'id')],
             'quantity' => ['required', 'integer', 'min:1', 'max:1000'],
-            'equipment_id' => ['nullable', 'integer', 'min:1'],
+            'equipment_id' => ['nullable', 'integer', Rule::exists('mes_equipments', 'id')],
             'employee_id' => ['nullable', 'integer', Rule::exists('mes_employees', 'id')],
         ];
     }

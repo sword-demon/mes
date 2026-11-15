@@ -5,6 +5,7 @@ namespace App\Modules\Production\Controller;
 use App\Core\Services\EntityService;
 use App\Http\Controllers\Controller;
 use App\Http\Responses\ApiResponse;
+use App\Modules\Equipment\Model\Equipment;
 use App\Modules\Organization\Model\Employee;
 use App\Modules\Production\FormRequest\StoreProductionReportRequest;
 use App\Modules\Production\Model\ProductionReport;
@@ -24,6 +25,7 @@ class ProductionReportController extends Controller
         'routeOperation.process',
         'employee',
         'team',
+        'equipment',
     ];
 
     public function __construct(
@@ -87,7 +89,7 @@ class ProductionReportController extends Controller
     {
         // shortcut: one page covers a demo factory's open tasks; add paging when it does not.
         $tasks = ProductionTask::query()
-            ->with(['product:id,code,name', 'productionOrder:id,code'])
+            ->with(['product:id,code,name', 'productionOrder:id,code,production_line_id'])
             ->whereHas('productionOrder', fn (Builder $order) => $order->whereIn('status', ProductionReportService::REPORTABLE_ORDER_STATUSES))
             ->where('status', '!=', ProductionTask::COMPLETED)
             ->orderBy('id')
@@ -101,6 +103,7 @@ class ProductionReportController extends Controller
                 'remaining_quantity' => number_format((float) $task->planned_quantity - (float) $task->produced_quantity, 3, '.', ''),
                 'product' => $task->product?->only(['id', 'code', 'name']),
                 'production_order' => $task->productionOrder?->only(['id', 'code']),
+                'production_line_id' => $task->production_line_id ?? $task->productionOrder?->production_line_id,
             ]);
 
         $employees = Employee::query()
@@ -109,9 +112,26 @@ class ProductionReportController extends Controller
             ->limit(100)
             ->get(['id', 'employee_no', 'name']);
 
+        $equipments = Equipment::query()
+            ->available()
+            ->orderBy('id')
+            ->limit(200)
+            ->get()
+            ->map(fn (Equipment $equipment): array => [
+                'id' => $equipment->id,
+                'code' => $equipment->code,
+                'name' => $equipment->name,
+                'type' => $equipment->type,
+                'model' => $equipment->model,
+                'production_line_id' => $equipment->production_line_id,
+                'status' => $equipment->status,
+                'status_label' => $equipment->statusLabel(),
+            ]);
+
         return ApiResponse::success([
             'tasks' => $tasks,
             'employees' => $employees,
+            'equipments' => $equipments,
         ]);
     }
 

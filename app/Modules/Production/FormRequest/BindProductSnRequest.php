@@ -19,7 +19,7 @@ class BindProductSnRequest extends FormRequest
     {
         return [
             'material_batch_no' => ['nullable', 'string', 'max:64'],
-            'equipment_id' => ['nullable', 'integer', 'min:1'],
+            'equipment_id' => ['nullable', 'integer', Rule::exists('mes_equipments', 'id')],
             'employee_id' => ['nullable', 'integer', Rule::exists('mes_employees', 'id')],
         ];
     }

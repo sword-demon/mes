@@ -23,12 +23,14 @@ class ProductSnController extends Controller
         'productionOrder.product',
         'productionBatch',
         'employee',
+        'equipment',
     ];
 
     private const array DETAIL_RELATIONS = [
         'productionOrder.product',
         'productionBatch',
         'employee',
+        'equipment',
         'processRecords.routeOperation.process',
         'processRecords.employee',
     ];
