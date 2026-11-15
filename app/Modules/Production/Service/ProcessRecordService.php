@@ -7,6 +7,7 @@ use App\Modules\Organization\Model\Employee;
 use App\Modules\Process\Model\RouteOperation;
 use App\Modules\Production\Model\ProcessRecord;
 use App\Modules\Production\Model\ProductionTask;
+use App\Modules\Production\Model\ProductSn;
 use Illuminate\Support\Facades\DB;
 
 class ProcessRecordService
@@ -81,12 +82,18 @@ class ProcessRecordService
                 throw new ApiException('操作人员不存在或已停用，不能开始工序', 422);
             }
 
+            $sn = $data['sn'] ?? $locked->sn;
+
+            if (is_string($sn) && $sn !== '') {
+                $this->ensureSerialNumber($sn, $task);
+            }
+
             $locked->update([
                 'status' => ProcessRecord::PROCESSING,
                 'employee_id' => $employee->id,
                 'team_id' => $employee->team_id,
                 'equipment_id' => $data['equipment_id'] ?? $locked->equipment_id,
-                'sn' => $data['sn'] ?? $locked->sn,
+                'sn' => $sn,
                 'started_at' => $locked->started_at ?? now(),
             ]);
 
@@ -275,6 +282,28 @@ class ProcessRecordService
             'rework_reason' => $reason,
             'rework_at' => now(),
         ]);
+    }
+
+    /**
+     * A typo or a scrapped unit must never end up attached to an execution.
+     *
+     * @throws ApiException
+     */
+    private function ensureSerialNumber(string $sn, ProductionTask $task): void
+    {
+        $productSn = ProductSn::query()->where('sn', $sn)->first();
+
+        if ($productSn === null) {
+            throw new ApiException('SN 不存在', 422);
+        }
+
+        if ($productSn->isVoided()) {
+            throw new ApiException('SN 已作废，不能投入生产', 422);
+        }
+
+        if ($productSn->production_order_id !== $task->production_order_id) {
+            throw new ApiException('SN 不属于该生产订单', 422);
+        }
     }
 
     /**

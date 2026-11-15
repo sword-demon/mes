@@ -12,6 +12,7 @@ import Teams from '@/pages/basic-data/teams';
 import Workshops from '@/pages/basic-data/workshops';
 import Login from '@/pages/login';
 import Placeholder from '@/pages/placeholder';
+import ProductSns from '@/pages/execution/sn';
 import ProductionOrders from '@/pages/production/orders';
 import ProductionDispatches from '@/pages/production/dispatch';
 import ProductionReports from '@/pages/production/reports';
@@ -42,6 +43,7 @@ const pages: Record<string, () => ReactNode> = {
     '/production/tasks': ProductionTasks,
     '/production/dispatch': ProductionDispatches,
     '/production/reports': ProductionReports,
+    '/execution/sn': ProductSns,
     '/system/users': Users,
 };
 

@@ -1,2 +1,19 @@
 @import 'tailwindcss';
 @import 'antd/dist/reset.css';
+
+@media print {
+    body * {
+        visibility: hidden;
+    }
+
+    .sn-label,
+    .sn-label * {
+        visibility: visible;
+    }
+
+    .sn-label {
+        position: absolute;
+        inset: 0;
+        border: none;
+    }
+}

@@ -18,6 +18,7 @@ use App\Modules\Production\Controller\ProductionDispatchController;
 use App\Modules\Production\Controller\ProductionOrderController;
 use App\Modules\Production\Controller\ProductionReportController;
 use App\Modules\Production\Controller\ProductionTaskController;
+use App\Modules\Production\Controller\ProductSnController;
 use App\Modules\System\Controller\AccessTokenController;
 use App\Modules\System\Controller\DepartmentController;
 use App\Modules\System\Controller\MeController;
@@ -267,6 +268,23 @@ Route::middleware(['auth:sanctum', 'active'])->group(function (): void {
             ->middleware('permission:production.reports.create')->name('reports.store');
         Route::post('/reports/{report}/reverse', [ProductionReportController::class, 'reverse'])
             ->middleware('permission:production.reports.reverse')->name('reports.reverse');
+
+        Route::get('/sns', [ProductSnController::class, 'index'])
+            ->middleware('permission:production.sns.index')->name('sns.index');
+        Route::get('/sns/options', [ProductSnController::class, 'options'])
+            ->middleware('permission:production.sns.create')->name('sns.options');
+        Route::post('/sns', [ProductSnController::class, 'store'])
+            ->middleware('permission:production.sns.create')->name('sns.store');
+        Route::get('/sns/{productSn}', [ProductSnController::class, 'show'])
+            ->middleware('permission:production.sns.index')->name('sns.show');
+        Route::put('/sns/{productSn}/bind', [ProductSnController::class, 'bind'])
+            ->middleware('permission:production.sns.bind')->name('sns.bind');
+        Route::get('/sns/{productSn}/label', [ProductSnController::class, 'label'])
+            ->middleware('permission:production.sns.print')->name('sns.label');
+        Route::post('/sns/{productSn}/print', [ProductSnController::class, 'markPrinted'])
+            ->middleware('permission:production.sns.print')->name('sns.print');
+        Route::post('/sns/{productSn}/void', [ProductSnController::class, 'void'])
+            ->middleware('permission:production.sns.void')->name('sns.void');
 
         Route::get('/process-records', [ProcessRecordController::class, 'index'])
             ->middleware('permission:production.flows.index')->name('process-records.index');

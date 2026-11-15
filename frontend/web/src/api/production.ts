@@ -264,6 +264,97 @@ export type ProductionReportOptions = {
     employees: { id: number; employee_no: string; name: string }[];
 };
 
+export const PRODUCT_SN_STATUSES = [
+    { value: 'active', label: '在用', color: 'green' },
+    { value: 'voided', label: '已作废', color: 'red' },
+] as const;
+
+export type ProductSnStatus = (typeof PRODUCT_SN_STATUSES)[number]['value'];
+
+export type ProductSnProcessRecord = {
+    id: number;
+    sequence: number;
+    status: string;
+    status_label: string;
+    equipment_id: number | null;
+    started_at: string | null;
+    completed_at: string | null;
+    received_at: string | null;
+    rework_count: number;
+    route_operation: { id: number; sequence: number; process: NamedRef } | null;
+    employee: { id: number; employee_no: string; name: string } | null;
+};
+
+export type ProductSn = {
+    id: number;
+    sn: string;
+    production_order_id: number;
+    production_batch_id: number;
+    material_batch_no: string | null;
+    equipment_id: number | null;
+    employee_id: number | null;
+    status: ProductSnStatus;
+    status_label: string;
+    printed_at: string | null;
+    voided_at: string | null;
+    void_reason: string | null;
+    production_order?: {
+        id: number;
+        code: string;
+        planned_quantity: string;
+        product: NamedRef | null;
+    };
+    production_batch?: { id: number; code: string; quantity: number };
+    employee?: { id: number; employee_no: string; name: string } | null;
+    process_records?: ProductSnProcessRecord[];
+    created_at: string;
+};
+
+export type ProductSnParams = {
+    page?: number;
+    per_page?: number;
+    keyword?: string;
+    status?: ProductSnStatus;
+    production_order_id?: number;
+    production_batch_id?: number;
+};
+
+export type ProductSnGeneratePayload = {
+    production_order_id: number;
+    quantity: number;
+    employee_id?: number;
+};
+
+export type ProductSnBindPayload = {
+    material_batch_no?: string;
+    equipment_id?: number;
+    employee_id?: number;
+};
+
+export type ProductSnGenerateResult = {
+    batch: { id: number; code: string; quantity: number; production_order_id: number };
+    items: ProductSn[];
+};
+
+export type ProductSnOptions = {
+    orders: {
+        id: number;
+        code: string;
+        planned_quantity: string;
+        product: NamedRef | null;
+    }[];
+    employees: { id: number; employee_no: string; name: string }[];
+};
+
+export type ProductSnLabel = {
+    sn: string;
+    product_code: string;
+    product_name: string;
+    production_order: string;
+    production_batch: string;
+    generated_at: string;
+};
+
 export type TaskRouteOperation = {
     id: number;
     route_id: number;
@@ -351,6 +442,38 @@ export function getReportOptions() {
 
 export function listReportOperations(taskId: number) {
     return api.get<TaskRouteOperation[]>(`/production/reports/tasks/${taskId}/operations`);
+}
+
+export function listProductSns(params: ProductSnParams = {}) {
+    return api.get<Paginated<ProductSn>>('/production/sns', params);
+}
+
+export function getProductSnOptions() {
+    return api.get<ProductSnOptions>('/production/sns/options');
+}
+
+export function generateProductSns(payload: ProductSnGeneratePayload) {
+    return api.post<ProductSnGenerateResult>('/production/sns', payload);
+}
+
+export function getProductSn(sn: string) {
+    return api.get<ProductSn>(`/production/sns/${sn}`);
+}
+
+export function bindProductSn(sn: string, payload: ProductSnBindPayload) {
+    return api.put<ProductSn>(`/production/sns/${sn}/bind`, payload);
+}
+
+export function getProductSnLabel(sn: string) {
+    return api.get<{ sn: ProductSn; label: ProductSnLabel }>(`/production/sns/${sn}/label`);
+}
+
+export function printProductSn(sn: string) {
+    return api.post<ProductSn>(`/production/sns/${sn}/print`);
+}
+
+export function voidProductSn(sn: string, reason: string) {
+    return api.post<ProductSn>(`/production/sns/${sn}/void`, { reason });
 }
 
 export function listApprovedBoms() {

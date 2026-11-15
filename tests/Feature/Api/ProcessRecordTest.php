@@ -7,6 +7,7 @@ use App\Modules\Process\Model\RouteOperation;
 use App\Modules\Production\Model\ProcessRecord;
 use App\Modules\Production\Model\ProductionOrder;
 use App\Modules\Production\Model\ProductionTask;
+use App\Modules\Production\Model\ProductSn;
 use App\Modules\Production\Service\ProductionTaskService;
 
 /**
@@ -57,11 +58,15 @@ it('starts an operation and records its operator, equipment and SN', function ()
     [$task, $records, $employee] = flowTask([false]);
     $actor = userWithPermissions(['production.flows.start']);
     $record = $records->first();
+    $sn = ProductSn::factory()->create([
+        'sn' => 'MES20261115000001',
+        'production_order_id' => $task->production_order_id,
+    ]);
 
     bearer($actor)->postJson("/api/v1/production/process-records/{$record->id}/start", [
         'employee_id' => $employee->id,
         'equipment_id' => 42,
-        'sn' => 'MES20261115000001',
+        'sn' => $sn->sn,
     ])->assertOk()
         ->assertJsonPath('data.status', ProcessRecord::PROCESSING)
         ->assertJsonPath('data.status_label', '加工中')
@@ -75,6 +80,29 @@ it('starts an operation and records its operator, equipment and SN', function ()
         ->assertJsonPath('data.route_operation.process.requires_inspection', false);
 
     expect($record->fresh()->started_at)->not->toBeNull();
+});
+
+it('rejects a serial number that is unknown, voided or from another order', function () {
+    [$task, $records, $employee] = flowTask([false]);
+    $actor = userWithPermissions(['production.flows.start']);
+    $record = $records->first();
+    $foreign = ProductSn::factory()->create();
+    $voided = ProductSn::factory()->create([
+        'production_order_id' => $task->production_order_id,
+        'status' => ProductSn::VOIDED,
+    ]);
+    $url = "/api/v1/production/process-records/{$record->id}/start";
+
+    bearer($actor)->postJson($url, ['employee_id' => $employee->id, 'sn' => $foreign->sn])
+        ->assertStatus(422);
+
+    bearer($actor)->postJson($url, ['employee_id' => $employee->id, 'sn' => $voided->sn])
+        ->assertStatus(422);
+
+    bearer($actor)->postJson($url, ['employee_id' => $employee->id, 'sn' => 'MES20990101000001'])
+        ->assertStatus(422);
+
+    expect($record->fresh()->status)->toBe(ProcessRecord::PENDING);
 });
 
 it('refuses to start a later operation before the previous one is transferred', function () {
