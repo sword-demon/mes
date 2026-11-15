@@ -46,6 +46,9 @@ class ProductionOrderService
     public function update(ProductionOrder $order, array $data): ProductionOrder
     {
         return DB::transaction(function () use ($order, $data): ProductionOrder {
+            // The route-bound model may be stale: a concurrent submit can land
+            // between binding and this call, so re-read under a row lock.
+            $order = ProductionOrder::query()->lockForUpdate()->findOrFail($order->getKey());
             $order->ensureEditable();
 
             $effective = [

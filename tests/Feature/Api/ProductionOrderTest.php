@@ -1,5 +1,6 @@
 <?php
 
+use App\Core\Exceptions\ApiException;
 use App\Modules\Bom\Model\Bom;
 use App\Modules\Organization\Model\ProductionLine;
 use App\Modules\Process\Model\Process;
@@ -8,6 +9,7 @@ use App\Modules\Process\Model\RouteOperation;
 use App\Modules\Product\Model\Product;
 use App\Modules\Product\Model\ProductVersion;
 use App\Modules\Production\Model\ProductionOrder;
+use App\Modules\Production\Service\ProductionOrderService;
 
 /**
  * @return array{0: Product, 1: Bom, 2: ProcessRoute, 3: ProductionLine}
@@ -292,6 +294,24 @@ it('still lets a draft change its remark after the pinned bom was retired', func
         ->assertOk()
         ->assertJsonPath('data.remark', '仅改备注')
         ->assertJsonPath('data.bom_version', 'B1.0');
+});
+
+it('refuses an update built from an order snapshot that was submitted concurrently', function () {
+    [$product, $bom, $route, $line] = usableProductionReferences();
+    $actor = userWithPermissions(['production.orders.create', 'production.orders.update']);
+
+    $created = bearer($actor)->postJson('/api/v1/production/orders', productionOrderPayload($product, $bom, $route, $line))
+        ->json('data');
+
+    // Models the request that bound the order while it was still a draft; a
+    // concurrent submit commits before that request reaches the service.
+    $stale = ProductionOrder::query()->findOrFail($created['id']);
+    ProductionOrder::query()->whereKey($created['id'])->update(['status' => ProductionOrder::PENDING]);
+
+    expect(fn () => app(ProductionOrderService::class)->update($stale, ['remark' => '迟到的修改']))
+        ->toThrow(ApiException::class, '生产订单已提交，不可修改');
+
+    expect(ProductionOrder::query()->findOrFail($created['id'])->remark)->not->toBe('迟到的修改');
 });
 
 it('rejects an end date earlier than the stored start on a partial update', function () {
