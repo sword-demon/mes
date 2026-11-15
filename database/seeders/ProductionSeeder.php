@@ -11,6 +11,7 @@ use App\Modules\Process\Model\RouteOperation;
 use App\Modules\Production\Model\ProductionDispatch;
 use App\Modules\Production\Model\ProductionOrder;
 use App\Modules\Production\Model\ProductionTask;
+use App\Modules\Production\Service\ProcessRecordService;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Carbon;
 use RuntimeException;
@@ -153,6 +154,8 @@ class ProductionSeeder extends Seeder
                         ],
                     );
                 }
+
+                app(ProcessRecordService::class)->createForTask($task);
             }
         }
     }

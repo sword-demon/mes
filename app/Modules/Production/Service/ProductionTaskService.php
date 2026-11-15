@@ -13,6 +13,8 @@ use Illuminate\Support\Facades\DB;
 
 class ProductionTaskService
 {
+    public function __construct(private readonly ProcessRecordService $processRecords) {}
+
     /**
      * The order row lock serialises concurrent splits, so two requests cannot
      * both read the same remainder and together overshoot the planned quantity.
@@ -52,7 +54,7 @@ class ProductionTaskService
 
             $sequence = ProductionTask::query()->where('production_order_id', $locked->id)->count() + 1;
 
-            return ProductionTask::query()->create([
+            $task = ProductionTask::query()->create([
                 'code' => $locked->code.'-T'.str_pad((string) $sequence, 2, '0', STR_PAD_LEFT),
                 'production_order_id' => $locked->id,
                 'product_id' => $locked->product_id,
@@ -62,6 +64,10 @@ class ProductionTaskService
                 'planned_end_at' => $end,
                 'status' => ProductionTask::PENDING,
             ]);
+
+            $this->processRecords->createForTask($task);
+
+            return $task;
         });
     }
 

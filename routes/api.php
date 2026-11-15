@@ -13,6 +13,7 @@ use App\Modules\Process\Controller\ProcessRouteController;
 use App\Modules\Process\Controller\RouteOperationController;
 use App\Modules\Product\Controller\ProductController;
 use App\Modules\Product\Controller\ProductVersionController;
+use App\Modules\Production\Controller\ProcessRecordController;
 use App\Modules\Production\Controller\ProductionDispatchController;
 use App\Modules\Production\Controller\ProductionOrderController;
 use App\Modules\Production\Controller\ProductionReportController;
@@ -266,5 +267,22 @@ Route::middleware(['auth:sanctum', 'active'])->group(function (): void {
             ->middleware('permission:production.reports.create')->name('reports.store');
         Route::post('/reports/{report}/reverse', [ProductionReportController::class, 'reverse'])
             ->middleware('permission:production.reports.reverse')->name('reports.reverse');
+
+        Route::get('/process-records', [ProcessRecordController::class, 'index'])
+            ->middleware('permission:production.flows.index')->name('process-records.index');
+        Route::post('/process-records/{record}/start', [ProcessRecordController::class, 'start'])
+            ->middleware('permission:production.flows.start')->name('process-records.start');
+        Route::post('/process-records/{record}/complete', [ProcessRecordController::class, 'complete'])
+            ->middleware('permission:production.flows.complete')->name('process-records.complete');
+        Route::post('/process-records/{record}/inspect', [ProcessRecordController::class, 'inspect'])
+            ->middleware('permission:production.flows.inspect')->name('process-records.inspect');
+        Route::post('/process-records/{record}/submit', [ProcessRecordController::class, 'submit'])
+            ->middleware('permission:production.flows.submit')->name('process-records.submit');
+        Route::post('/process-records/{record}/receive', [ProcessRecordController::class, 'receive'])
+            ->middleware('permission:production.flows.receive')->name('process-records.receive');
+        Route::post('/process-records/{record}/exception', [ProcessRecordController::class, 'exception'])
+            ->middleware('permission:production.flows.exception')->name('process-records.exception');
+        Route::post('/process-records/{record}/rework', [ProcessRecordController::class, 'rework'])
+            ->middleware('permission:production.flows.rework')->name('process-records.rework');
     });
 });
