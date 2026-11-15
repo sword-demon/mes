@@ -33,24 +33,29 @@ class ProductionDispatchController extends Controller
 
     public function index(Request $request): JsonResponse
     {
+        $orderId = $request->query('production_order_id');
+        $startDate = $request->query('start_date');
+        $endDate = $request->query('end_date');
+        $keyword = $request->query('keyword');
+
         $query = ProductionDispatch::query()
             ->with(self::RELATIONS)
             ->when(
-                $request->query('production_order_id'),
-                fn (Builder $query, string $orderId) => $query->whereHas(
+                is_string($orderId) && $orderId !== '',
+                fn (Builder $query) => $query->whereHas(
                     'productionTask',
                     fn (Builder $task) => $task->where('production_order_id', $orderId),
                 ),
             )
             ->when(
-                $request->query('start_date'),
-                fn (Builder $query, string $date) => $query->whereDate('dispatched_at', '>=', $date),
+                is_string($startDate) && $startDate !== '',
+                fn (Builder $query) => $query->whereDate('dispatched_at', '>=', $startDate),
             )
             ->when(
-                $request->query('end_date'),
-                fn (Builder $query, string $date) => $query->whereDate('dispatched_at', '<=', $date),
+                is_string($endDate) && $endDate !== '',
+                fn (Builder $query) => $query->whereDate('dispatched_at', '<=', $endDate),
             )
-            ->when($request->query('keyword'), function (Builder $query, string $keyword): void {
+            ->when(is_string($keyword) && $keyword !== '', function (Builder $query) use ($keyword): void {
                 $query->where(fn (Builder $inner) => $inner
                     ->whereHas('employee', fn (Builder $employee) => $employee
                         ->where('name', 'like', "%{$keyword}%")
@@ -62,7 +67,10 @@ class ProductionDispatchController extends Controller
         return ApiResponse::paginated(
             $this->entities->paginateQuery(
                 $query,
-                $request->only(['production_task_id', 'employee_id', 'per_page']),
+                array_filter(
+                    $request->only(['production_task_id', 'employee_id', 'per_page']),
+                    static fn (mixed $value): bool => is_scalar($value),
+                ),
                 [],
                 filterColumns: ['production_task_id', 'employee_id'],
             ),

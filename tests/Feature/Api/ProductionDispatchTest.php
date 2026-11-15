@@ -168,6 +168,20 @@ it('filters dispatch records by task, order, employee and date', function () {
         ->assertJsonPath('data.items.0.id', $matched->id);
 });
 
+it('ignores array-shaped dispatch filters instead of failing', function () {
+    $actor = userWithPermissions(['production.dispatches.index']);
+
+    bearer($actor)->getJson('/api/v1/production/dispatches?'.http_build_query([
+        'start_date' => ['2026-11-01'],
+        'end_date' => ['2026-11-30'],
+        'production_order_id' => ['1'],
+        'production_task_id' => ['1'],
+        'employee_id' => ['1'],
+        'keyword' => ['PD-1'],
+        'per_page' => ['100'],
+    ]))->assertOk();
+});
+
 it('returns only the current user own dispatches from mine', function () {
     [$task, $operation, $team, $employee] = dispatchReferences();
     $otherEmployee = Employee::factory()->create(['team_id' => $team->id]);
