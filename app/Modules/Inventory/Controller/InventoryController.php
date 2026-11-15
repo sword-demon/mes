@@ -9,9 +9,12 @@ use App\Modules\Inventory\FormRequest\AdjustInventoryRequest;
 use App\Modules\Inventory\FormRequest\InventoryMovementRequest;
 use App\Modules\Inventory\Model\Inventory;
 use App\Modules\Inventory\Model\InventoryTransaction;
+use App\Modules\Inventory\Model\StorageLocation;
+use App\Modules\Inventory\Model\Warehouse;
 use App\Modules\Inventory\Resource\InventoryResource;
 use App\Modules\Inventory\Resource\InventoryTransactionResource;
 use App\Modules\Inventory\Service\InventoryService;
+use App\Modules\Material\Model\Material;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -68,7 +71,24 @@ class InventoryController extends Controller
 
     public function transactions(Request $request): JsonResponse
     {
-        $query = InventoryTransaction::query()->with(['material', 'inventory.location.warehouse']);
+        $warehouseId = $request->query('warehouse_id');
+        $locationId = $request->query('location_id');
+        $batchNo = $request->query('batch_no');
+
+        $query = InventoryTransaction::query()
+            ->with(['material', 'inventory.location.warehouse'])
+            ->when(is_scalar($warehouseId), fn (Builder $query) => $query->whereHas(
+                'inventory.location',
+                fn (Builder $location) => $location->where('warehouse_id', $warehouseId),
+            ))
+            ->when(is_scalar($locationId), fn (Builder $query) => $query->whereHas(
+                'inventory',
+                fn (Builder $inventory) => $inventory->where('location_id', $locationId),
+            ))
+            ->when(is_string($batchNo) && $batchNo !== '', fn (Builder $query) => $query->whereHas(
+                'inventory',
+                fn (Builder $inventory) => $inventory->where('batch_no', $batchNo),
+            ));
 
         return ApiResponse::paginated(
             $this->entities->paginateQuery(
@@ -82,6 +102,42 @@ class InventoryController extends Controller
             ),
             InventoryTransactionResource::class,
         );
+    }
+
+    public function options(): JsonResponse
+    {
+        // shortcut: one page covers a demo factory's master data; add paging when it grows.
+        $materials = Material::query()
+            ->where('status', true)
+            ->orderBy('id')
+            ->limit(200)
+            ->get(['id', 'code', 'name', 'unit', 'batch_managed']);
+
+        $warehouses = Warehouse::query()
+            ->with('locations')
+            ->where('status', true)
+            ->orderBy('id')
+            ->get()
+            ->map(fn (Warehouse $warehouse) => [
+                'id' => $warehouse->id,
+                'code' => $warehouse->code,
+                'name' => $warehouse->name,
+                'locations' => $warehouse->locations
+                    ->where('status', true)
+                    ->sortBy('code')
+                    ->values()
+                    ->map(fn (StorageLocation $location) => [
+                        'id' => $location->id,
+                        'code' => $location->code,
+                        'name' => $location->name,
+                    ])
+                    ->all(),
+            ]);
+
+        return ApiResponse::success([
+            'materials' => $materials,
+            'warehouses' => $warehouses,
+        ]);
     }
 
     public function inbound(InventoryMovementRequest $request): JsonResponse

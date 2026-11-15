@@ -256,8 +256,11 @@ Route::middleware(['auth:sanctum', 'active'])->group(function (): void {
     });
 
     Route::prefix('inventory')->name('api.inventory.')->group(function (): void {
+        Route::get('/options', [InventoryController::class, 'options'])
+            ->middleware('permission:inventory.index|inventory.inbound|inventory.outbound|inventory.adjust')->name('options');
         Route::get('/transactions', [InventoryController::class, 'transactions'])
-            ->middleware('permission:inventory.index')->name('transactions.index');
+            ->middleware('permission:inventory.index|inventory.inbound|inventory.outbound|inventory.adjust')
+            ->name('transactions.index');
         Route::get('/', [InventoryController::class, 'index'])
             ->middleware('permission:inventory.index')->name('index');
         Route::post('/inbound', [InventoryController::class, 'inbound'])

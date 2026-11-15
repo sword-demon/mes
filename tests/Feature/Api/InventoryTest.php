@@ -96,6 +96,48 @@ it('rejects every inventory endpoint without its own permission', function () {
     ])->assertForbidden();
     bearer(userWithPermissions([], 'tester_transactions'))->getJson('/api/v1/inventory/transactions')
         ->assertForbidden();
+    bearer(userWithPermissions([], 'tester_options'))->getJson('/api/v1/inventory/options')
+        ->assertForbidden();
+});
+
+it('serves inventory options with enabled materials and warehouse locations', function () {
+    $actor = userWithPermissions(['inventory.inbound']);
+    [$warehouse, $location] = inventoryLocation();
+    $material = Material::factory()->create(['code' => 'M001', 'status' => true]);
+    Material::factory()->create(['code' => 'M002', 'status' => false]);
+    StorageLocation::factory()->create([
+        'warehouse_id' => $warehouse->id,
+        'code' => 'A-99',
+        'status' => false,
+    ]);
+
+    bearer($actor)->getJson('/api/v1/inventory/options')
+        ->assertOk()
+        ->assertJsonCount(1, 'data.materials')
+        ->assertJsonPath('data.materials.0.code', 'M001')
+        ->assertJsonPath('data.materials.0.batch_managed', $material->batch_managed)
+        ->assertJsonPath('data.warehouses.0.id', $warehouse->id)
+        ->assertJsonCount(1, 'data.warehouses.0.locations')
+        ->assertJsonPath('data.warehouses.0.locations.0.id', $location->id)
+        ->assertJsonPath('data.warehouses.0.locations.0.code', 'A-01');
+});
+
+it('lets a movement-only user read the inventory ledger', function () {
+    $actor = userWithPermissions(['inventory.inbound']);
+    [, $location] = inventoryLocation();
+    $material = Material::factory()->create();
+    $inventory = Inventory::factory()->create([
+        'material_id' => $material->id,
+        'location_id' => $location->id,
+    ]);
+    InventoryTransaction::factory()->create([
+        'inventory_id' => $inventory->id,
+        'material_id' => $material->id,
+    ]);
+
+    bearer($actor)->getJson('/api/v1/inventory/transactions')
+        ->assertOk()
+        ->assertJsonCount(1, 'data.items');
 });
 
 it('creates an inventory row and an inbound transaction', function () {
@@ -340,4 +382,37 @@ it('lists inventory transactions filtered by material', function () {
         ->assertJsonPath('data.items.1.business_type', InventoryTransaction::OUTBOUND)
         ->assertJsonPath('data.items.1.quantity', -50)
         ->assertJsonPath('data.items.1.inventory.location.code', $location->code);
+});
+
+it('filters inventory transactions by warehouse, location and batch', function () {
+    $actor = userWithPermissions(['inventory.index']);
+    [$warehouse, $location] = inventoryLocation();
+    [, $otherLocation] = inventoryLocation('WH02', 'B-01');
+    $material = Material::factory()->create();
+
+    foreach ([
+        [$location, 'B001', 10],
+        [$otherLocation, 'B002', 20],
+    ] as [$target, $batchNo, $quantity]) {
+        $inventory = Inventory::factory()->create([
+            'material_id' => $material->id,
+            'location_id' => $target->id,
+            'batch_no' => $batchNo,
+        ]);
+        InventoryTransaction::factory()->create([
+            'inventory_id' => $inventory->id,
+            'material_id' => $material->id,
+            'quantity' => $quantity,
+            'after_quantity' => $quantity,
+        ]);
+    }
+
+    bearer($actor)->getJson('/api/v1/inventory/transactions?'.http_build_query([
+        'warehouse_id' => $warehouse->id,
+        'location_id' => $location->id,
+        'batch_no' => 'B001',
+    ]))->assertOk()
+        ->assertJsonCount(1, 'data.items')
+        ->assertJsonPath('data.items.0.quantity', 10)
+        ->assertJsonPath('data.items.0.inventory.batch_no', 'B001');
 });
