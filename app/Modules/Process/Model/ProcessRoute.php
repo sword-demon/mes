@@ -65,17 +65,26 @@ class ProcessRoute extends Model
     }
 
     /**
-     * What an order may pin: approved, enabled, on an enabled product, with no
-     * retired step. Kept on the model so order validation and dropdowns agree.
+     * Enabled, on an enabled product, with no retired step.
+     *
+     * @param  Builder<self>  $query
+     */
+    public function scopeSelectable(Builder $query): void
+    {
+        $query->where('status', true)
+            ->whereHas('product', fn (Builder $inner) => $inner->where('status', true))
+            ->whereDoesntHave('operations.process', fn (Builder $inner) => $inner->where('status', false));
+    }
+
+    /**
+     * What an order may pin: a selectable route that passed its audit. Kept on
+     * the model so order validation and dropdowns cannot drift apart.
      *
      * @param  Builder<self>  $query
      */
     public function scopeUsable(Builder $query): void
     {
-        $query->where('audit_status', self::APPROVED)
-            ->where('status', true)
-            ->whereHas('product', fn (Builder $inner) => $inner->where('status', true))
-            ->whereDoesntHave('operations.process', fn (Builder $inner) => $inner->where('status', false));
+        $query->where('audit_status', self::APPROVED)->selectable();
     }
 
     /**

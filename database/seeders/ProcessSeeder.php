@@ -27,7 +27,7 @@ class ProcessSeeder extends Seeder
     ];
 
     /**
-     * Demo routes keyed by product; approved ones are usable by orders, the
+     * Demo routes keyed by code; approved ones are usable by orders, the
      * pending one proves an unaudited route cannot be used.
      */
     private const ROUTES = [

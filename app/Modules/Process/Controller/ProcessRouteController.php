@@ -23,6 +23,10 @@ class ProcessRouteController extends Controller
 
         if ($request->boolean('usable')) {
             $query->usable();
+        } elseif ($request->boolean('status')) {
+            // `status=1` feeds the dropdowns, so a route whose product or any
+            // of its processes was retired must not look selectable.
+            $query->selectable();
         }
 
         return ApiResponse::paginated(
@@ -30,10 +34,7 @@ class ProcessRouteController extends Controller
                 $query,
                 $request->only(['product_id', 'audit_status', 'status', 'keyword', 'per_page']),
                 ['code', 'version'],
-                // `status=1` feeds the dropdowns, so a route whose product or
-                // any of its processes was retired must not look selectable.
-                ['product', 'operations.process'],
-                ['product_id', 'audit_status'],
+                filterColumns: ['product_id', 'audit_status'],
             ),
             ProcessRouteResource::class,
         );
@@ -54,7 +55,7 @@ class ProcessRouteController extends Controller
         $route->ensureEditable(array_keys($data));
 
         return ApiResponse::success(ProcessRouteResource::make(
-            $this->entities->update($route, $data)->load('product'),
+            $this->entities->update($route, $data)->loadMissing('product'),
         ));
     }
 

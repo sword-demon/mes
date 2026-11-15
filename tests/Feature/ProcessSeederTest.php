@@ -7,7 +7,7 @@ use Database\Seeders\MaterialSeeder;
 use Database\Seeders\ProcessSeeder;
 use Database\Seeders\ProductSeeder;
 
-test('the process seeder covers eight processes and three audited routes', function () {
+test('the process seeder covers eight processes and three routes with two audited', function () {
     $this->seed(MaterialSeeder::class);
     $this->seed(ProductSeeder::class);
     $this->seed(ProcessSeeder::class);
