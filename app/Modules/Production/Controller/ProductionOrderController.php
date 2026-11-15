@@ -64,53 +64,53 @@ class ProductionOrderController extends Controller
 
     public function submit(ProductionOrder $order): JsonResponse
     {
-        return $this->transition($order, ProductionOrder::PENDING, '提交审核');
+        return $this->transition($order, ProductionOrder::PENDING);
     }
 
     public function approve(ProductionOrder $order): JsonResponse
     {
-        return $this->transition($order, ProductionOrder::APPROVED, '审核通过');
+        return $this->transition($order, ProductionOrder::APPROVED);
     }
 
     public function release(ProductionOrder $order): JsonResponse
     {
-        return $this->transition($order, ProductionOrder::RELEASED, '下达');
+        return $this->transition($order, ProductionOrder::RELEASED);
     }
 
     public function start(ProductionOrder $order): JsonResponse
     {
-        return $this->transition($order, ProductionOrder::IN_PROGRESS, '开工');
+        return $this->transition($order, ProductionOrder::IN_PROGRESS);
     }
 
     public function pause(ProductionOrder $order): JsonResponse
     {
-        return $this->transition($order, ProductionOrder::PAUSED, '暂停');
+        return $this->transition($order, ProductionOrder::PAUSED);
     }
 
     public function resume(ProductionOrder $order): JsonResponse
     {
-        return $this->transition($order, ProductionOrder::IN_PROGRESS, '恢复生产');
+        return $this->transition($order, ProductionOrder::IN_PROGRESS);
     }
 
     public function complete(ProductionOrder $order): JsonResponse
     {
-        return $this->transition($order, ProductionOrder::COMPLETED, '完成');
+        return $this->transition($order, ProductionOrder::COMPLETED);
     }
 
     public function close(ProductionOrder $order): JsonResponse
     {
-        return $this->transition($order, ProductionOrder::CLOSED, '关闭');
+        return $this->transition($order, ProductionOrder::CLOSED);
     }
 
     public function cancel(ProductionOrder $order): JsonResponse
     {
-        return $this->transition($order, ProductionOrder::CANCELLED, '取消');
+        return $this->transition($order, ProductionOrder::CANCELLED);
     }
 
-    private function transition(ProductionOrder $order, string $target, string $action): JsonResponse
+    private function transition(ProductionOrder $order, string $target): JsonResponse
     {
         return ApiResponse::success(ProductionOrderResource::make(
-            $this->orders->transition($order, $target, $action)->load(self::RELATIONS),
+            $this->orders->transition($order, $target)->load(self::RELATIONS),
         ));
     }
 }

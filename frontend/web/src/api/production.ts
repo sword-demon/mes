@@ -110,8 +110,7 @@ export function transitionOrder(id: number, action: ProductionOrderAction) {
 export function listApprovedBoms() {
     // shortcut: one page covers a demo factory's approved BOMs; add paging when it does not.
     return api.get<Paginated<ApprovedBom>>('/basic-data/boms', {
-        status: true,
-        audit_status: 'approved',
+        usable: 1,
         per_page: 100,
     });
 }

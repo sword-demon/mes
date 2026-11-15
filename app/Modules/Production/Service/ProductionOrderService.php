@@ -9,6 +9,7 @@ use App\Modules\Process\Model\ProcessRoute;
 use App\Modules\Product\Model\Product;
 use App\Modules\Production\Model\ProductionOrder;
 use Illuminate\Support\Arr;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 
 class ProductionOrderService
@@ -37,6 +38,9 @@ class ProductionOrderService
     }
 
     /**
+     * Only a changed BOM, route, product or line is re-validated: editing a
+     * draft's remark must not fail because a pinned BOM was retired later.
+     *
      * @param  array<string, mixed>  $data
      */
     public function update(ProductionOrder $order, array $data): ProductionOrder
@@ -44,29 +48,49 @@ class ProductionOrderService
         return DB::transaction(function () use ($order, $data): ProductionOrder {
             $order->ensureEditable();
 
-            $effective = [...Arr::only($order->getAttributes(), [
-                'product_id',
-                'bom_id',
-                'route_id',
-                'production_line_id',
-            ]), ...Arr::only($data, [
-                'product_id',
-                'bom_id',
-                'route_id',
-                'production_line_id',
-            ])];
+            $effective = [
+                'product_id' => $order->product_id,
+                'bom_id' => $order->bom_id,
+                'route_id' => $order->route_id,
+                'production_line_id' => $order->production_line_id,
+                ...Arr::only($data, [
+                    'product_id',
+                    'bom_id',
+                    'route_id',
+                    'production_line_id',
+                ]),
+            ];
 
-            $product = $this->activeProduct((int) $effective['product_id']);
-            $bom = $this->usableBom((int) $effective['bom_id'], $product);
-            $route = $this->usableRoute((int) $effective['route_id'], $product);
-            $this->ensureActiveLine((int) $effective['production_line_id']);
+            if (array_key_exists('production_line_id', $data)
+                && (int) $data['production_line_id'] !== $order->production_line_id) {
+                $this->ensureActiveLine((int) $effective['production_line_id']);
+            }
 
-            $order->update([
-                ...$data,
-                'product_version_id' => $bom->product_version_id,
-                'bom_version' => $bom->version,
-                'route_version' => $route->version,
-            ]);
+            $pinningChanged = collect(['product_id', 'bom_id', 'route_id'])
+                ->contains(fn (string $key) => array_key_exists($key, $data)
+                    && (int) $data[$key] !== $order->{$key});
+
+            if ($pinningChanged) {
+                $product = $this->activeProduct((int) $effective['product_id']);
+                $bom = $this->usableBom((int) $effective['bom_id'], $product);
+                $route = $this->usableRoute((int) $effective['route_id'], $product);
+
+                $data = [
+                    ...$data,
+                    'product_version_id' => $bom->product_version_id,
+                    'bom_version' => $bom->version,
+                    'route_version' => $route->version,
+                ];
+            }
+
+            $start = $data['planned_start_at'] ?? $order->planned_start_at;
+            $end = array_key_exists('planned_end_at', $data) ? $data['planned_end_at'] : $order->planned_end_at;
+
+            if ($end !== null && Carbon::parse($end)->lt(Carbon::parse($start))) {
+                throw new ApiException('计划结束时间不能早于计划开始时间', 422);
+            }
+
+            $order->update($data);
 
             return $order;
         });
@@ -75,11 +99,11 @@ class ProductionOrderService
     /**
      * @throws ApiException
      */
-    public function transition(ProductionOrder $order, string $target, string $action): ProductionOrder
+    public function transition(ProductionOrder $order, string $target): ProductionOrder
     {
-        return DB::transaction(function () use ($order, $target, $action): ProductionOrder {
+        return DB::transaction(function () use ($order, $target): ProductionOrder {
             $locked = ProductionOrder::query()->lockForUpdate()->findOrFail($order->getKey());
-            $locked->transitionTo($target, $action);
+            $locked->transitionTo($target);
 
             return $locked;
         });
@@ -108,7 +132,7 @@ class ProductionOrderService
      */
     private function usableBom(int $bomId, Product $product): Bom
     {
-        $bom = Bom::query()->with('productVersion.product')->find($bomId);
+        $bom = Bom::query()->find($bomId);
 
         if ($bom === null) {
             throw new ApiException('BOM 不存在', 422);
@@ -126,7 +150,7 @@ class ProductionOrderService
             throw new ApiException('BOM 已停用，不能用于生产订单', 422);
         }
 
-        if (! $bom->productVersion->status) {
+        if (! Bom::query()->usable()->whereKey($bomId)->exists()) {
             throw new ApiException('BOM 的产品版本已停用，不能用于生产订单', 422);
         }
 

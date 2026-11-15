@@ -9,6 +9,7 @@ use Database\Factories\BomFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\Table;
 use Illuminate\Database\Eloquent\Attributes\UseFactory;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -63,6 +64,21 @@ class Bom extends Model
     public function isEditable(): bool
     {
         return $this->audit_status === self::DRAFT;
+    }
+
+    /**
+     * What an order may pin: an approved, enabled BOM on a live product version.
+     * Kept here so order validation and the dropdown cannot drift apart.
+     *
+     * @param  Builder<self>  $query
+     */
+    public function scopeUsable(Builder $query): void
+    {
+        $query->where('audit_status', self::APPROVED)
+            ->where('status', true)
+            ->whereHas('productVersion', fn (Builder $inner) => $inner
+                ->where('status', true)
+                ->whereHas('product', fn (Builder $product) => $product->where('status', true)));
     }
 
     /**

@@ -19,10 +19,15 @@ class BomController extends Controller
 
     public function index(Request $request): JsonResponse
     {
+        $query = Bom::query()->with(['productVersion.product']);
+
+        if ($request->boolean('usable')) {
+            $query->usable();
+        }
+
         return ApiResponse::paginated(
-            $this->entities->paginate(
-                Bom::class,
-                ['productVersion.product'],
+            $this->entities->paginateQuery(
+                $query,
                 $request->only(['product_version_id', 'audit_status', 'status', 'keyword', 'per_page']),
                 ['code', 'version'],
                 enabledRelations: ['productVersion', 'productVersion.product'],

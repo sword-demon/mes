@@ -20,15 +20,28 @@ class ProductionOrderFactory extends EloquentFactory
      */
     public function definition(): array
     {
+        $product = Product::factory()->create();
+        $version = ProductVersion::factory()->create(['product_id' => $product->id]);
+        $bom = Bom::factory()->create([
+            'product_version_id' => $version->id,
+            'version' => 'B1.0',
+            'audit_status' => Bom::APPROVED,
+        ]);
+        $route = ProcessRoute::factory()->create([
+            'product_id' => $product->id,
+            'version' => 'R1.0',
+            'audit_status' => ProcessRoute::APPROVED,
+        ]);
+
         return [
             'code' => 'PO-'.fake()->unique()->numerify('######'),
-            'product_id' => Product::factory(),
-            'product_version_id' => ProductVersion::factory(),
-            'bom_id' => Bom::factory(),
-            'route_id' => ProcessRoute::factory(),
+            'product_id' => $product->id,
+            'product_version_id' => $version->id,
+            'bom_id' => $bom->id,
+            'route_id' => $route->id,
             'production_line_id' => ProductionLine::factory(),
-            'bom_version' => 'V1.0',
-            'route_version' => 'V1.0',
+            'bom_version' => $bom->version,
+            'route_version' => $route->version,
             'planned_quantity' => 100,
             'planned_start_at' => now()->addDay(),
             'planned_end_at' => now()->addDays(3),

@@ -178,7 +178,7 @@ it('walks the full order state machine and rejects transitions that skip states'
 
     bearer($actor)->postJson("/api/v1/production/orders/{$order['id']}/approve")
         ->assertUnprocessable()
-        ->assertJsonPath('message', '生产订单当前状态为「草稿」，不能审核通过');
+        ->assertJsonPath('message', '生产订单当前状态为「草稿」，不能变更为「已审核」');
 
     $steps = [
         'submit' => ProductionOrder::PENDING,
@@ -199,7 +199,7 @@ it('walks the full order state machine and rejects transitions that skip states'
 
     bearer($actor)->postJson("/api/v1/production/orders/{$order['id']}/start")
         ->assertUnprocessable()
-        ->assertJsonPath('message', '生产订单当前状态为「已关闭」，不能开工');
+        ->assertJsonPath('message', '生产订单当前状态为「已关闭」，不能变更为「生产中」');
 });
 
 it('cancels an order before completion but never after it is completed', function () {
@@ -215,13 +215,13 @@ it('cancels an order before completion but never after it is completed', functio
 
     bearer($actor)->postJson("/api/v1/production/orders/{$order['id']}/cancel")
         ->assertUnprocessable()
-        ->assertJsonPath('message', '生产订单当前状态为「已取消」，不能取消');
+        ->assertJsonPath('message', '生产订单当前状态为「已取消」，不能变更为「已取消」');
 
     $completed = ProductionOrder::factory()->create(['status' => ProductionOrder::COMPLETED]);
 
     bearer($actor)->postJson("/api/v1/production/orders/{$completed->id}/cancel")
         ->assertUnprocessable()
-        ->assertJsonPath('message', '生产订单当前状态为「已完成」，不能取消');
+        ->assertJsonPath('message', '生产订单当前状态为「已完成」，不能变更为「已取消」');
 });
 
 it('edits a draft order, re-pins the bom and route, and locks it once submitted', function () {
@@ -271,6 +271,40 @@ it('keeps the version snapshots after the source records change', function () {
         ->assertOk()
         ->assertJsonPath('data.items.0.bom_version', 'B1.0')
         ->assertJsonPath('data.items.0.route_version', 'R1.0');
+});
+
+it('still lets a draft change its remark after the pinned bom was retired', function () {
+    [$product, $bom, $route, $line] = usableProductionReferences();
+    $actor = userWithPermissions(['production.orders.create', 'production.orders.update']);
+
+    $order = bearer($actor)->postJson('/api/v1/production/orders', productionOrderPayload($product, $bom, $route, $line))
+        ->json('data');
+
+    $bom->forceFill(['status' => false])->save();
+
+    bearer($actor)->putJson("/api/v1/production/orders/{$order['id']}", [
+        'remark' => '仅改备注',
+        'product_id' => $product->id,
+        'bom_id' => $bom->id,
+        'route_id' => $route->id,
+        'production_line_id' => $line->id,
+    ])
+        ->assertOk()
+        ->assertJsonPath('data.remark', '仅改备注')
+        ->assertJsonPath('data.bom_version', 'B1.0');
+});
+
+it('rejects an end date earlier than the stored start on a partial update', function () {
+    [$product, $bom, $route, $line] = usableProductionReferences();
+    $actor = userWithPermissions(['production.orders.create', 'production.orders.update']);
+
+    $order = bearer($actor)->postJson('/api/v1/production/orders', productionOrderPayload($product, $bom, $route, $line))
+        ->json('data');
+
+    bearer($actor)->putJson("/api/v1/production/orders/{$order['id']}", [
+        'planned_end_at' => '2026-11-15 08:00:00',
+    ])->assertUnprocessable()
+        ->assertJsonPath('message', '计划结束时间不能早于计划开始时间');
 });
 
 it('filters orders by status, product, line and planned date', function () {

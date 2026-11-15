@@ -141,10 +141,12 @@ class ProductionOrder extends Model
     /**
      * @throws ApiException
      */
-    public function transitionTo(string $target, string $action): void
+    public function transitionTo(string $target): void
     {
         if (! in_array($target, self::TRANSITIONS[$this->status] ?? [], true)) {
-            throw new ApiException("生产订单当前状态为「{$this->statusLabel()}」，不能{$action}", 422);
+            $label = self::STATUS_LABELS[$target] ?? $target;
+
+            throw new ApiException("生产订单当前状态为「{$this->statusLabel()}」，不能变更为「{$label}」", 422);
         }
 
         $this->update(['status' => $target]);

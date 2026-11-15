@@ -41,6 +41,24 @@ it('lists boms with their product version and only surfaces approved enabled one
         ->assertJsonPath('data.items.0.product_version.product.id', $approvedVersion->product_id);
 });
 
+it('lists only fully usable boms when the order form asks for them', function () {
+    $actor = userWithPermissions(['basic.boms.index']);
+    $usable = Bom::factory()->create(['version' => 'V1.0', 'audit_status' => Bom::APPROVED]);
+    Bom::factory()->create(['version' => 'V2.0', 'audit_status' => Bom::DRAFT]);
+    Bom::factory()->create(['version' => 'V3.0', 'audit_status' => Bom::APPROVED, 'status' => false]);
+    $retiredVersion = ProductVersion::factory()->create(['status' => false]);
+    Bom::factory()->create([
+        'product_version_id' => $retiredVersion->id,
+        'version' => 'V1.0',
+        'audit_status' => Bom::APPROVED,
+    ]);
+
+    bearer($actor)->getJson('/api/v1/basic-data/boms?usable=1')
+        ->assertOk()
+        ->assertJsonCount(1, 'data.items')
+        ->assertJsonPath('data.items.0.id', $usable->id);
+});
+
 it('returns 403 when listing boms without the permission', function () {
     bearer(userWithPermissions([]))->getJson('/api/v1/basic-data/boms')
         ->assertForbidden()
