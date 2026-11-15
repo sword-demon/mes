@@ -7,26 +7,31 @@ use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\Validator;
 
-class InspectionItemRequest extends FormRequest
+abstract class InspectionItemRequest extends FormRequest
 {
-    public function authorize(): bool
+    final public function authorize(): bool
     {
         return true;
     }
 
     /** @return array<string, array<int, mixed>> */
-    public function rules(): array
+    protected function itemRules(?InspectionItem $item = null): array
     {
-        $item = $this->route('item');
-        $presence = $item instanceof InspectionItem ? ['sometimes'] : [];
+        $presence = $item === null ? [] : ['sometimes'];
+        $decimal = ['numeric', 'decimal:0,3', 'between:-999999999.999,999999999.999'];
+        $code = Rule::unique('mes_inspection_items', 'code');
+
+        if ($item !== null) {
+            $code->ignore($item->id);
+        }
 
         return [
-            'code' => [...$presence, 'required', 'string', 'max:64', Rule::unique('mes_inspection_items', 'code')->ignore($item instanceof InspectionItem ? $item->id : null)],
+            'code' => [...$presence, 'required', 'string', 'max:64', $code],
             'name' => [...$presence, 'required', 'string', 'max:128'],
             'unit' => [...$presence, 'required', 'string', 'max:16'],
-            'standard_value' => [...$presence, 'required', 'numeric', 'decimal:0,3', 'between:-999999999.999,999999999.999'],
-            'min_value' => [...$presence, 'required', 'numeric', 'decimal:0,3', 'between:-999999999.999,999999999.999'],
-            'max_value' => [...$presence, 'required', 'numeric', 'decimal:0,3', 'between:-999999999.999,999999999.999'],
+            'standard_value' => [...$presence, 'required', ...$decimal],
+            'min_value' => [...$presence, 'required', ...$decimal],
+            'max_value' => [...$presence, 'required', ...$decimal],
             'status' => ['sometimes', 'boolean'],
         ];
     }

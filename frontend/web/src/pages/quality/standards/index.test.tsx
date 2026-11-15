@@ -69,6 +69,11 @@ it('shows numerical standards and hides maintenance actions for readers', async 
     expect(document.body.textContent).not.toContain('缺陷代码');
 });
 
+it('explains the empty state when the menu is visible but no quality permission is granted', async () => {
+    await render([]);
+    expect(document.body.textContent).toContain('暂无检验标准查看权限');
+});
+
 it('opens an editable standard with negative values and switches to classified defects', async () => {
     await render(['quality.standards.index', 'button.quality.standards.update', 'quality.defect-codes.index']);
     const edit = [...document.querySelectorAll('button')].find((button) => button.textContent?.replace(/\s/g, '') === '编辑');

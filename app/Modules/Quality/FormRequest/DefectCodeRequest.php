@@ -6,21 +6,25 @@ use App\Modules\Quality\Model\DefectCode;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 
-class DefectCodeRequest extends FormRequest
+abstract class DefectCodeRequest extends FormRequest
 {
-    public function authorize(): bool
+    final public function authorize(): bool
     {
         return true;
     }
 
     /** @return array<string, array<int, mixed>> */
-    public function rules(): array
+    protected function defectRules(?DefectCode $defect = null): array
     {
-        $defect = $this->route('defect');
-        $presence = $defect instanceof DefectCode ? ['sometimes'] : [];
+        $presence = $defect === null ? [] : ['sometimes'];
+        $code = Rule::unique('mes_defect_codes', 'code');
+
+        if ($defect !== null) {
+            $code->ignore($defect->id);
+        }
 
         return [
-            'code' => [...$presence, 'required', 'string', 'max:64', Rule::unique('mes_defect_codes', 'code')->ignore($defect instanceof DefectCode ? $defect->id : null)],
+            'code' => [...$presence, 'required', 'string', 'max:64', $code],
             'name' => [...$presence, 'required', 'string', 'max:128'],
             'category' => [...$presence, 'required', 'string', 'max:64'],
             'status' => ['sometimes', 'boolean'],

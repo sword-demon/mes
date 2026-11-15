@@ -5,7 +5,8 @@ namespace App\Modules\Quality\Controller;
 use App\Core\Services\EntityService;
 use App\Http\Controllers\Controller;
 use App\Http\Responses\ApiResponse;
-use App\Modules\Quality\FormRequest\DefectCodeRequest;
+use App\Modules\Quality\FormRequest\StoreDefectCodeRequest;
+use App\Modules\Quality\FormRequest\UpdateDefectCodeRequest;
 use App\Modules\Quality\Model\DefectCode;
 use App\Modules\Quality\Resource\DefectCodeResource;
 use Illuminate\Http\JsonResponse;
@@ -24,12 +25,12 @@ class DefectCodeController extends Controller
         ), DefectCodeResource::class);
     }
 
-    public function store(DefectCodeRequest $request): JsonResponse
+    public function store(StoreDefectCodeRequest $request): JsonResponse
     {
         return ApiResponse::success(DefectCodeResource::make($this->entities->create(DefectCode::class, $request->validated())));
     }
 
-    public function update(DefectCodeRequest $request, DefectCode $defect): JsonResponse
+    public function update(UpdateDefectCodeRequest $request, DefectCode $defect): JsonResponse
     {
         return ApiResponse::success(DefectCodeResource::make($this->entities->update($defect, $request->validated())));
     }

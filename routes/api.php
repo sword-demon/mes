@@ -35,18 +35,20 @@ Route::post('/auth/tokens', [AccessTokenController::class, 'store'])
     ->name('api.auth.tokens.store');
 
 Route::middleware(['auth:sanctum', 'active'])->group(function (): void {
-    Route::get('/quality/defect-codes', [DefectCodeController::class, 'index'])
-        ->middleware('permission:quality.defect-codes.index')->name('api.quality.defect-codes.index');
-    Route::post('/quality/defect-codes', [DefectCodeController::class, 'store'])
-        ->middleware('permission:quality.defect-codes.create')->name('api.quality.defect-codes.store');
-    Route::put('/quality/defect-codes/{defect}', [DefectCodeController::class, 'update'])
-        ->middleware('permission:quality.defect-codes.update')->name('api.quality.defect-codes.update');
-    Route::get('/quality/inspection-items', [InspectionItemController::class, 'index'])
-        ->middleware('permission:quality.standards.index')->name('api.quality.inspection-items.index');
-    Route::post('/quality/inspection-items', [InspectionItemController::class, 'store'])
-        ->middleware('permission:quality.standards.create')->name('api.quality.inspection-items.store');
-    Route::put('/quality/inspection-items/{item}', [InspectionItemController::class, 'update'])
-        ->middleware('permission:quality.standards.update')->name('api.quality.inspection-items.update');
+    Route::prefix('quality')->name('api.quality.')->group(function (): void {
+        Route::get('/defect-codes', [DefectCodeController::class, 'index'])
+            ->middleware('permission:quality.defect-codes.index')->name('defect-codes.index');
+        Route::post('/defect-codes', [DefectCodeController::class, 'store'])
+            ->middleware('permission:quality.defect-codes.create')->name('defect-codes.store');
+        Route::put('/defect-codes/{defect}', [DefectCodeController::class, 'update'])
+            ->middleware('permission:quality.defect-codes.update')->name('defect-codes.update');
+        Route::get('/inspection-items', [InspectionItemController::class, 'index'])
+            ->middleware('permission:quality.standards.index')->name('inspection-items.index');
+        Route::post('/inspection-items', [InspectionItemController::class, 'store'])
+            ->middleware('permission:quality.standards.create')->name('inspection-items.store');
+        Route::put('/inspection-items/{item}', [InspectionItemController::class, 'update'])
+            ->middleware('permission:quality.standards.update')->name('inspection-items.update');
+    });
     Route::get('/me', [MeController::class, 'show'])->name('api.me');
 
     Route::delete('/auth/tokens', [AccessTokenController::class, 'destroy'])

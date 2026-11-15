@@ -5,7 +5,8 @@ namespace App\Modules\Quality\Controller;
 use App\Core\Services\EntityService;
 use App\Http\Controllers\Controller;
 use App\Http\Responses\ApiResponse;
-use App\Modules\Quality\FormRequest\InspectionItemRequest;
+use App\Modules\Quality\FormRequest\StoreInspectionItemRequest;
+use App\Modules\Quality\FormRequest\UpdateInspectionItemRequest;
 use App\Modules\Quality\Model\InspectionItem;
 use App\Modules\Quality\Resource\InspectionItemResource;
 use App\Modules\Quality\Service\InspectionItemService;
@@ -14,7 +15,7 @@ use Illuminate\Http\Request;
 
 class InspectionItemController extends Controller
 {
-    public function __construct(private readonly EntityService $entities, private readonly InspectionItemService $items) {}
+    public function __construct(private readonly EntityService $entities, private readonly InspectionItemService $inspectionItems) {}
 
     public function index(Request $request): JsonResponse
     {
@@ -24,13 +25,13 @@ class InspectionItemController extends Controller
         ), InspectionItemResource::class);
     }
 
-    public function store(InspectionItemRequest $request): JsonResponse
+    public function store(StoreInspectionItemRequest $request): JsonResponse
     {
-        return ApiResponse::success(InspectionItemResource::make($this->items->save($request->validated())));
+        return ApiResponse::success(InspectionItemResource::make($this->inspectionItems->save($request->validated())));
     }
 
-    public function update(InspectionItemRequest $request, InspectionItem $item): JsonResponse
+    public function update(UpdateInspectionItemRequest $request, InspectionItem $item): JsonResponse
     {
-        return ApiResponse::success(InspectionItemResource::make($this->items->save($request->validated(), $item)));
+        return ApiResponse::success(InspectionItemResource::make($this->inspectionItems->save($request->validated(), $item)));
     }
 }
