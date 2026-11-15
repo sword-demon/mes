@@ -55,6 +55,7 @@ class SystemSeeder extends Seeder
         ]],
         ['slug' => 'material', 'name' => '物料管理', 'icon' => 'InboxOutlined', 'children' => [
             ['slug' => 'material.inventory', 'name' => '库存查询', 'path' => '/material/inventory'],
+            ['slug' => 'material.inventory-alerts', 'name' => '库存预警', 'path' => '/material/inventory/alerts'],
             ['slug' => 'material.inbound', 'name' => '入库管理', 'path' => '/material/inbound'],
             ['slug' => 'material.outbound', 'name' => '出库管理', 'path' => '/material/outbound'],
             ['slug' => 'material.requisitions', 'name' => '领料管理', 'path' => '/material/requisitions'],
@@ -139,6 +140,9 @@ class SystemSeeder extends Seeder
         'process.routes.submit' => '提交工艺路线审核',
         'process.routes.audit' => '审核工艺路线',
         'inventory.index' => '库存与流水查询',
+        'inventory.alerts.index' => '库存预警列表',
+        'inventory.alerts.confirm' => '确认库存预警',
+        'inventory.alerts.close' => '关闭库存预警',
         'inventory.inbound' => '库存入库',
         'inventory.outbound' => '库存出库',
         'inventory.adjust' => '库存调整',
@@ -233,7 +237,7 @@ class SystemSeeder extends Seeder
         'production_operator' => ['name' => '生产操作员', 'menus' => ['dashboard', 'production', 'execution'], 'api' => ['production.dispatches.mine', 'production.reports.index', 'production.reports.create', 'production.reports.reverse', 'production.flows.index', 'production.flows.start', 'production.flows.complete', 'production.flows.exception', 'production.flows.rework', 'production.sns.index', 'production.sns.create', 'production.sns.bind', 'production.sns.print'], 'scope' => 'line'],
         'quality_inspector' => ['name' => '质检员', 'menus' => ['dashboard', 'quality', 'traceability'], 'api' => ['production.flows.index', 'quality.standards.index', 'quality.defect-codes.index', 'quality.inspections.index', 'quality.inspections.create', 'quality.inspections.record', 'quality.defects.index', 'quality.defects.create', 'quality.defects.process', 'quality.defects.rework', 'quality.defects.scrap', 'quality.defects.recheck'], 'scope' => 'line'],
         'quality_manager' => ['name' => '质检主管', 'menus' => ['dashboard', 'quality', 'traceability'], 'api' => ['quality.standards.index', 'quality.standards.create', 'quality.standards.update', 'quality.defect-codes.index', 'quality.defect-codes.create', 'quality.defect-codes.update', 'quality.inspections.index', 'quality.inspections.create', 'quality.inspections.record', 'quality.defects.index', 'quality.defects.create', 'quality.defects.process', 'quality.defects.rework', 'quality.defects.scrap', 'quality.defects.recheck'], 'scope' => 'factory'],
-        'warehouse_manager' => ['name' => '仓库管理员', 'menus' => ['dashboard', 'material', 'basic', 'execution', 'traceability'], 'api' => ['inventory.index', 'inventory.inbound', 'inventory.outbound', 'inventory.adjust', 'production.sns.index', 'production.sns.create', 'production.sns.bind', 'production.sns.print', 'production.sns.void'], 'scope' => 'factory'],
+        'warehouse_manager' => ['name' => '仓库管理员', 'menus' => ['dashboard', 'material', 'basic', 'execution', 'traceability'], 'api' => ['inventory.index', 'inventory.alerts.index', 'inventory.alerts.confirm', 'inventory.alerts.close', 'inventory.inbound', 'inventory.outbound', 'inventory.adjust', 'production.sns.index', 'production.sns.create', 'production.sns.bind', 'production.sns.print', 'production.sns.void'], 'scope' => 'factory'],
         'equipment_manager' => ['name' => '设备管理员', 'menus' => ['dashboard', 'equipment'], 'scope' => 'factory'],
     ];
 

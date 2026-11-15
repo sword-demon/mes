@@ -104,7 +104,7 @@ class InventoryController extends Controller
         );
     }
 
-    public function options(): JsonResponse
+    public function options(Request $request): JsonResponse
     {
         // shortcut: one page covers a demo factory's master data; add paging when it grows.
         $materials = Material::query()

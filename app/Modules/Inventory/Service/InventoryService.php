@@ -61,7 +61,7 @@ class InventoryService
     private function apply(array $data, string $businessType, ?int $operatorId): Inventory
     {
         return DB::transaction(function () use ($data, $businessType, $operatorId): Inventory {
-            $material = Material::query()->whereKey($data['material_id'])->first();
+            $material = Material::query()->lockForUpdate()->whereKey($data['material_id'])->first();
 
             if ($material === null || ! $material->status) {
                 throw new ApiException('物料不存在或已停用', 422);

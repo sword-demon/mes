@@ -8,6 +8,7 @@ import Factories from '@/pages/basic-data/factories';
 import Materials from '@/pages/basic-data/materials';
 import MaterialInbound from '@/pages/material/inbound';
 import MaterialInventory from '@/pages/material/inventory';
+import MaterialInventoryAlerts from '@/pages/material/inventory-alerts';
 import MaterialOutbound from '@/pages/material/outbound';
 import ProductionLines from '@/pages/basic-data/production-lines';
 import Products from '@/pages/basic-data/products';
@@ -46,6 +47,7 @@ const pages: Record<string, () => ReactNode> = {
     '/basic-data/employees': Employees,
     '/basic-data/materials': Materials,
     '/material/inventory': MaterialInventory,
+    '/material/inventory/alerts': MaterialInventoryAlerts,
     '/material/inbound': MaterialInbound,
     '/material/outbound': MaterialOutbound,
     '/basic-data/products': Products,

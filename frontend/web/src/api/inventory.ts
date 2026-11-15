@@ -2,6 +2,7 @@ import { api } from './client';
 import type { Paginated } from '@/types/api';
 
 export type InventoryBusinessType = 'inbound' | 'outbound' | 'adjustment';
+export type InventoryAlertStatus = 'pending' | 'confirmed' | 'closed';
 
 export type InventoryNamedRef = { id: number; code: string; name: string };
 
@@ -49,6 +50,21 @@ export type InventoryTransaction = {
         location: InventoryLocationRef | null;
     };
     created_at: string;
+};
+
+export type InventoryAlert = {
+    id: number;
+    material_id: number;
+    min_stock: number;
+    current_quantity: number;
+    status: InventoryAlertStatus;
+    status_label: string;
+    handled_by: { id: number; name: string } | null;
+    handled_at: string | null;
+    resolved_at: string | null;
+    material: InventoryMaterialRef;
+    created_at: string;
+    updated_at: string;
 };
 
 export type InventoryParams = {
@@ -100,6 +116,22 @@ export function listInventoryTransactions(params: InventoryTransactionParams = {
 
 export function getInventoryOptions() {
     return api.get<InventoryOptions>('/inventory/options');
+}
+
+export function listInventoryAlerts(params: Pick<InventoryParams, 'page' | 'per_page' | 'material_id'> = {}) {
+    return api.get<Paginated<InventoryAlert>>('/inventory/alerts', params);
+}
+
+export function searchInventoryAlertMaterials(keyword: string) {
+    return api.get<{ materials: InventoryMaterialRef[] }>('/inventory/alerts/options/materials', { keyword });
+}
+
+export function confirmInventoryAlert(id: number) {
+    return api.post<InventoryAlert>(`/inventory/alerts/${id}/confirm`);
+}
+
+export function closeInventoryAlert(id: number) {
+    return api.post<InventoryAlert>(`/inventory/alerts/${id}/close`);
 }
 
 export function inboundInventory(payload: InventoryMovementPayload) {

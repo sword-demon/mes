@@ -2,6 +2,7 @@
 
 use App\Modules\Bom\Controller\BomController;
 use App\Modules\Bom\Controller\BomItemController;
+use App\Modules\Inventory\Controller\InventoryAlertController;
 use App\Modules\Inventory\Controller\InventoryController;
 use App\Modules\Material\Controller\MaterialController;
 use App\Modules\Organization\Controller\EmployeeController;
@@ -256,6 +257,14 @@ Route::middleware(['auth:sanctum', 'active'])->group(function (): void {
     });
 
     Route::prefix('inventory')->name('api.inventory.')->group(function (): void {
+        Route::get('/alerts', [InventoryAlertController::class, 'index'])
+            ->middleware('permission:inventory.alerts.index')->name('alerts.index');
+        Route::get('/alerts/options/materials', [InventoryAlertController::class, 'materialOptions'])
+            ->middleware('permission:inventory.alerts.index')->name('alerts.options.materials');
+        Route::post('/alerts/{alert}/confirm', [InventoryAlertController::class, 'confirm'])
+            ->middleware('permission:inventory.alerts.confirm')->name('alerts.confirm');
+        Route::post('/alerts/{alert}/close', [InventoryAlertController::class, 'close'])
+            ->middleware('permission:inventory.alerts.close')->name('alerts.close');
         Route::get('/options', [InventoryController::class, 'options'])
             ->middleware('permission:inventory.index|inventory.inbound|inventory.outbound|inventory.adjust')->name('options');
         Route::get('/transactions', [InventoryController::class, 'transactions'])
