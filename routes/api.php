@@ -2,6 +2,7 @@
 
 use App\Modules\Bom\Controller\BomController;
 use App\Modules\Bom\Controller\BomItemController;
+use App\Modules\Inventory\Controller\InventoryController;
 use App\Modules\Material\Controller\MaterialController;
 use App\Modules\Organization\Controller\EmployeeController;
 use App\Modules\Organization\Controller\FactoryController;
@@ -252,6 +253,19 @@ Route::middleware(['auth:sanctum', 'active'])->group(function (): void {
             Route::delete('/routes/{route}/operations/{operation}', [RouteOperationController::class, 'destroy'])
                 ->middleware('permission:process.routes.update')->name('routes.operations.destroy');
         });
+    });
+
+    Route::prefix('inventory')->name('api.inventory.')->group(function (): void {
+        Route::get('/transactions', [InventoryController::class, 'transactions'])
+            ->middleware('permission:inventory.index')->name('transactions.index');
+        Route::get('/', [InventoryController::class, 'index'])
+            ->middleware('permission:inventory.index')->name('index');
+        Route::post('/inbound', [InventoryController::class, 'inbound'])
+            ->middleware('permission:inventory.inbound')->name('inbound');
+        Route::post('/outbound', [InventoryController::class, 'outbound'])
+            ->middleware('permission:inventory.outbound')->name('outbound');
+        Route::post('/adjust', [InventoryController::class, 'adjust'])
+            ->middleware('permission:inventory.adjust')->name('adjust');
     });
 
     Route::prefix('production')->name('api.production.')->group(function (): void {
