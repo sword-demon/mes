@@ -15,6 +15,7 @@ use App\Modules\Product\Controller\ProductController;
 use App\Modules\Product\Controller\ProductVersionController;
 use App\Modules\Production\Controller\ProductionDispatchController;
 use App\Modules\Production\Controller\ProductionOrderController;
+use App\Modules\Production\Controller\ProductionReportController;
 use App\Modules\Production\Controller\ProductionTaskController;
 use App\Modules\System\Controller\AccessTokenController;
 use App\Modules\System\Controller\DepartmentController;
@@ -254,5 +255,16 @@ Route::middleware(['auth:sanctum', 'active'])->group(function (): void {
             ->middleware('permission:production.dispatches.create')->name('dispatches.store');
         Route::get('/tasks/{task}/operations', [ProductionDispatchController::class, 'operations'])
             ->middleware('permission:production.dispatches.create')->name('tasks.operations');
+
+        Route::get('/reports', [ProductionReportController::class, 'index'])
+            ->middleware('permission:production.reports.index')->name('reports.index');
+        Route::get('/reports/options', [ProductionReportController::class, 'options'])
+            ->middleware('permission:production.reports.create')->name('reports.options');
+        Route::get('/reports/tasks/{task}/operations', [ProductionReportController::class, 'operations'])
+            ->middleware('permission:production.reports.create')->name('reports.tasks.operations');
+        Route::post('/reports', [ProductionReportController::class, 'store'])
+            ->middleware('permission:production.reports.create')->name('reports.store');
+        Route::post('/reports/{report}/reverse', [ProductionReportController::class, 'reverse'])
+            ->middleware('permission:production.reports.reverse')->name('reports.reverse');
     });
 });

@@ -185,6 +185,85 @@ export type ProductionDispatchPayload = {
     dispatched_at?: string;
 };
 
+export const PRODUCTION_REPORT_TYPES = [
+    { value: 'normal', label: '正常', color: 'blue' },
+    { value: 'batch', label: '批量', color: 'cyan' },
+    { value: 'reversed', label: '已冲销', color: 'default' },
+] as const;
+
+export type ProductionReportType = (typeof PRODUCTION_REPORT_TYPES)[number]['value'];
+
+export type ProductionReport = {
+    id: number;
+    code: string;
+    production_task_id: number;
+    route_operation_id: number;
+    employee_id: number;
+    team_id: number | null;
+    quantity: string;
+    qualified_quantity: string;
+    defective_quantity: string;
+    type: ProductionReportType;
+    type_label: string;
+    reported_at: string;
+    reversed_at: string | null;
+    production_task?: {
+        id: number;
+        code: string;
+        production_order_id: number;
+        planned_quantity: string;
+        produced_quantity: string;
+        progress_percent: number;
+        status: ProductionTaskStatus;
+        status_label: string;
+    };
+    production_order?: { id: number; code: string };
+    product?: NamedRef;
+    route_operation?: {
+        id: number;
+        sequence: number;
+        process: { id: number; code: string; name: string };
+    };
+    employee?: { id: number; employee_no: string; name: string };
+    team?: NamedRef | null;
+};
+
+export type ProductionReportParams = {
+    page?: number;
+    per_page?: number;
+    keyword?: string;
+    production_task_id?: number;
+    production_order_id?: number;
+    employee_id?: number;
+    type?: ProductionReportType;
+    start_date?: string;
+    end_date?: string;
+};
+
+export type ProductionReportPayload = {
+    production_task_id: number;
+    route_operation_id: number;
+    employee_id: number;
+    quantity: number;
+    qualified_quantity: number;
+    defective_quantity: number;
+    type?: 'normal' | 'batch';
+    reported_at?: string;
+};
+
+export type ProductionReportOptions = {
+    tasks: {
+        id: number;
+        code: string;
+        planned_quantity: string;
+        produced_quantity: string;
+        remaining_quantity: string;
+        product: NamedRef | null;
+        production_order: { id: number; code: string } | null;
+    }[];
+    employees: { id: number; employee_no: string; name: string }[];
+};
+
 export type TaskRouteOperation = {
     id: number;
     route_id: number;
@@ -252,6 +331,26 @@ export function createDispatch(payload: ProductionDispatchPayload) {
 
 export function listTaskOperations(taskId: number) {
     return api.get<TaskRouteOperation[]>(`/production/tasks/${taskId}/operations`);
+}
+
+export function listReports(params: ProductionReportParams = {}) {
+    return api.get<Paginated<ProductionReport>>('/production/reports', params);
+}
+
+export function createReport(payload: ProductionReportPayload) {
+    return api.post<ProductionReport>('/production/reports', payload);
+}
+
+export function reverseReport(id: number) {
+    return api.post<ProductionReport>(`/production/reports/${id}/reverse`);
+}
+
+export function getReportOptions() {
+    return api.get<ProductionReportOptions>('/production/reports/options');
+}
+
+export function listReportOperations(taskId: number) {
+    return api.get<TaskRouteOperation[]>(`/production/reports/tasks/${taskId}/operations`);
 }
 
 export function listApprovedBoms() {

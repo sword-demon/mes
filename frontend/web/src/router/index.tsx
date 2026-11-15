@@ -14,6 +14,7 @@ import Login from '@/pages/login';
 import Placeholder from '@/pages/placeholder';
 import ProductionOrders from '@/pages/production/orders';
 import ProductionDispatches from '@/pages/production/dispatch';
+import ProductionReports from '@/pages/production/reports';
 import ProductionTasks from '@/pages/production/tasks';
 import Users from '@/pages/system/users';
 import { useAuthStore } from '@/stores/auth';
@@ -40,6 +41,7 @@ const pages: Record<string, () => ReactNode> = {
     '/production/orders': ProductionOrders,
     '/production/tasks': ProductionTasks,
     '/production/dispatch': ProductionDispatches,
+    '/production/reports': ProductionReports,
     '/system/users': Users,
 };
 
