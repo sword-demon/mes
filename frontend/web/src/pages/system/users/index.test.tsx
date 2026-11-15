@@ -2,6 +2,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { App as AntdApp } from 'antd';
 import { act } from 'react';
 import { createRoot } from 'react-dom/client';
+import type { Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import Users from './index';
 import { http } from '@/api/client';
@@ -23,6 +24,7 @@ window.matchMedia ??= ((query: string) => ({
 })) as unknown as typeof window.matchMedia;
 
 let requested: string[] = [];
+let root: Root;
 
 async function renderUsers() {
     const container = document.createElement('div');
@@ -33,7 +35,8 @@ async function renderUsers() {
     });
 
     await act(async () => {
-        createRoot(container).render(
+        root = createRoot(container);
+        root.render(
             <QueryClientProvider client={queryClient}>
                 <AntdApp>
                     <Users />
@@ -65,6 +68,7 @@ describe('用户管理页', () => {
     });
 
     afterEach(() => {
+        act(() => root?.unmount());
         document.body.innerHTML = '';
     });
 
