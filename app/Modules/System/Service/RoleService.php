@@ -10,7 +10,10 @@ use Illuminate\Pagination\LengthAwarePaginator;
 
 class RoleService
 {
-    public function __construct(private readonly AccessControlService $access) {}
+    public function __construct(
+        private readonly AccessControlService $access,
+        private readonly OperationLogService $operationLogs,
+    ) {}
 
     /**
      * A role may not hand out a permission its author does not hold.
@@ -58,6 +61,14 @@ class RoleService
         $role = Role::query()->create($data);
         $role->permissions()->sync($permissionIds);
 
+        $this->operationLogs->record(
+            action: 'system.role.created',
+            actionName: '新增角色',
+            objectType: '角色',
+            objectId: $role->id,
+            objectName: $role->name,
+        );
+
         return $role->load('permissions');
     }
 
@@ -79,13 +90,27 @@ class RoleService
             throw new ApiException('超级管理员角色编码为系统保留，不能使用', 403, status: 403);
         }
 
+        $role->loadMissing('permissions');
+        $before = $this->snapshot($role);
         $role->update($data);
 
         if ($permissionIds !== null) {
             $role->permissions()->sync($permissionIds);
         }
 
-        return $role->load('permissions');
+        $role->load('permissions');
+
+        $this->operationLogs->record(
+            action: 'system.role.updated',
+            actionName: '编辑角色',
+            objectType: '角色',
+            objectId: $role->id,
+            objectName: $role->name,
+            before: $before,
+            after: $this->snapshot($role),
+        );
+
+        return $role;
     }
 
     public function delete(Role $role): void
@@ -99,6 +124,27 @@ class RoleService
         }
 
         $role->delete();
+
+        $this->operationLogs->record(
+            action: 'system.role.deleted',
+            actionName: '删除角色',
+            objectType: '角色',
+            objectId: $role->id,
+            objectName: $role->name,
+        );
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function snapshot(Role $role): array
+    {
+        return [
+            '名称' => $role->name,
+            '编码' => $role->code,
+            '状态' => $role->status ? '启用' : '停用',
+            '权限' => $role->permissions->pluck('code')->sort()->values()->all(),
+        ];
     }
 
     /**

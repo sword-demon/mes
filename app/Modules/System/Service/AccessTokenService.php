@@ -10,6 +10,8 @@ use Laravel\Sanctum\TransientToken;
 
 class AccessTokenService
 {
+    public function __construct(private readonly LoginLogService $loginLogs) {}
+
     /**
      * @return array{user: User, token: string}
      *
@@ -19,15 +21,36 @@ class AccessTokenService
     {
         $user = User::query()->where('email', $email)->first();
 
-        if (! $user || ! $user->status || ! Hash::check($password, $user->password)) {
+        if ($user === null) {
+            $this->loginLogs->record($email, null, false, '账号不存在');
+
             throw ValidationException::withMessages([
                 'email' => __('auth.failed'),
             ]);
         }
 
+        if (! $user->status) {
+            $this->loginLogs->record($email, $user, false, '账号已停用');
+
+            throw ValidationException::withMessages([
+                'email' => __('auth.failed'),
+            ]);
+        }
+
+        if (! Hash::check($password, $user->password)) {
+            $this->loginLogs->record($email, $user, false, '密码错误');
+
+            throw ValidationException::withMessages([
+                'email' => __('auth.failed'),
+            ]);
+        }
+
+        $token = $user->createToken($deviceName)->plainTextToken;
+        $this->loginLogs->record($email, $user, true, '登录成功');
+
         return [
             'user' => $user,
-            'token' => $user->createToken($deviceName)->plainTextToken,
+            'token' => $token,
         ];
     }
 

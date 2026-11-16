@@ -1,0 +1,60 @@
+<?php
+
+namespace App\Modules\System\Model;
+
+use Illuminate\Database\Eloquent\Attributes\Fillable;
+use Illuminate\Database\Eloquent\Attributes\Table;
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Support\Carbon;
+
+/**
+ * @property int $id
+ * @property int|null $user_id
+ * @property string $user_name
+ * @property string $action
+ * @property string $action_name
+ * @property string $object_type
+ * @property int|null $object_id
+ * @property string $object_name
+ * @property string $summary
+ * @property array<string, array{before: mixed, after: mixed}>|null $changes
+ * @property string $ip
+ * @property Carbon|null $created_at
+ */
+#[Fillable([
+    'user_id',
+    'user_name',
+    'action',
+    'action_name',
+    'object_type',
+    'object_id',
+    'object_name',
+    'summary',
+    'changes',
+    'ip',
+])]
+#[Table('sys_operation_logs')]
+class OperationLog extends Model
+{
+    public const UPDATED_AT = null;
+
+    /**
+     * @return BelongsTo<User, $this>
+     */
+    public function user(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'user_id');
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    protected function casts(): array
+    {
+        return [
+            'changes' => 'array',
+            'created_at' => 'datetime',
+        ];
+    }
+}

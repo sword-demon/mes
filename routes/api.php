@@ -36,6 +36,7 @@ use App\Modules\System\Controller\AccessTokenController;
 use App\Modules\System\Controller\DepartmentController;
 use App\Modules\System\Controller\MeController;
 use App\Modules\System\Controller\MenuController;
+use App\Modules\System\Controller\OperationLogController;
 use App\Modules\System\Controller\PermissionController;
 use App\Modules\System\Controller\RoleController;
 use App\Modules\System\Controller\UserController;
@@ -166,6 +167,11 @@ Route::middleware(['auth:sanctum', 'active'])->group(function (): void {
             ->middleware('permission:system.departments.update')->name('departments.update');
         Route::delete('/departments/{department}', [DepartmentController::class, 'destroy'])
             ->middleware('permission:system.departments.delete')->name('departments.destroy');
+
+        Route::get('/operation-logs/options', [OperationLogController::class, 'options'])
+            ->middleware('permission:system.logs.index')->name('operation-logs.options');
+        Route::get('/operation-logs', [OperationLogController::class, 'index'])
+            ->middleware('permission:system.logs.index')->name('operation-logs.index');
     });
 
     Route::prefix('basic-data')->name('api.basic-data.')->group(function (): void {

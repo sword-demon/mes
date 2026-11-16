@@ -225,6 +225,7 @@ class SystemSeeder extends Seeder
         'system.departments.create' => '新增部门',
         'system.departments.update' => '编辑部门',
         'system.departments.delete' => '删除部门',
+        'system.logs.index' => '操作日志列表',
     ];
 
     /**

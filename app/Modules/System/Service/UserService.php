@@ -8,7 +8,10 @@ use Illuminate\Pagination\LengthAwarePaginator;
 
 class UserService
 {
-    public function __construct(private readonly AccessControlService $access) {}
+    public function __construct(
+        private readonly AccessControlService $access,
+        private readonly OperationLogService $operationLogs,
+    ) {}
 
     /**
      * @return LengthAwarePaginator<int, User>
@@ -41,6 +44,14 @@ class UserService
         $user = User::query()->create($data);
         $user->roles()->sync($roleIds);
 
+        $this->operationLogs->record(
+            action: 'system.user.created',
+            actionName: '新增用户',
+            objectType: '用户',
+            objectId: $user->id,
+            objectName: $user->name,
+        );
+
         return $user->load('roles');
     }
 
@@ -55,9 +66,22 @@ class UserService
             throw new ApiException('不能停用当前登录账号', 403, status: 403);
         }
 
+        $user->loadMissing('roles');
+        $before = $this->snapshot($user);
         $user->update($data);
+        $user->load('roles');
 
-        return $user->load('roles');
+        $this->operationLogs->record(
+            action: 'system.user.updated',
+            actionName: '编辑用户',
+            objectType: '用户',
+            objectId: $user->id,
+            objectName: $user->name,
+            before: $before,
+            after: $this->snapshot($user),
+        );
+
+        return $user;
     }
 
     public function resetPassword(User $actor, User $user, string $password): void
@@ -66,6 +90,14 @@ class UserService
 
         $user->update(['password' => $password]);
         $user->tokens()->delete();
+
+        $this->operationLogs->record(
+            action: 'system.user.password-reset',
+            actionName: '重置密码',
+            objectType: '用户',
+            objectId: $user->id,
+            objectName: $user->name,
+        );
     }
 
     /**
@@ -76,8 +108,36 @@ class UserService
         $this->access->ensureCanManageUser($actor, $user);
         $this->access->ensureCanGrantRoles($actor, $roleIds);
 
+        $user->load('roles');
+        $before = $this->snapshot($user);
         $user->roles()->sync($roleIds);
+        $user->load('roles');
 
-        return $user->load('roles');
+        $this->operationLogs->record(
+            action: 'system.user.roles-assigned',
+            actionName: '分配角色',
+            objectType: '用户',
+            objectId: $user->id,
+            objectName: $user->name,
+            before: $before,
+            after: $this->snapshot($user),
+        );
+
+        return $user;
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function snapshot(User $user): array
+    {
+        return [
+            '姓名' => $user->name,
+            '邮箱' => $user->email,
+            '手机号' => $user->phone,
+            '状态' => $user->status ? '启用' : '停用',
+            '岗位' => $user->position,
+            '角色' => $user->roles->pluck('name')->sort()->values()->all(),
+        ];
     }
 }

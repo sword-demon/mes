@@ -9,11 +9,15 @@ use App\Modules\Process\Model\RouteOperation;
 use App\Modules\Production\Model\ProductionOrder;
 use App\Modules\Production\Model\ProductionReport;
 use App\Modules\Production\Model\ProductionTask;
+use App\Modules\System\Service\OperationLogService;
 use Illuminate\Support\Facades\DB;
 
 class ProductionReportService
 {
-    public function __construct(private readonly EquipmentService $equipments) {}
+    public function __construct(
+        private readonly EquipmentService $equipments,
+        private readonly OperationLogService $operationLogs,
+    ) {}
 
     public const array REPORTABLE_ORDER_STATUSES = [
         ProductionOrder::RELEASED,
@@ -90,7 +94,18 @@ class ProductionReportService
                 'reported_at' => $data['reported_at'] ?? now(),
             ]);
 
+            $producedBefore = $task->produced_quantity;
             $this->shiftQuantities($task, $order, $quantity, $qualified, $defective);
+
+            $this->operationLogs->record(
+                action: 'production.report.create',
+                actionName: '生产报工',
+                objectType: '生产报工',
+                objectId: $report->id,
+                objectName: $report->code,
+                before: ['任务累计产量' => $producedBefore],
+                after: ['任务累计产量' => $task->produced_quantity],
+            );
 
             return $report;
         });
@@ -113,6 +128,8 @@ class ProductionReportService
 
             $task = ProductionTask::query()->lockForUpdate()->findOrFail($locked->production_task_id);
             $order = ProductionOrder::query()->lockForUpdate()->findOrFail($task->production_order_id);
+            $typeBefore = $locked->typeLabel();
+            $producedBefore = $task->produced_quantity;
 
             $locked->update([
                 'type' => ProductionReport::REVERSED,
@@ -125,6 +142,16 @@ class ProductionReportService
                 -$this->milli($locked->quantity),
                 -$this->milli($locked->qualified_quantity),
                 -$this->milli($locked->defective_quantity),
+            );
+
+            $this->operationLogs->record(
+                action: 'production.report.reverse',
+                actionName: '冲销报工',
+                objectType: '生产报工',
+                objectId: $locked->id,
+                objectName: $locked->code,
+                before: ['报工状态' => $typeBefore, '任务累计产量' => $producedBefore],
+                after: ['报工状态' => $locked->typeLabel(), '任务累计产量' => $task->produced_quantity],
             );
 
             return $locked;

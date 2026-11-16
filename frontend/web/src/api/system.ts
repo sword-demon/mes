@@ -1,5 +1,12 @@
 import { api } from './client';
-import type { DepartmentNode, Paginated, Role, User } from '@/types/api';
+import type {
+    DepartmentNode,
+    OperationLog,
+    OperationLogOptions,
+    Paginated,
+    Role,
+    User,
+} from '@/types/api';
 
 export type UserPayload = {
     username?: string | null;
@@ -40,4 +47,18 @@ export function assignUserRoles(id: number, roleIds: number[]) {
 
 export function listDepartments() {
     return api.get<DepartmentNode[]>('/system/departments');
+}
+
+export function listOperationLogs(params: {
+    page?: number;
+    user_id?: number;
+    action?: string;
+    start_date?: string;
+    end_date?: string;
+} = {}) {
+    return api.get<Paginated<OperationLog>>('/system/operation-logs', params);
+}
+
+export function getOperationLogOptions() {
+    return api.get<OperationLogOptions>('/system/operation-logs/options');
 }

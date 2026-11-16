@@ -76,3 +76,28 @@ export type LoginResult = {
     token: string;
     user: User;
 };
+
+export type OperationLogChange = {
+    before: unknown;
+    after: unknown;
+};
+
+export type OperationLog = {
+    id: number;
+    user_id: number | null;
+    user_name: string;
+    action: string;
+    action_name: string;
+    object_type: string;
+    object_id: number | null;
+    object_name: string;
+    summary: string;
+    changes: Record<string, OperationLogChange> | null;
+    ip: string;
+    created_at: string;
+};
+
+export type OperationLogOptions = {
+    users: { id: number; name: string }[];
+    actions: { action: string; action_name: string }[];
+};

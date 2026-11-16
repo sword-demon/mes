@@ -28,6 +28,7 @@ import ProductionDispatches from '@/pages/production/dispatch';
 import ProductionReports from '@/pages/production/reports';
 import ProductionTasks from '@/pages/production/tasks';
 import Users from '@/pages/system/users';
+import OperationLogs from '@/pages/system/logs';
 import QualityStandards from '@/pages/quality/standards';
 import QualityRecords from '@/pages/quality/records';
 import QualityTasks from '@/pages/quality/tasks';
@@ -75,6 +76,7 @@ const pages: Record<string, () => ReactNode> = {
     '/execution/exceptions': ProductionExceptions,
     '/execution/sn': ProductSns,
     '/system/users': Users,
+    '/system/logs': OperationLogs,
     '/quality/standards': QualityStandards,
     '/quality/tasks': QualityTasks,
     '/quality/records': QualityRecords,

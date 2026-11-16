@@ -8,12 +8,15 @@ use App\Modules\Organization\Model\ProductionLine;
 use App\Modules\Process\Model\ProcessRoute;
 use App\Modules\Product\Model\Product;
 use App\Modules\Production\Model\ProductionOrder;
+use App\Modules\System\Service\OperationLogService;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 
 class ProductionOrderService
 {
+    public function __construct(private readonly OperationLogService $operationLogs) {}
+
     /**
      * Pinning the BOM and route inside the same transaction keeps an order
      * from pointing at a version that changed between validation and insert.
@@ -106,7 +109,18 @@ class ProductionOrderService
     {
         return DB::transaction(function () use ($order, $target): ProductionOrder {
             $locked = ProductionOrder::query()->lockForUpdate()->findOrFail($order->getKey());
+            $before = $locked->statusLabel();
             $locked->transitionTo($target);
+
+            $this->operationLogs->record(
+                action: 'production.order.transition',
+                actionName: '订单状态流转',
+                objectType: '生产订单',
+                objectId: $locked->id,
+                objectName: $locked->code,
+                before: ['状态' => $before],
+                after: ['状态' => $locked->statusLabel()],
+            );
 
             return $locked;
         });

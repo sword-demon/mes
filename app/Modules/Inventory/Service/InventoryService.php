@@ -7,10 +7,13 @@ use App\Modules\Inventory\Model\Inventory;
 use App\Modules\Inventory\Model\InventoryTransaction;
 use App\Modules\Inventory\Model\StorageLocation;
 use App\Modules\Material\Model\Material;
+use App\Modules\System\Service\OperationLogService;
 use Illuminate\Support\Facades\DB;
 
 class InventoryService
 {
+    public function __construct(private readonly OperationLogService $operationLogs) {}
+
     private const int MAX_MILLI = 999_999_999_999;
 
     /**
@@ -125,6 +128,20 @@ class InventoryService
                 'remark' => $data['remark'] ?? null,
                 'created_by_id' => $operatorId,
             ]);
+
+            $this->operationLogs->record(
+                action: 'inventory.'.$businessType,
+                actionName: match ($businessType) {
+                    InventoryTransaction::INBOUND => '库存入库',
+                    InventoryTransaction::OUTBOUND => '库存出库',
+                    default => '库存调整',
+                },
+                objectType: '库存',
+                objectId: $inventory->id,
+                objectName: $material->code.' '.$material->name.' / '.$location->code.($batchNo !== '' ? ' / 批次 '.$batchNo : ''),
+                before: ['当前库存' => $this->decimal($before)],
+                after: ['当前库存' => $this->decimal($after)],
+            );
 
             return $inventory;
         });
