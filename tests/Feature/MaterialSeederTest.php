@@ -28,7 +28,7 @@ test('the material seeder seeds warehouses, locations, inventory and a ledger wh
 
     $inventories = Inventory::query()->with('location.warehouse')->get();
 
-    expect($inventories)->toHaveCount(10)
+    expect($inventories)->toHaveCount(32)
         ->and(Warehouse::query()->count())->toBe(4)
         ->and(StorageLocation::query()->count())->toBe(10)
         ->and($inventories->pluck('location.warehouse_id')->unique()->count())->toBe(4)
@@ -48,5 +48,5 @@ test('the material seeder seeds warehouses, locations, inventory and a ledger wh
     $this->seed(MaterialSeeder::class);
 
     expect(Inventory::query()->count())->toBe($count)
-        ->and(InventoryTransaction::query()->count())->toBe(10);
+        ->and(InventoryTransaction::query()->count())->toBe(32);
 });

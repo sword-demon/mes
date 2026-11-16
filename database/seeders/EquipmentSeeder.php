@@ -4,6 +4,7 @@ namespace Database\Seeders;
 
 use App\Modules\Equipment\Model\Equipment;
 use App\Modules\Equipment\Model\EquipmentAlarm;
+use App\Modules\Equipment\Model\EquipmentData;
 use App\Modules\Organization\Model\Employee;
 use App\Modules\Organization\Model\ProductionLine;
 use App\Modules\Organization\Model\Workshop;
@@ -127,6 +128,44 @@ class EquipmentSeeder extends Seeder
                         : null,
                 ],
             );
+        }
+
+        $this->seedHistory();
+    }
+
+    /**
+     * An hour of five-minute samples gives the monitor and history pages a
+     * curve immediately; restricted devices keep a flat output count because
+     * they produced nothing while down.
+     */
+    private function seedHistory(): void
+    {
+        $equipments = Equipment::query()
+            ->whereIn('code', array_column(self::EQUIPMENTS, 'code'))
+            ->orderBy('id')
+            ->get();
+
+        foreach ($equipments as $equipmentIndex => $equipment) {
+            $baseOutput = 5000 + $equipmentIndex * 1000;
+            $producing = $equipment->status === Equipment::RUNNING;
+            $start = ($equipment->created_at ?? now())->copy()->startOfHour()->subHour();
+
+            for ($sample = 0; $sample < 12; $sample++) {
+                EquipmentData::query()->updateOrCreate(
+                    [
+                        'equipment_id' => $equipment->id,
+                        'recorded_at' => $start->copy()->addMinutes($sample * 5)->format('Y-m-d H:i:s.u'),
+                        'message_type' => EquipmentData::TYPE_DATA,
+                    ],
+                    [
+                        'status' => $equipment->status,
+                        'temperature' => $equipment->status === Equipment::RUNNING ? 45 + $sample * 0.2 : 28,
+                        'speed' => $producing ? 1200 + $sample * 10 : 0,
+                        'pressure' => $producing ? 0.6 + $sample * 0.005 : 0,
+                        'output' => $producing ? $baseOutput + $sample * 10 : $baseOutput,
+                    ],
+                );
+            }
         }
     }
 }

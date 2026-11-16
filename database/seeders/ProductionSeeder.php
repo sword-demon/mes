@@ -3,76 +3,65 @@
 namespace Database\Seeders;
 
 use App\Modules\Bom\Model\Bom;
+use App\Modules\Inventory\Model\Inventory;
+use App\Modules\Material\Service\Quantity;
 use App\Modules\Organization\Model\Employee;
 use App\Modules\Organization\Model\ProductionLine;
 use App\Modules\Organization\Model\Team;
 use App\Modules\Process\Model\ProcessRoute;
 use App\Modules\Process\Model\RouteOperation;
+use App\Modules\Production\Model\ProcessRecord;
 use App\Modules\Production\Model\ProductionBatch;
 use App\Modules\Production\Model\ProductionDispatch;
 use App\Modules\Production\Model\ProductionOrder;
+use App\Modules\Production\Model\ProductionReport;
 use App\Modules\Production\Model\ProductionTask;
+use App\Modules\Production\Model\ProductSn;
 use App\Modules\Production\Service\ProcessRecordService;
 use Illuminate\Database\Seeder;
-use Illuminate\Support\Carbon;
+use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\DB;
 use RuntimeException;
 
 class ProductionSeeder extends Seeder
 {
     /**
-     * Demo orders, tasks and dispatches; every code is deterministic so a
-     * re-run updates in place instead of duplicating records.
+     * Twenty orders cover all nine statuses; the repeated statuses give the
+     * dashboard enough live work to show.
      */
     private const ORDERS = [
-        [
-            'code' => 'PO-DEMO-001',
-            'planned_quantity' => 100,
-            'status' => ProductionOrder::IN_PROGRESS,
-            'start_days' => -1,
-            'end_days' => 5,
-            'tasks' => [
-                [
-                    'code' => 'PO-DEMO-001-T01',
-                    'planned_quantity' => 60,
-                    'status' => ProductionTask::IN_PROGRESS,
-                    'owner' => 'EMP004',
-                    'team' => 'TEAM01',
-                    'line' => 'PL01',
-                    'operations' => [1, 2],
-                    'workers' => ['EMP004', 'EMP002'],
-                ],
-                [
-                    'code' => 'PO-DEMO-001-T02',
-                    'planned_quantity' => 40,
-                    'status' => ProductionTask::PENDING,
-                    'owner' => null,
-                    'team' => 'TEAM01',
-                    'line' => 'PL01',
-                    'operations' => [1],
-                    'workers' => ['EMP002'],
-                ],
-            ],
-        ],
-        [
-            'code' => 'PO-DEMO-002',
-            'planned_quantity' => 60,
-            'status' => ProductionOrder::IN_PROGRESS,
-            'start_days' => -2,
-            'end_days' => 3,
-            'tasks' => [
-                [
-                    'code' => 'PO-DEMO-002-T01',
-                    'planned_quantity' => 60,
-                    'status' => ProductionTask::IN_PROGRESS,
-                    'owner' => 'EMP002',
-                    'team' => 'TEAM01',
-                    'line' => 'PL01',
-                    'operations' => [3],
-                    'workers' => ['EMP002'],
-                ],
-            ],
-        ],
+        ProductionOrder::DRAFT,
+        ProductionOrder::PENDING,
+        ProductionOrder::APPROVED,
+        ProductionOrder::RELEASED,
+        ProductionOrder::IN_PROGRESS,
+        ProductionOrder::PAUSED,
+        ProductionOrder::COMPLETED,
+        ProductionOrder::CLOSED,
+        ProductionOrder::CANCELLED,
+        ProductionOrder::IN_PROGRESS,
+        ProductionOrder::IN_PROGRESS,
+        ProductionOrder::IN_PROGRESS,
+        ProductionOrder::IN_PROGRESS,
+        ProductionOrder::PAUSED,
+        ProductionOrder::COMPLETED,
+        ProductionOrder::COMPLETED,
+        ProductionOrder::COMPLETED,
+        ProductionOrder::CLOSED,
+        ProductionOrder::RELEASED,
+        ProductionOrder::RELEASED,
     ];
+
+    private const REPORTABLE_STATUSES = [
+        ProductionOrder::IN_PROGRESS,
+        ProductionOrder::PAUSED,
+        ProductionOrder::COMPLETED,
+        ProductionOrder::CLOSED,
+    ];
+
+    private const TASK_PLANNED_QUANTITY = 10;
+
+    private const REPORTS_PER_TASK = 5;
 
     public function run(): void
     {
@@ -86,86 +75,361 @@ class ProductionSeeder extends Seeder
         }
 
         $workers = Employee::query()
-            ->whereIn('employee_no', ['EMP002', 'EMP004'])
+            ->whereIn('employee_no', ['EMP002', 'EMP004', 'EMP005', 'EMP006', 'EMP009'])
             ->get()
             ->keyBy('employee_no');
         $operations = RouteOperation::query()
             ->where('route_id', $route->id)
             ->get()
             ->keyBy('sequence');
+        $materialBatchNo = Inventory::query()
+            ->where('batch_no', '<>', '')
+            ->orderBy('batch_no')
+            ->value('batch_no');
 
-        foreach (self::ORDERS as $orderDefinition) {
-            $order = ProductionOrder::query()->updateOrCreate(
-                ['code' => $orderDefinition['code']],
+        DB::transaction(function () use ($bom, $route, $line, $team, $workers, $operations, $materialBatchNo): void {
+            foreach (self::ORDERS as $index => $status) {
+                $order = $this->seedOrder($index, $status, $bom, $route, $line);
+                $taskCount = 1 + $index % 2;
+
+                for ($taskNumber = 1; $taskNumber <= $taskCount; $taskNumber++) {
+                    $task = $this->seedTask($order, $status, $taskNumber, $route, $line, $team, $workers);
+                    $this->seedDispatches($task, $operations, $team, $workers);
+                    app(ProcessRecordService::class)->createForTask($task);
+                }
+            }
+
+            $this->seedProcessStatusCoverage($team, $workers);
+            $this->seedReports($route, $workers);
+            $this->recalculateTotals();
+            $this->seedSerialNumbers($workers, $materialBatchNo);
+        });
+    }
+
+    private function seedOrder(
+        int $index,
+        string $status,
+        Bom $bom,
+        ProcessRoute $route,
+        ProductionLine $line,
+    ): ProductionOrder {
+        $code = 'PO-DEMO-'.str_pad((string) ($index + 1), 3, '0', STR_PAD_LEFT);
+        $closed = in_array($status, [ProductionOrder::COMPLETED, ProductionOrder::CLOSED], true);
+        $plannedStart = $closed
+            ? now()->subDays(10 + $index % 5)
+            : now()->addDays($index % 7 - 2);
+
+        $order = ProductionOrder::query()->updateOrCreate(
+            ['code' => $code],
+            [
+                'product_id' => $route->product_id,
+                'product_version_id' => $bom->product_version_id,
+                'bom_id' => $bom->id,
+                'route_id' => $route->id,
+                'production_line_id' => $line->id,
+                'bom_version' => $bom->version,
+                'route_version' => $route->version,
+                'planned_quantity' => (1 + $index % 2) * self::TASK_PLANNED_QUANTITY,
+                'planned_start_at' => $plannedStart,
+                'planned_end_at' => $plannedStart->copy()->addDays(5),
+                'status' => $status,
+                'remark' => '演示订单',
+            ],
+        );
+
+        $createdAt = $index >= 16
+            ? now()->subMinutes(($index - 16 + 1) * 10)
+            : now()->subDays($index + 1)->subHours($index % 8);
+
+        $order->forceFill(['created_at' => $createdAt, 'updated_at' => $createdAt])->save();
+
+        ProductionBatch::query()->updateOrCreate(
+            ['code' => $order->code.'-L01'],
+            [
+                'production_order_id' => $order->id,
+                'quantity' => (int) $order->planned_quantity,
+                'remark' => '演示批次',
+            ],
+        );
+
+        return $order;
+    }
+
+    /**
+     * @param  Collection<string, Employee>  $workers
+     */
+    private function seedTask(
+        ProductionOrder $order,
+        string $orderStatus,
+        int $taskNumber,
+        ProcessRoute $route,
+        ProductionLine $line,
+        Team $team,
+        Collection $workers,
+    ): ProductionTask {
+        $status = match (true) {
+            in_array($orderStatus, [ProductionOrder::COMPLETED, ProductionOrder::CLOSED], true) => ProductionTask::COMPLETED,
+            $orderStatus === ProductionOrder::IN_PROGRESS => ProductionTask::IN_PROGRESS,
+            $orderStatus === ProductionOrder::PAUSED => ProductionTask::PAUSED,
+            default => ProductionTask::PENDING,
+        };
+        $owner = $status === ProductionTask::PENDING
+            ? null
+            : $workers->get($taskNumber % 2 === 1 ? 'EMP002' : 'EMP004');
+
+        return ProductionTask::query()->updateOrCreate(
+            ['code' => $order->code.'-T'.str_pad((string) $taskNumber, 2, '0', STR_PAD_LEFT)],
+            [
+                'production_order_id' => $order->id,
+                'product_id' => $route->product_id,
+                'route_id' => $route->id,
+                'production_line_id' => $line->id,
+                'team_id' => $team->id,
+                'owner_id' => $owner?->id,
+                'planned_quantity' => self::TASK_PLANNED_QUANTITY,
+                'planned_start_at' => $order->planned_start_at,
+                'planned_end_at' => $order->planned_end_at,
+                'status' => $status,
+            ],
+        );
+    }
+
+    /**
+     * @param  Collection<int, RouteOperation>  $operations
+     * @param  Collection<string, Employee>  $workers
+     */
+    private function seedDispatches(ProductionTask $task, Collection $operations, Team $team, Collection $workers): void
+    {
+        foreach ([1, 2] as $sequence) {
+            $operation = $operations->get($sequence);
+            $employee = $workers->get($sequence === 1 ? 'EMP002' : 'EMP004');
+
+            if ($operation === null || $employee === null) {
+                continue;
+            }
+
+            ProductionDispatch::query()->updateOrCreate(
+                ['code' => ProductionDispatch::codeFor($task->code, $sequence)],
                 [
-                    'product_id' => $route->product_id,
-                    'product_version_id' => $bom->product_version_id,
-                    'bom_id' => $bom->id,
-                    'route_id' => $route->id,
-                    'production_line_id' => $line->id,
-                    'bom_version' => $bom->version,
-                    'route_version' => $route->version,
-                    'planned_quantity' => $orderDefinition['planned_quantity'],
-                    'planned_start_at' => Carbon::now()->addDays($orderDefinition['start_days']),
-                    'planned_end_at' => Carbon::now()->addDays($orderDefinition['end_days']),
-                    'status' => $orderDefinition['status'],
+                    'production_task_id' => $task->id,
+                    'route_operation_id' => $operation->id,
+                    'employee_id' => $employee->id,
+                    'team_id' => $team->id,
+                    'dispatched_at' => now()->subHours(12 - $sequence),
                 ],
             );
+        }
+    }
 
-            ProductionBatch::query()->updateOrCreate(
-                ['code' => $order->code.'-L01'],
-                [
-                    'production_order_id' => $order->id,
-                    'quantity' => $orderDefinition['planned_quantity'],
-                    'remark' => '演示批次',
-                ],
-            );
+    /**
+     * @param  Collection<string, Employee>  $workers
+     */
+    private function seedProcessStatusCoverage(Team $team, Collection $workers): void
+    {
+        $statuses = [
+            ProcessRecord::PENDING,
+            ProcessRecord::PROCESSING,
+            ProcessRecord::INSPECTING,
+            ProcessRecord::INSPECTED,
+            ProcessRecord::PENDING_TRANSFER,
+            ProcessRecord::TRANSFERRED,
+            ProcessRecord::REWORKING,
+        ];
+        $tasks = ProductionTask::query()
+            ->whereHas(
+                'productionOrder',
+                fn ($query) => $query->whereIn('status', self::REPORTABLE_STATUSES),
+            )
+            ->orderBy('id')
+            ->limit(count($statuses))
+            ->get();
+        $employee = $workers->get('EMP002');
+        $base = now()->subHours(6);
 
-            foreach ($orderDefinition['tasks'] as $taskDefinition) {
-                $teamId = $taskDefinition['team'] === null ? null : $team->id;
-                $ownerId = $taskDefinition['owner'] === null
-                    ? null
-                    : $workers->get($taskDefinition['owner'])?->id;
+        foreach ($statuses as $index => $status) {
+            $task = $tasks->get($index);
+            $record = $task === null
+                ? null
+                : ProcessRecord::query()
+                    ->where('production_task_id', $task->id)
+                    ->orderBy('sequence')
+                    ->first();
 
-                $task = ProductionTask::query()->updateOrCreate(
-                    ['code' => $taskDefinition['code']],
-                    [
-                        'production_order_id' => $order->id,
-                        'product_id' => $route->product_id,
-                        'route_id' => $route->id,
-                        'production_line_id' => $taskDefinition['line'] === null ? null : $line->id,
-                        'team_id' => $teamId,
-                        'owner_id' => $ownerId,
-                        'planned_quantity' => $taskDefinition['planned_quantity'],
-                        'planned_start_at' => $order->planned_start_at,
-                        'planned_end_at' => $order->planned_end_at,
-                        'status' => $taskDefinition['status'],
-                    ],
-                );
+            if ($task === null || $record === null) {
+                continue;
+            }
 
-                foreach ($taskDefinition['operations'] as $index => $sequence) {
-                    $operation = $operations->get($sequence);
-                    $employee = $workers->get($taskDefinition['workers'][$index] ?? null);
+            $record->update([
+                'status' => $status,
+                'employee_id' => $task->owner_id ?? $employee?->id,
+                'team_id' => $team->id,
+                'started_at' => $status === ProcessRecord::PENDING ? null : $base->copy(),
+                'completed_at' => in_array($status, [
+                    ProcessRecord::INSPECTING,
+                    ProcessRecord::INSPECTED,
+                    ProcessRecord::PENDING_TRANSFER,
+                    ProcessRecord::TRANSFERRED,
+                ], true) ? $base->copy()->addHour() : null,
+                'inspected_at' => $status === ProcessRecord::INSPECTED ? $base->copy()->addHours(2) : null,
+                'submitted_at' => in_array($status, [
+                    ProcessRecord::INSPECTING,
+                    ProcessRecord::PENDING_TRANSFER,
+                    ProcessRecord::TRANSFERRED,
+                ], true) ? $base->copy()->addHours(2) : null,
+                'received_at' => $status === ProcessRecord::TRANSFERRED ? $base->copy()->addHours(3) : null,
+                'exception_reason' => $status === ProcessRecord::REWORKING ? '演示工序异常' : null,
+                'exception_at' => $status === ProcessRecord::REWORKING ? $base->copy()->addMinutes(30) : null,
+                'rework_reason' => $status === ProcessRecord::REWORKING ? '演示返工' : null,
+                'rework_at' => $status === ProcessRecord::REWORKING ? $base->copy()->addHour() : null,
+                'rework_count' => $status === ProcessRecord::REWORKING ? 1 : 0,
+                'inspection_cycle' => in_array($status, [ProcessRecord::INSPECTING, ProcessRecord::INSPECTED], true) ? 1 : 0,
+            ]);
+        }
+    }
 
-                    if ($operation === null || $employee === null) {
-                        throw new RuntimeException("请先执行 ProcessSeeder 与 OrganizationSeeder 以提供工序 {$sequence} 和作业人员");
-                    }
+    /**
+     * @param  Collection<string, Employee>  $workers
+     */
+    private function seedReports(ProcessRoute $route, Collection $workers): void
+    {
+        $operation = RouteOperation::query()
+            ->where('route_id', $route->id)
+            ->orderBy('sequence')
+            ->first();
 
-                    ProductionDispatch::query()->updateOrCreate(
-                        [
-                            'production_task_id' => $task->id,
-                            'route_operation_id' => $operation->id,
-                            'employee_id' => $employee->id,
-                        ],
-                        [
-                            'code' => ProductionDispatch::codeFor($task->code, $index + 1),
-                            'team_id' => $team->id,
-                            'dispatched_at' => Carbon::now()->subHours(6 - $index),
-                        ],
-                    );
+        if ($operation === null) {
+            throw new RuntimeException('请先执行 ProcessSeeder 以提供报工工序');
+        }
+
+        $tasks = ProductionTask::query()
+            ->whereHas(
+                'productionOrder',
+                fn ($query) => $query->whereIn('status', self::REPORTABLE_STATUSES),
+            )
+            ->orderBy('id')
+            ->get();
+        $employeeKeys = ['EMP002', 'EMP004', 'EMP005', 'EMP006', 'EMP009'];
+
+        foreach ($tasks as $taskIndex => $task) {
+            $completed = $task->status === ProductionTask::COMPLETED;
+
+            for ($reportIndex = 1; $reportIndex <= self::REPORTS_PER_TASK; $reportIndex++) {
+                $quantity = $completed ? 2 : 1;
+                $qualified = $quantity === 2 && $reportIndex % 2 === 0 ? 1 : $quantity;
+                $type = match (true) {
+                    $taskIndex < 5 && $reportIndex === 2 => ProductionReport::BATCH,
+                    ($taskIndex === 10 && $reportIndex === 3), ($taskIndex === 12 && $reportIndex === 4) => ProductionReport::REVERSED,
+                    default => ProductionReport::NORMAL,
+                };
+                $reportedAt = $taskIndex < 5
+                    ? now()->subMinutes(($taskIndex * 5 + $reportIndex) * 3)
+                    : now()->subDays($taskIndex % 6 + 1)->subHours($reportIndex * 2)->subMinutes($taskIndex);
+                $employee = $workers->get($employeeKeys[$taskIndex % count($employeeKeys)]);
+
+                if ($employee === null) {
+                    throw new RuntimeException('请先执行 OrganizationSeeder 以提供报工作业人员');
                 }
 
-                app(ProcessRecordService::class)->createForTask($task);
+                ProductionReport::query()->updateOrCreate(
+                    ['code' => ProductionReport::codeFor($task->code, $reportIndex)],
+                    [
+                        'production_task_id' => $task->id,
+                        'route_operation_id' => $operation->id,
+                        'employee_id' => $employee->id,
+                        'team_id' => $employee->team_id,
+                        'quantity' => $quantity,
+                        'qualified_quantity' => $qualified,
+                        'defective_quantity' => $quantity - $qualified,
+                        'type' => $type,
+                        'reported_at' => $reportedAt,
+                        'reversed_at' => $type === ProductionReport::REVERSED
+                            ? $reportedAt->copy()->addMinute()
+                            : null,
+                    ],
+                );
+            }
+        }
+    }
+
+    private function recalculateTotals(): void
+    {
+        $taskTotals = ProductionReport::query()
+            ->where('type', '<>', ProductionReport::REVERSED)
+            ->get()
+            ->groupBy('production_task_id')
+            ->map(fn ($reports): array => [
+                'produced' => (int) $reports->sum(fn (ProductionReport $report): int => Quantity::toMilli($report->quantity)),
+                'qualified' => (int) $reports->sum(fn (ProductionReport $report): int => Quantity::toMilli($report->qualified_quantity)),
+                'defective' => (int) $reports->sum(fn (ProductionReport $report): int => Quantity::toMilli($report->defective_quantity)),
+            ]);
+
+        ProductionTask::query()->each(function (ProductionTask $task) use ($taskTotals): void {
+            $totals = $taskTotals[$task->id] ?? ['produced' => 0, 'qualified' => 0, 'defective' => 0];
+
+            $task->forceFill([
+                'produced_quantity' => Quantity::toDecimal($totals['produced']),
+                'qualified_quantity' => Quantity::toDecimal($totals['qualified']),
+                'defective_quantity' => Quantity::toDecimal($totals['defective']),
+            ])->save();
+        });
+
+        $orderTotals = ProductionTask::query()->get()
+            ->groupBy('production_order_id')
+            ->map(fn ($tasks): array => [
+                'produced' => (int) $tasks->sum(fn (ProductionTask $task): int => Quantity::toMilli($task->produced_quantity)),
+                'qualified' => (int) $tasks->sum(fn (ProductionTask $task): int => Quantity::toMilli($task->qualified_quantity)),
+                'defective' => (int) $tasks->sum(fn (ProductionTask $task): int => Quantity::toMilli($task->defective_quantity)),
+            ]);
+
+        ProductionOrder::query()->each(function (ProductionOrder $order) use ($orderTotals): void {
+            $totals = $orderTotals[$order->id] ?? ['produced' => 0, 'qualified' => 0, 'defective' => 0];
+
+            $order->forceFill([
+                'produced_quantity' => Quantity::toDecimal($totals['produced']),
+                'qualified_quantity' => Quantity::toDecimal($totals['qualified']),
+                'defective_quantity' => Quantity::toDecimal($totals['defective']),
+            ])->save();
+        });
+    }
+
+    /**
+     * @param  Collection<string, Employee>  $workers
+     */
+    private function seedSerialNumbers(Collection $workers, ?string $materialBatchNo): void
+    {
+        $orders = ProductionOrder::query()->orderBy('id')->get();
+        $employee = $workers->get('EMP004');
+        $sequence = 0;
+
+        foreach ($orders as $orderIndex => $order) {
+            $batch = ProductionBatch::query()
+                ->where('production_order_id', $order->id)
+                ->orderBy('id')
+                ->first();
+
+            if ($batch === null) {
+                continue;
+            }
+
+            $count = $orderIndex < 10 ? 3 : 2;
+
+            for ($index = 0; $index < $count; $index++) {
+                $sequence++;
+                $voided = $sequence % 17 === 0;
+
+                ProductSn::query()->updateOrCreate(
+                    ['sn' => 'MES-DEMO-'.str_pad((string) $sequence, 6, '0', STR_PAD_LEFT)],
+                    [
+                        'production_order_id' => $order->id,
+                        'production_batch_id' => $batch->id,
+                        'material_batch_no' => $materialBatchNo,
+                        'employee_id' => $employee?->id,
+                        'status' => $voided ? ProductSn::VOIDED : ProductSn::ACTIVE,
+                        'printed_at' => now()->subDays($orderIndex % 5),
+                        'voided_at' => $voided ? now()->subDay() : null,
+                        'void_reason' => $voided ? '演示作废' : null,
+                    ],
+                );
             }
         }
     }

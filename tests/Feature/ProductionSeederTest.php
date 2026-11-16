@@ -32,7 +32,7 @@ test('the production seeder matches every dispatch to its task and is idempotent
         'dispatches' => ProductionDispatch::query()->count(),
     ];
 
-    expect($counts)->toBe(['orders' => 2, 'tasks' => 3, 'dispatches' => 4]);
+    expect($counts)->toBe(['orders' => 20, 'tasks' => 30, 'dispatches' => 60]);
 
     ProductionDispatch::query()->with(['productionTask', 'routeOperation', 'employee', 'team'])->each(
         function (ProductionDispatch $dispatch): void {
@@ -58,9 +58,9 @@ test('the seeded operator can see the dispatches assigned to their employee reco
 
     expect($operator->employee_id)->not->toBeNull();
 
-    bearer($operator)->getJson('/api/v1/production/dispatches/mine')
+    bearer($operator)->getJson('/api/v1/production/dispatches/mine?per_page=100')
         ->assertOk()
-        ->assertJsonCount(1, 'data.items')
+        ->assertJsonCount(21, 'data.items')
         ->assertJsonPath('data.items.0.employee.id', $operator->employee_id);
 });
 

@@ -8,6 +8,7 @@ use App\Modules\Production\Model\ProductionOrder;
 use App\Modules\Quality\Model\DefectCode;
 use App\Modules\Quality\Model\DefectiveProduct;
 use App\Modules\Quality\Model\InspectionItem;
+use App\Modules\Quality\Model\InspectionTask;
 use App\Modules\Quality\Model\ReworkOrder;
 use App\Modules\System\Model\User;
 use Illuminate\Database\Seeder;
@@ -38,6 +39,7 @@ class QualitySeeder extends Seeder
             }
 
             $this->seedDefects();
+            $this->seedInspections();
         });
     }
 
@@ -47,12 +49,28 @@ class QualitySeeder extends Seeder
      */
     private function seedDefects(): void
     {
-        $order = ProductionOrder::query()->where('code', 'PO-DEMO-001')->first();
-        $batch = ProductionBatch::query()->where('code', 'PO-DEMO-001-L01')->first();
+        $order = ProductionOrder::query()
+            ->whereIn('status', [
+                ProductionOrder::IN_PROGRESS,
+                ProductionOrder::PAUSED,
+                ProductionOrder::COMPLETED,
+                ProductionOrder::CLOSED,
+            ])
+            ->orderBy('code')
+            ->first();
         $inspector = User::query()->where('email', 'quality1@mes.test')->first();
         $code = DefectCode::query()->where('code', 'D001')->first();
 
-        if ($order === null || $batch === null || $inspector === null || $code === null) {
+        if ($order === null || $inspector === null || $code === null) {
+            return;
+        }
+
+        $batch = ProductionBatch::query()
+            ->where('production_order_id', $order->id)
+            ->orderBy('id')
+            ->first();
+
+        if ($batch === null) {
             return;
         }
 
@@ -115,6 +133,70 @@ class QualitySeeder extends Seeder
                     ],
                 );
             }
+        }
+    }
+
+    /**
+     * Fifty OQC records give the quality list and dashboard enough history;
+     * the pass/fail split keeps both result states visible.
+     */
+    private function seedInspections(): void
+    {
+        $orders = ProductionOrder::query()
+            ->whereNotIn('status', [
+                ProductionOrder::DRAFT,
+                ProductionOrder::PENDING,
+                ProductionOrder::APPROVED,
+                ProductionOrder::CANCELLED,
+            ])
+            ->orderBy('code')
+            ->get();
+        $inspectors = User::query()
+            ->whereIn('email', [
+                'quality1@mes.test',
+                'quality2@mes.test',
+                'quality3@mes.test',
+                'quality4@mes.test',
+            ])
+            ->orderBy('email')
+            ->get();
+
+        if ($orders->isEmpty() || $inspectors->isEmpty()) {
+            return;
+        }
+
+        $operations = RouteOperation::query()
+            ->whereIn('route_id', $orders->pluck('route_id')->unique()->all())
+            ->orderBy('sequence')
+            ->get()
+            ->groupBy('route_id')
+            ->map(fn ($routeOperations) => $routeOperations->first());
+
+        for ($index = 1; $index <= 50; $index++) {
+            $order = $orders[($index - 1) % $orders->count()];
+            $operation = $operations->get($order->route_id);
+
+            if ($operation === null) {
+                continue;
+            }
+
+            $remark = '演示 OQC 检验-'.str_pad((string) $index, 2, '0', STR_PAD_LEFT);
+
+            InspectionTask::query()->updateOrCreate(
+                [
+                    'production_order_id' => $order->id,
+                    'process_record_id' => null,
+                    'route_operation_id' => $operation->id,
+                    'inspection_type' => InspectionTask::OQC,
+                    'inspection_cycle' => 0,
+                    'remark' => $remark,
+                ],
+                [
+                    'result' => $index % 4 === 0 ? InspectionTask::FAILED : InspectionTask::PASSED,
+                    'inspector_id' => $inspectors[($index - 1) % $inspectors->count()]->id,
+                    'inspected_at' => now()->subDays($index % 7)->subHours($index % 6),
+                ],
+            );
         }
     }
 }

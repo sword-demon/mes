@@ -2,6 +2,7 @@
 
 use App\Modules\Equipment\Model\Equipment;
 use App\Modules\Equipment\Model\EquipmentAlarm;
+use App\Modules\Equipment\Model\EquipmentData;
 use Database\Seeders\EquipmentSeeder;
 use Database\Seeders\OrganizationSeeder;
 use Database\Seeders\SystemSeeder;
@@ -36,8 +37,11 @@ test('the equipment seeder seeds five devices and twenty alarms covering every s
         ->and(EquipmentAlarm::query()->where('status', EquipmentAlarm::PROCESSING)->whereNull('handling_note')->count())->toBe(0)
         ->and(EquipmentAlarm::query()->where('status', EquipmentAlarm::CLOSED)->whereNull('handling_note')->count())->toBe(0);
 
+    expect(EquipmentData::query()->count())->toBe(60);
+
     $this->seed(EquipmentSeeder::class);
 
     expect(Equipment::query()->count())->toBe(5)
-        ->and(EquipmentAlarm::query()->count())->toBe(20);
+        ->and(EquipmentAlarm::query()->count())->toBe(20)
+        ->and(EquipmentData::query()->count())->toBe(60);
 });

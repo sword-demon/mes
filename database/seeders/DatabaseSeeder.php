@@ -24,5 +24,7 @@ class DatabaseSeeder extends Seeder
             ProductionSeeder::class,
             QualitySeeder::class,
         ]);
+
+        (new DemoDataConsistencyChecker)->assertConsistent();
     }
 }
