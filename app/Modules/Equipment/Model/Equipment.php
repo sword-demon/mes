@@ -93,7 +93,7 @@ class Equipment extends Model
      */
     public function scopeAvailable(Builder $query): Builder
     {
-        return $query->where('enabled', true)->whereIn('status', [self::RUNNING, self::IDLE]);
+        return $query->enabled()->whereIn('status', [self::RUNNING, self::IDLE]);
     }
 
     /**

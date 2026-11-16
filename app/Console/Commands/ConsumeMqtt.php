@@ -2,6 +2,7 @@
 
 namespace App\Console\Commands;
 
+use App\Modules\Equipment\Model\EquipmentData;
 use App\Modules\Equipment\Service\EquipmentMessageService;
 use Illuminate\Console\Attributes\Description;
 use Illuminate\Console\Attributes\Signature;
@@ -52,7 +53,7 @@ class ConsumeMqtt extends Command
                 ->setKeepAliveInterval(30);
             $mqtt->connect($settings, true);
 
-            foreach (['status', 'data', 'alarm'] as $kind) {
+            foreach (EquipmentData::MESSAGE_TYPES as $kind) {
                 $mqtt->subscribe("mes/{$factory}/+/{$kind}", function (string $topic, string $message) use ($mqtt, $messages, $limit, &$received, &$failure): void {
                     if ($failure !== null || ($limit > 0 && $received >= $limit)) {
                         return;
@@ -82,7 +83,7 @@ class ConsumeMqtt extends Command
             $startedAt = microtime(true);
             $deadline = now()->addSeconds(5);
 
-            while ($subscriptions->countSubscriptions() !== 3) {
+            while ($subscriptions->countSubscriptions() !== count(EquipmentData::MESSAGE_TYPES)) {
                 if ($stopping) {
                     break;
                 }
@@ -103,7 +104,8 @@ class ConsumeMqtt extends Command
             }
 
             if (! $stopping) {
-                $this->info("已订阅 mes/{$factory}/+/{status,data,alarm}");
+                $topics = implode(',', EquipmentData::MESSAGE_TYPES);
+                $this->info("已订阅 mes/{$factory}/+/{$topics}");
                 $mqtt->loop();
             }
 

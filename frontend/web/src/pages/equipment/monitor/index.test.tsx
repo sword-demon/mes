@@ -59,6 +59,7 @@ const equipment = {
 
 async function render(permissions: string[]) {
     requests.length = 0;
+    const canMonitor = permissions.includes('equipment.monitor.index');
     useAuthStore.setState({ token: 'token', user: currentUserFixture({ permissions }) });
     const container = document.createElement('div');
     document.body.append(container);
@@ -69,9 +70,12 @@ async function render(permissions: string[]) {
         let data: unknown = { items: [], status_counts: {} };
 
         if (config.url === '/equipments/monitor') {
+            const { latest_data, ...summary } = equipment;
             data = {
-                items: [equipment],
-                status_counts: { running: 1, idle: 0, fault: 0, repair: 0, offline: 0 },
+                items: canMonitor ? [equipment] : [summary],
+                ...(canMonitor
+                    ? { status_counts: { running: 1, idle: 0, fault: 0, repair: 0, offline: 0 } }
+                    : {}),
                 max_history_seconds: 31 * 24 * 60 * 60,
             };
         }
@@ -117,6 +121,7 @@ it('shows equipment status, latest metrics and four history curves', async () =>
     expect(document.body.textContent).toContain('SMT 贴片机一号');
     expect(document.body.textContent).toContain('66.5');
     expect(document.body.textContent).toContain('1320');
+    expect(document.body.textContent).toContain('累计产量');
     expect(document.querySelector('[data-testid="status-count-running"]')?.textContent).toContain('1');
     expect(document.querySelectorAll('[data-testid="chart"]')).toHaveLength(4);
 
@@ -132,14 +137,17 @@ it('hides history curves without the history permission', async () => {
     await render(['equipment.monitor.index']);
 
     expect(document.body.textContent).toContain('没有设备历史数据权限');
+    expect(document.querySelector('[data-testid="status-count-running"]')?.textContent).toContain('1');
     expect(document.querySelectorAll('[data-testid="chart"]')).toHaveLength(0);
     expect(requests.some((request) => request.url === '/equipments/1/history')).toBe(false);
 });
 
-it('loads the equipment list for history-only users', async () => {
+it('loads the equipment list for history-only users without live metrics', async () => {
     await render(['equipment.history.index']);
 
     expect(document.body.textContent).toContain('EQ-SMT-01');
+    expect(document.body.textContent).not.toContain('66.5');
+    expect(document.querySelector('[data-testid="status-count-running"]')).toBeNull();
     expect(document.querySelectorAll('[data-testid="chart"]')).toHaveLength(4);
     expect(requests.some((request) => request.url === '/equipments/monitor')).toBe(true);
     expect(requests.some((request) => request.url === '/equipments/1/history')).toBe(true);

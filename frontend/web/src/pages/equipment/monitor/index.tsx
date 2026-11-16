@@ -35,7 +35,7 @@ const METRICS: { key: MetricKey; label: string; unit: string; color: string }[] 
     { key: 'temperature', label: '温度', unit: '℃', color: '#1677ff' },
     { key: 'speed', label: '转速', unit: 'rpm', color: '#52c41a' },
     { key: 'pressure', label: '压力', unit: 'MPa', color: '#faad14' },
-    { key: 'output', label: '产量', unit: '件', color: '#eb2f96' },
+    { key: 'output', label: '累计产量', unit: '件', color: '#eb2f96' },
 ];
 
 const statusColor = Object.fromEntries(
@@ -92,7 +92,7 @@ function MetricDescriptions({ latest }: { latest: EquipmentMetric | null }) {
             <Descriptions.Item label="温度">{formatMetric(latest.temperature, '℃')}</Descriptions.Item>
             <Descriptions.Item label="转速">{formatMetric(latest.speed, 'rpm')}</Descriptions.Item>
             <Descriptions.Item label="压力">{formatMetric(latest.pressure, 'MPa')}</Descriptions.Item>
-            <Descriptions.Item label="产量">{formatMetric(latest.output, '件')}</Descriptions.Item>
+            <Descriptions.Item label="累计产量">{formatMetric(latest.output, '件')}</Descriptions.Item>
             <Descriptions.Item label="运行时间">{formatRuntime(latest.runtime_seconds)}</Descriptions.Item>
             <Descriptions.Item label="采样时间">
                 {dayjs(latest.recorded_at).format('MM-DD HH:mm:ss')}
@@ -129,7 +129,9 @@ function EquipmentCard({
             <Typography.Text type="secondary" className="mb-3 block">
                 {equipment.production_line?.name ?? '-'} · {equipment.type}
             </Typography.Text>
-            <MetricDescriptions latest={equipment.latest_data} />
+            {equipment.latest_data !== undefined ? (
+                <MetricDescriptions latest={equipment.latest_data} />
+            ) : null}
         </Card>
     );
 }
@@ -146,7 +148,7 @@ export default function EquipmentMonitor() {
         queryKey: ['equipment', 'monitor'],
         queryFn: getEquipmentMonitor,
         enabled: canRead,
-        refetchInterval: 5000,
+        refetchInterval: canMonitor ? 5000 : false,
     });
     const equipments = monitor.data?.items ?? [];
     const selected = equipments.find((equipment) => equipment.id === selectedId);
@@ -199,17 +201,19 @@ export default function EquipmentMonitor() {
                 />
             ) : null}
 
-            <Row gutter={[12, 12]}>
-                {EQUIPMENT_STATUSES.map(({ value, label }) => (
-                    <Col xs={12} sm={8} xl={4} key={value}>
-                        <Card size="small">
-                            <div data-testid={`status-count-${value}`}>
-                                <Statistic title={label} value={monitor.data?.status_counts[value] ?? 0} />
-                            </div>
-                        </Card>
-                    </Col>
-                ))}
-            </Row>
+            {canMonitor ? (
+                <Row gutter={[12, 12]}>
+                    {EQUIPMENT_STATUSES.map(({ value, label }) => (
+                        <Col xs={12} sm={8} xl={4} key={value}>
+                            <Card size="small">
+                                <div data-testid={`status-count-${value}`}>
+                                    <Statistic title={label} value={monitor.data?.status_counts?.[value] ?? 0} />
+                                </div>
+                            </Card>
+                        </Col>
+                    ))}
+                </Row>
+            ) : null}
 
             <Spin spinning={monitor.isLoading}>
                 {equipments.length === 0 && !monitor.isLoading && !monitor.isError ? (

@@ -65,8 +65,9 @@ class EquipmentService
      */
     public function history(Equipment $equipment, CarbonImmutable $start, CarbonImmutable $end): Collection
     {
-        $rangeSeconds = max(1, (int) $start->diffInSeconds($end));
-        $bucketSeconds = max(1, (int) ceil($rangeSeconds / EquipmentData::HISTORY_POINT_LIMIT));
+        $rangeSeconds = max(0, (int) $start->diffInSeconds($end));
+        $bucketSeconds = max(1, (int) ceil(($rangeSeconds + 1) / EquipmentData::HISTORY_POINT_LIMIT));
+        $startTimestamp = $start->getTimestamp();
         $buckets = [];
 
         EquipmentData::query()
@@ -80,8 +81,8 @@ class EquipmentService
             ->orderBy('id')
             ->select(['recorded_at', 'temperature', 'speed', 'pressure', 'output'])
             ->cursor()
-            ->each(function (EquipmentData $sample) use (&$buckets, $bucketSeconds): void {
-                $key = intdiv($sample->recorded_at->getTimestamp(), $bucketSeconds);
+            ->each(function (EquipmentData $sample) use (&$buckets, $bucketSeconds, $startTimestamp): void {
+                $key = intdiv($sample->recorded_at->getTimestamp() - $startTimestamp, $bucketSeconds);
                 $buckets[$key] ??= [
                     'recorded_at' => $sample->recorded_at,
                     'temperature' => 0.0,

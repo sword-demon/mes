@@ -92,12 +92,12 @@ export type EquipmentHistorySample = {
 };
 
 export type MonitorEquipment = Equipment & {
-    latest_data: EquipmentMetric | null;
+    latest_data?: EquipmentMetric | null;
 };
 
 export type EquipmentMonitorData = {
     items: MonitorEquipment[];
-    status_counts: Record<EquipmentStatus, number>;
+    status_counts?: Record<EquipmentStatus, number>;
     max_history_seconds: number;
 };
 

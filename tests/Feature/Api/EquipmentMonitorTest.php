@@ -158,6 +158,8 @@ it('downsamples dense history into a bounded number of points', function () {
             'message_type' => 'data',
             'recorded_at' => Carbon::parse('2026-11-16 04:00:00')->addSeconds($second),
             'temperature' => 60 + $second / 100,
+            'speed' => 1000 + $second,
+            'pressure' => 0.5 + $second / 1000,
             'output' => 1000 + $second,
         ]);
     }
@@ -172,8 +174,32 @@ it('downsamples dense history into a bounded number of points', function () {
     expect(count($items))->toBeLessThanOrEqual(500)
         ->toBeGreaterThan(1)
         ->and($items[0]['recorded_at'])->toBe('2026-11-16T04:00:01.000000Z')
+        ->and($items[0]['temperature'])->toBe(60.005)
+        ->and($items[0]['speed'])->toBe(1001)
+        ->and($items[0]['pressure'])->toBe(0.501)
         ->and($items[array_key_last($items)]['recorded_at'])->toBe('2026-11-16T04:09:59.000000Z')
         ->and($items[array_key_last($items)]['output'])->toBe(1599);
+});
+
+it('keeps downsampled history within the point limit when the range starts mid-bucket', function () {
+    $actor = userWithPermissions(['equipment.history.index']);
+    $equipment = Equipment::factory()->create();
+    $start = Carbon::parse('2026-11-16 04:00:01');
+
+    foreach (range(0, 1000) as $second) {
+        EquipmentData::factory()->create([
+            'equipment_id' => $equipment->id,
+            'message_type' => 'data',
+            'recorded_at' => $start->copy()->addSeconds($second),
+        ]);
+    }
+
+    $response = bearer($actor)->getJson('/api/v1/equipments/'.$equipment->id.'/history?'.http_build_query([
+        'start_at' => '2026-11-16T04:00:01Z',
+        'end_at' => '2026-11-16T04:16:41Z',
+    ]))->assertOk();
+
+    expect(count($response->json('data.items')))->toBeLessThanOrEqual(500);
 });
 
 it('accepts a history range longer than 24 hours', function () {
@@ -228,6 +254,21 @@ it('requires both history timestamps', function () {
         ->assertJsonPath('data.errors.end_at.0', '请选择结束时间');
 });
 
+it('rejects an invalid history timestamp', function (string $field, string $value) {
+    $actor = userWithPermissions(['equipment.history.index']);
+    $equipment = Equipment::factory()->create();
+
+    bearer($actor)->getJson('/api/v1/equipments/'.$equipment->id.'/history?'.http_build_query([
+        'start_at' => $field === 'start_at' ? $value : '2026-11-16T04:00:00Z',
+        'end_at' => $field === 'end_at' ? $value : '2026-11-16T05:00:00Z',
+    ]))
+        ->assertUnprocessable()
+        ->assertJsonValidationErrors([$field], 'data.errors');
+})->with([
+    'start_at' => ['start_at', 'not-a-date'],
+    'end_at' => ['end_at', 'not-a-date'],
+]);
+
 it('returns 404 for history of an unknown equipment', function () {
     bearer(userWithPermissions(['equipment.history.index']))
         ->getJson('/api/v1/equipments/999/history?start_at=2026-11-16T04%3A00%3A00Z&end_at=2026-11-16T05%3A00%3A00Z')
@@ -252,13 +293,28 @@ it('returns every enabled equipment beyond the old 200 device cap', function () 
         ->assertJsonPath('data.status_counts.running', 201);
 });
 
-it('lets history-only users load the equipment list', function () {
-    Equipment::factory()->create();
+it('lets history-only users load the equipment list without live metrics', function () {
+    $equipment = Equipment::factory()->create();
+    EquipmentData::factory()->create([
+        'equipment_id' => $equipment->id,
+        'message_type' => 'data',
+        'recorded_at' => '2026-11-16 05:00:00',
+    ]);
 
     bearer(userWithPermissions(['equipment.history.index']))
         ->getJson('/api/v1/equipments/monitor')
         ->assertOk()
-        ->assertJsonCount(1, 'data.items');
+        ->assertJsonCount(1, 'data.items')
+        ->assertJsonMissingPath('data.items.0.latest_data')
+        ->assertJsonMissingPath('data.status_counts');
+});
+
+it('forbids history for users with only monitoring permission', function () {
+    $equipment = Equipment::factory()->create();
+
+    bearer(userWithPermissions(['equipment.monitor.index']))
+        ->getJson('/api/v1/equipments/'.$equipment->id.'/history?start_at=2026-11-16T04%3A00%3A00Z&end_at=2026-11-16T05%3A00%3A00Z')
+        ->assertForbidden();
 });
 
 it('forbids monitoring and history without their permissions', function (string $uri) {

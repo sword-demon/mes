@@ -11,10 +11,12 @@ use App\Modules\Equipment\FormRequest\UpdateEquipmentRequest;
 use App\Modules\Equipment\Model\Equipment;
 use App\Modules\Equipment\Model\EquipmentData;
 use App\Modules\Equipment\Resource\EquipmentResource;
+use App\Modules\Equipment\Resource\EquipmentSummaryResource;
 use App\Modules\Equipment\Service\EquipmentService;
 use App\Modules\Organization\Model\Employee as OrganizationEmployee;
 use App\Modules\Organization\Model\ProductionLine;
 use App\Modules\Organization\Model\Workshop;
+use App\Modules\System\Service\AccessControlService;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -30,6 +32,7 @@ class EquipmentController extends Controller
     public function __construct(
         private readonly EquipmentService $equipments,
         private readonly EntityService $entities,
+        private readonly AccessControlService $access,
     ) {}
 
     public function index(Request $request): JsonResponse
@@ -89,32 +92,41 @@ class EquipmentController extends Controller
         ]);
     }
 
-    public function monitor(): JsonResponse
+    public function monitor(Request $request): JsonResponse
     {
-        $statusRows = Equipment::query()
-            ->enabled()
-            ->selectRaw('status, COUNT(*) as aggregate')
-            ->groupBy('status')
-            ->pluck('aggregate', 'status');
-        $statusCounts = array_fill_keys(Equipment::STATUSES, 0);
+        $user = $request->user();
+        $canMonitor = $user !== null && $this->access->allows($user, 'equipment.monitor.index');
 
-        foreach ($statusRows as $status => $count) {
-            if (array_key_exists($status, $statusCounts)) {
-                $statusCounts[$status] = (int) $count;
-            }
-        }
-
+        // 停用设备不参与实时监控，也不计入状态聚合。
         $equipments = Equipment::query()
             ->enabled()
-            ->with([...self::RELATIONS, 'latestData'])
+            ->with([...self::RELATIONS, ...($canMonitor ? ['latestData'] : [])])
             ->orderBy('id')
             ->get();
 
-        return ApiResponse::success([
+        $data = [
             'items' => EquipmentResource::collection($equipments)->resolve(),
-            'status_counts' => $statusCounts,
             'max_history_seconds' => EquipmentData::MAX_HISTORY_SECONDS,
-        ]);
+        ];
+
+        if ($canMonitor) {
+            $statusRows = Equipment::query()
+                ->enabled()
+                ->selectRaw('status, COUNT(*) as aggregate')
+                ->groupBy('status')
+                ->pluck('aggregate', 'status');
+            $statusCounts = array_fill_keys(Equipment::STATUSES, 0);
+
+            foreach ($statusRows as $status => $count) {
+                if (array_key_exists($status, $statusCounts)) {
+                    $statusCounts[$status] = (int) $count;
+                }
+            }
+
+            $data['status_counts'] = $statusCounts;
+        }
+
+        return ApiResponse::success($data);
     }
 
     public function history(Request $request, Equipment $equipment): JsonResponse
@@ -137,13 +149,7 @@ class EquipmentController extends Controller
         $samples = $this->equipments->history($equipment, $start, $end);
 
         return ApiResponse::success([
-            'equipment' => [
-                'id' => $equipment->id,
-                'code' => $equipment->code,
-                'name' => $equipment->name,
-                'status' => $equipment->status,
-                'status_label' => $equipment->statusLabel(),
-            ],
+            'equipment' => EquipmentSummaryResource::make($equipment)->resolve(),
             'start_at' => $start->toISOString(),
             'end_at' => $end->toISOString(),
             'items' => $samples,
