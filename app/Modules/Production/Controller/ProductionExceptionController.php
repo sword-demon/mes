@@ -67,15 +67,31 @@ class ProductionExceptionController extends Controller
     {
         $data = $request->validate([
             'production_order_id' => ['sometimes', 'integer', 'min:1', 'exists:mes_production_orders,id'],
+            'keyword' => ['sometimes', 'string', 'max:100'],
+            'include' => ['sometimes', Rule::in(['all', 'orders', 'process_records'])],
         ]);
         $orderId = $data['production_order_id'] ?? null;
+        $keyword = $data['keyword'] ?? null;
+        $include = $data['include'] ?? 'all';
         $hasOrder = $orderId !== null;
 
-        $orders = ProductionOrder::query()
-            ->with('product')
+        // shortcut: one page of matches covers a demo factory; add server paging when order volume grows.
+        $orders = $include === 'process_records' ? [] : ProductionOrder::query()
+            ->with('product:id,code,name')
+            ->when(
+                $keyword !== null && $keyword !== '',
+                fn (Builder $query) => $query->where(
+                    fn (Builder $inner) => $inner
+                        ->where('code', 'like', "%{$keyword}%")
+                        ->orWhereHas(
+                            'product',
+                            fn (Builder $product) => $product->where('name', 'like', "%{$keyword}%"),
+                        ),
+                ),
+            )
             ->orderByDesc('id')
             ->limit(100)
-            ->get()
+            ->get(['id', 'code', 'product_id'])
             ->map(fn (ProductionOrder $order): array => [
                 'id' => $order->id,
                 'code' => $order->code,
@@ -84,10 +100,17 @@ class ProductionExceptionController extends Controller
                     'code' => $order->product->code,
                     'name' => $order->product->name,
                 ],
-            ]);
+            ])
+            ->all();
 
-        $query = ProcessRecord::query()
-            ->with(['routeOperation.process', 'productionTask.productionOrder'])
+        // shortcut: one order's execution records fit in 200; add paging for very large tasks.
+        $records = $include === 'orders' ? [] : ProcessRecord::query()
+            ->with([
+                'routeOperation:id,sequence,process_id',
+                'routeOperation.process:id,code,name',
+                'productionTask:id,production_order_id',
+                'productionTask.productionOrder:id,code',
+            ])
             ->when(
                 $hasOrder,
                 fn (Builder $query) => $query
@@ -99,9 +122,8 @@ class ProductionExceptionController extends Controller
                     ->orderBy('sequence'),
             )
             ->when(! $hasOrder, fn (Builder $query) => $query->orderByDesc('id'))
-            ->limit($hasOrder ? 200 : 100);
-
-        $records = $query->get()
+            ->limit($hasOrder ? 200 : 100)
+            ->get(['id', 'sequence', 'sn', 'production_task_id', 'route_operation_id'])
             ->map(fn (ProcessRecord $record): array => [
                 'id' => $record->id,
                 'sequence' => $record->sequence,
@@ -119,7 +141,8 @@ class ProductionExceptionController extends Controller
                         'name' => $record->routeOperation->process->name,
                     ],
                 ],
-            ]);
+            ])
+            ->all();
 
         return ApiResponse::success([
             'orders' => $orders,
@@ -155,14 +178,10 @@ class ProductionExceptionController extends Controller
         ));
     }
 
-    public function close(Request $request, ProductionException $exception): JsonResponse
+    public function close(ProductionException $exception): JsonResponse
     {
-        $data = $request->validate([
-            'handling_result' => ['sometimes', 'nullable', 'string', 'max:2000'],
-        ]);
-
         return ApiResponse::success(ProductionExceptionResource::make(
-            $this->exceptions->close($exception, $data['handling_result'] ?? null),
+            $this->exceptions->close($exception),
         ));
     }
 

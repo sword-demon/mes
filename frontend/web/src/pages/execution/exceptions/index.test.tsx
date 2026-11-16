@@ -71,6 +71,7 @@ async function render(permissions: string[], overrides: Partial<ProductionExcept
     client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     http.defaults.adapter = async (config) => {
         requests.push({ url: config.url, method: config.method, data: config.data });
+        const body = typeof config.data === 'string' ? JSON.parse(config.data) : config.data;
 
         if (config.url === '/production/exceptions/1/close') {
             currentException = {
@@ -85,13 +86,14 @@ async function render(permissions: string[], overrides: Partial<ProductionExcept
                 status: 'processing',
                 status_label: '处理中',
                 handler: { id: 1, name: '测试员' },
-                handling_result: '处理中',
+                handling_result: body?.handling_result ?? '处理中',
                 handled_at: '2026-11-16T03:00:00Z',
             };
         }
 
         const isAction = ['process', 'close']
             .some((action) => config.url === `/production/exceptions/1/${action}`);
+        const include = (config.params as { include?: string } | undefined)?.include ?? 'all';
 
         return {
             config,
@@ -103,7 +105,10 @@ async function render(permissions: string[], overrides: Partial<ProductionExcept
                 data: isAction
                     ? currentException
                     : config.url === '/production/exceptions/options'
-                        ? { orders: [exception.production_order], process_records: [exception.process_record] }
+                        ? {
+                            orders: include === 'process_records' ? [] : [exception.production_order],
+                            process_records: include === 'orders' ? [] : [exception.process_record],
+                        }
                         : {
                             items: [currentException],
                             meta: { current_page: 1, per_page: 15, total: 1, last_page: 1 },
@@ -176,6 +181,48 @@ it('closes a processing exception through the protected API action', async () =>
     expect(document.body.textContent).toContain('已关闭');
 });
 
+it('requires a handling result before processing an exception', async () => {
+    await render(['production.exceptions.index', 'button.production.exceptions.process']);
+    const process = [...document.querySelectorAll('button')]
+        .find((button) => button.textContent?.trim() === '处理');
+
+    await act(async () => {
+        (process as HTMLButtonElement).click();
+    });
+    await act(async () => { await new Promise((resolve) => setTimeout(resolve, 50)); });
+
+    const submit = [...document.querySelectorAll('button')]
+        .find((button) => button.textContent?.trim() === '提交处理');
+
+    await act(async () => {
+        (submit as HTMLButtonElement).click();
+        await new Promise((resolve) => setTimeout(resolve, 50));
+    });
+
+    expect(requests.some((request) => request.url === '/production/exceptions/1/process')).toBe(false);
+
+    const textarea = document.querySelector('textarea') as HTMLTextAreaElement;
+    const setValue = Object.getOwnPropertyDescriptor(
+        window.HTMLTextAreaElement.prototype,
+        'value',
+    )?.set;
+
+    await act(async () => {
+        setValue?.call(textarea, '已更换吸嘴并复测。');
+        textarea.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    await act(async () => {
+        (submit as HTMLButtonElement).click();
+        await new Promise((resolve) => setTimeout(resolve, 100));
+    });
+
+    const request = requests.find((item) => item.url === '/production/exceptions/1/process');
+
+    expect(request).toBeDefined();
+    expect(String(request?.data)).toContain('已更换吸嘴并复测。');
+    expect(document.body.textContent).toContain('处理中');
+});
+
 it('shows the report form only when the user may create exceptions', async () => {
     await render(['production.exceptions.index', 'button.production.exceptions.create']);
     const report = [...document.querySelectorAll('button')]
@@ -188,4 +235,18 @@ it('shows the report form only when the user may create exceptions', async () =>
     expect(document.body.textContent).toContain('上报生产异常');
     expect(document.body.textContent).toContain('异常类型');
     expect(document.body.textContent).toContain('生产订单与工序执行记录至少填写一项');
+});
+
+it('lets a create-only user open the report form', async () => {
+    await render(['button.production.exceptions.create']);
+    const report = [...document.querySelectorAll('button')]
+        .find((button) => button.textContent?.trim() === '上报异常');
+
+    expect(report).toBeDefined();
+
+    await act(async () => {
+        (report as HTMLButtonElement).click();
+    });
+
+    expect(document.body.textContent).toContain('上报生产异常');
 });

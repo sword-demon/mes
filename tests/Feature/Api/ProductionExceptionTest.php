@@ -197,12 +197,21 @@ it('processes and closes an exception while enforcing the state machine', functi
         'production.exceptions.close',
     ], 'production_exception_handler');
     $exception = ProductionException::factory()->create(['status' => ProductionException::REPORTED]);
-    $processing = ProductionException::factory()->create(['status' => ProductionException::PROCESSING]);
+    $processing = ProductionException::factory()->create([
+        'status' => ProductionException::PROCESSING,
+        'handling_result' => '已定位异常原因。',
+    ]);
     $closed = ProductionException::factory()->create(['status' => ProductionException::CLOSED]);
 
     bearer($actor)->postJson("/api/v1/production/exceptions/{$exception->id}/process")
         ->assertUnprocessable()
         ->assertJsonPath('data.errors.handling_result.0', '请填写处理结果');
+
+    bearer($actor)->postJson("/api/v1/production/exceptions/{$exception->id}/process", [
+        'handling_result' => '   ',
+    ])
+        ->assertUnprocessable()
+        ->assertJsonPath('message', '请填写处理结果');
 
     bearer($actor)->postJson("/api/v1/production/exceptions/{$processing->id}/process", [
         'handling_result' => '重复处理',
@@ -214,6 +223,7 @@ it('processes and closes an exception while enforcing the state machine', functi
         ->assertOk()
         ->assertJsonPath('data.status', ProductionException::CLOSED)
         ->assertJsonPath('data.status_label', '已关闭')
+        ->assertJsonPath('data.handling_result', '已定位异常原因。')
         ->assertJsonPath('data.closed_at', fn (string $value): bool => $value !== '');
 
     bearer($actor)->postJson("/api/v1/production/exceptions/{$closed->id}/close")
@@ -229,17 +239,29 @@ it('processes and closes an exception while enforcing the state machine', functi
         ->assertJsonPath('data.handler.name', $actor->name)
         ->assertJsonPath('data.handled_at', fn (string $value): bool => $value !== '');
 
-    bearer($actor)->postJson("/api/v1/production/exceptions/{$exception->id}/close", [
-        'handling_result' => '复测连续三件合格，恢复生产。',
-    ])
+    bearer($actor)->postJson("/api/v1/production/exceptions/{$exception->id}/close")
         ->assertOk()
         ->assertJsonPath('data.status', ProductionException::CLOSED)
-        ->assertJsonPath('data.handling_result', '复测连续三件合格，恢复生产。');
+        ->assertJsonPath('data.handling_result', '已更换吸嘴并复测。');
 
     $exception->refresh();
 
     expect($exception->handled_at)->not->toBeNull()
         ->and($exception->closed_at)->not->toBeNull();
+});
+
+it('refuses to close a processing exception without a handling result', function () {
+    $actor = userWithPermissions(['production.exceptions.close'], 'production_exception_close_guard');
+    $exception = ProductionException::factory()->create([
+        'status' => ProductionException::PROCESSING,
+        'handling_result' => null,
+    ]);
+
+    bearer($actor)->postJson("/api/v1/production/exceptions/{$exception->id}/close")
+        ->assertUnprocessable()
+        ->assertJsonPath('message', '关闭生产异常前必须填写处理结果');
+
+    expect($exception->fresh()->status)->toBe(ProductionException::PROCESSING);
 });
 
 it('offers orders and their process records for the report form', function () {
@@ -267,6 +289,39 @@ it('offers orders and their process records for the report form', function () {
         ->assertOk()
         ->assertJsonPath('data.process_records.0.id', $record->id)
         ->assertJsonPath('data.process_records.0.production_order.code', $order->code);
+
+    bearer($actor)->getJson("/api/v1/production/exceptions/options?production_order_id={$order->id}&include=orders")
+        ->assertOk()
+        ->assertJsonCount(1, 'data.orders')
+        ->assertJsonCount(0, 'data.process_records');
+
+    bearer($actor)->getJson("/api/v1/production/exceptions/options?production_order_id={$order->id}&include=process_records")
+        ->assertOk()
+        ->assertJsonCount(0, 'data.orders')
+        ->assertJsonPath('data.process_records.0.id', $record->id);
+});
+
+it('searches report order options by keyword', function () {
+    $actor = userWithPermissions(['production.exceptions.create'], 'production_exception_option_search');
+    $old = ProductionOrder::factory()->create(['code' => 'PO-OLD-999']);
+    ProductionOrder::factory()->create(['code' => 'PO-NEW-001']);
+
+    bearer($actor)->getJson('/api/v1/production/exceptions/options?keyword=OLD')
+        ->assertOk()
+        ->assertJsonCount(1, 'data.orders')
+        ->assertJsonPath('data.orders.0.id', $old->id)
+        ->assertJsonPath('data.orders.0.code', 'PO-OLD-999');
+});
+
+it('treats zero as a meaningful order search keyword', function () {
+    $actor = userWithPermissions(['production.exceptions.create'], 'production_exception_zero_search');
+    $zero = ProductionOrder::factory()->create(['code' => 'PO-ZERO-0']);
+    ProductionOrder::factory()->create(['code' => 'PO-NINE-9']);
+
+    bearer($actor)->getJson('/api/v1/production/exceptions/options?keyword=0')
+        ->assertOk()
+        ->assertJsonCount(1, 'data.orders')
+        ->assertJsonPath('data.orders.0.id', $zero->id);
 });
 
 it('validates exception list filters', function (string $query, string $field) {

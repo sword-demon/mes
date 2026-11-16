@@ -37,6 +37,7 @@ export type ProductionOrderAction =
     | 'cancel';
 
 export type NamedRef = { id: number; code: string; name: string };
+export type RouteOperationRef = { id: number; sequence: number; process: NamedRef };
 
 export type ProductionOrder = {
     id: number;
@@ -158,11 +159,7 @@ export type ProductionDispatch = {
         status_label: string;
     };
     production_order?: { id: number; code: string };
-    route_operation?: {
-        id: number;
-        sequence: number;
-        process: { id: number; code: string; name: string };
-    };
+    route_operation?: RouteOperationRef;
     employee?: { id: number; employee_no: string; name: string };
     team?: NamedRef;
 };
@@ -221,11 +218,7 @@ export type ProductionReport = {
     };
     production_order?: { id: number; code: string };
     product?: NamedRef;
-    route_operation?: {
-        id: number;
-        sequence: number;
-        process: { id: number; code: string; name: string };
-    };
+    route_operation?: RouteOperationRef;
     employee?: { id: number; employee_no: string; name: string };
     team?: NamedRef | null;
     equipment?: Equipment | null;
@@ -287,7 +280,7 @@ export type ProductSnProcessRecord = {
     completed_at: string | null;
     received_at: string | null;
     rework_count: number;
-    route_operation: { id: number; sequence: number; process: NamedRef } | null;
+    route_operation: RouteOperationRef | null;
     employee: { id: number; employee_no: string; name: string } | null;
 };
 
@@ -527,11 +520,7 @@ export type ProductionExceptionProcessRecordRef = {
     sequence: number;
     sn: string | null;
     production_order?: { id: number; code: string };
-    route_operation: {
-        id: number;
-        sequence: number;
-        process: NamedRef;
-    };
+    route_operation: RouteOperationRef;
 };
 
 export type ProductionExceptionImage = { id: number; original_name: string | null; url: string };
@@ -579,13 +568,21 @@ export type ProductionExceptionOptions = {
     process_records: ProductionExceptionProcessRecordRef[];
 };
 
+export type ProductionExceptionOptionInclude = 'all' | 'orders' | 'process_records';
+
 export function listProductionExceptions(params: ProductionExceptionParams = {}) {
     return api.get<Paginated<ProductionException>>('/production/exceptions', params);
 }
 
-export function getProductionExceptionOptions(productionOrderId?: number) {
+export function getProductionExceptionOptions(
+    productionOrderId?: number,
+    keyword?: string,
+    include: ProductionExceptionOptionInclude = 'all',
+) {
     return api.get<ProductionExceptionOptions>('/production/exceptions/options', {
         production_order_id: productionOrderId,
+        keyword,
+        include,
     });
 }
 
@@ -613,8 +610,6 @@ export function processProductionException(id: number, handlingResult: string) {
     });
 }
 
-export function closeProductionException(id: number, handlingResult?: string) {
-    return api.post<ProductionException>(`/production/exceptions/${id}/close`, {
-        handling_result: handlingResult,
-    });
+export function closeProductionException(id: number) {
+    return api.post<ProductionException>(`/production/exceptions/${id}/close`);
 }

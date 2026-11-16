@@ -80,6 +80,10 @@ class ProductionExceptionService
 
     public function process(ProductionException $exception, User $handler, string $result): ProductionException
     {
+        if (trim($result) === '') {
+            throw new ApiException('请填写处理结果', 422);
+        }
+
         return $this->transition(
             $exception,
             ProductionException::REPORTED,
@@ -93,19 +97,22 @@ class ProductionExceptionService
         );
     }
 
-    public function close(ProductionException $exception, ?string $result = null): ProductionException
+    public function close(ProductionException $exception): ProductionException
     {
         return $this->transition(
             $exception,
             ProductionException::PROCESSING,
             '只有处理中的生产异常可以关闭',
-            fn (ProductionException $locked): array => [
-                'status' => ProductionException::CLOSED,
-                'handling_result' => $result !== null && trim($result) !== ''
-                    ? $result
-                    : $locked->handling_result,
-                'closed_at' => now(),
-            ],
+            function (ProductionException $locked): array {
+                if ($locked->handling_result === null || trim($locked->handling_result) === '') {
+                    throw new ApiException('关闭生产异常前必须填写处理结果', 422);
+                }
+
+                return [
+                    'status' => ProductionException::CLOSED,
+                    'closed_at' => now(),
+                ];
+            },
         );
     }
 

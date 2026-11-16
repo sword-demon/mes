@@ -18,6 +18,7 @@ import dayjs from 'dayjs';
 import type { Dayjs } from 'dayjs';
 import { useState } from 'react';
 import Can from '@/components/can';
+import { useDebouncedValue } from '@/hooks/use-debounced-value';
 import {
     closeProductionException,
     getProductionExceptionOptions,
@@ -60,11 +61,11 @@ function HandlingModal({
     const client = useQueryClient();
     const [form] = Form.useForm<{ handling_result?: string }>();
     const save = useMutation({
-        mutationFn: (result: string) => action === 'process'
-            ? processProductionException(exception.id, result)
-            : closeProductionException(exception.id, result),
-        onSuccess: async (updated) => {
-            await client.invalidateQueries({ queryKey: ['production', 'exceptions'] });
+        mutationFn: (result?: string) => action === 'process'
+            ? processProductionException(exception.id, result ?? '')
+            : closeProductionException(exception.id),
+        onSuccess: (updated) => {
+            void client.invalidateQueries({ queryKey: ['production', 'exceptions', 'list'] });
             message.success(`生产异常${updated.status_label}`);
             onClose();
         },
@@ -80,24 +81,25 @@ function HandlingModal({
             okText={action === 'process' ? '提交处理' : '确认关闭'}
             confirmLoading={save.isPending}
             onCancel={onClose}
-            onOk={() => form.submit()}
+            onOk={() => action === 'process' ? form.submit() : save.mutate()}
         >
-            <Form
-                form={form}
-                layout="vertical"
-                initialValues={{ handling_result: exception.handling_result ?? undefined }}
-                onFinish={(values) => save.mutate(values.handling_result ?? '')}
-            >
-                <Form.Item
-                    name="handling_result"
-                    label="处理结果"
-                    rules={action === 'process'
-                        ? [{ required: true, message: '请填写处理结果' }]
-                        : []}
+            {action === 'process' ? (
+                <Form
+                    form={form}
+                    layout="vertical"
+                    onFinish={(values) => save.mutate(values.handling_result ?? '')}
                 >
-                    <Input.TextArea rows={4} maxLength={2000} showCount />
-                </Form.Item>
-            </Form>
+                    <Form.Item
+                        name="handling_result"
+                        label="处理结果"
+                        rules={[{ required: true, message: '请填写处理结果' }]}
+                    >
+                        <Input.TextArea rows={4} maxLength={2000} showCount />
+                    </Form.Item>
+                </Form>
+            ) : (
+                <Typography.Text>处理结果：{exception.handling_result ?? '—'}</Typography.Text>
+            )}
         </Modal>
     );
 }
@@ -107,22 +109,26 @@ export default function ProductionExceptionsPage() {
     const queryClient = useQueryClient();
     const user = useAuthStore((state) => state.user);
     const canRead = can(user, 'production.exceptions.index');
+    const canCreate = can(user, 'button.production.exceptions.create');
     const [page, setPage] = useState(1);
     const [type, setType] = useState<ProductionExceptionType>();
     const [status, setStatus] = useState<ProductionExceptionStatus>();
     const [orderId, setOrderId] = useState<number>();
+    const [orderKeyword, setOrderKeyword] = useState('');
     const [dates, setDates] = useState<[Dayjs, Dayjs] | null>(null);
     const [reporting, setReporting] = useState(false);
     const [handling, setHandling] = useState<{ exception: ProductionException; action: HandlingAction }>();
     const startDate = dates?.[0].format('YYYY-MM-DD');
     const endDate = dates?.[1].format('YYYY-MM-DD');
+    const debouncedOrderKeyword = useDebouncedValue(orderKeyword);
     const options = useQuery({
-        queryKey: ['production', 'exceptions', 'options'],
-        queryFn: () => getProductionExceptionOptions(),
+        queryKey: ['production', 'exceptions', 'options', 'orders', debouncedOrderKeyword],
+        queryFn: () => getProductionExceptionOptions(undefined, debouncedOrderKeyword, 'orders'),
         enabled: canRead,
+        staleTime: 30_000,
     });
     const exceptions = useQuery({
-        queryKey: ['production', 'exceptions', page, type, status, orderId, startDate, endDate],
+        queryKey: ['production', 'exceptions', 'list', page, type, status, orderId, startDate, endDate],
         queryFn: () => listProductionExceptions({
             page,
             type,
@@ -136,8 +142,8 @@ export default function ProductionExceptionsPage() {
     const report = useMutation({
         mutationFn: ({ payload, files }: { payload: ProductionExceptionPayload; files: File[] }) =>
             reportProductionException(payload, files),
-        onSuccess: async () => {
-            await queryClient.invalidateQueries({ queryKey: ['production', 'exceptions'] });
+        onSuccess: () => {
+            void queryClient.invalidateQueries({ queryKey: ['production', 'exceptions', 'list'] });
             message.success('生产异常已上报');
             setReporting(false);
         },
@@ -146,7 +152,7 @@ export default function ProductionExceptionsPage() {
         ),
     });
 
-    if (!canRead) {
+    if (!canRead && !canCreate) {
         return <Empty description="暂无生产异常查看权限" />;
     }
 
@@ -163,52 +169,55 @@ export default function ProductionExceptionsPage() {
                     <Button type="primary" onClick={() => setReporting(true)}>上报异常</Button>
                 </Can>
             </Space>
-            <Space className="mb-4" wrap>
-                <Select
-                    allowClear
-                    placeholder="异常类型"
-                    className="w-32"
-                    options={PRODUCTION_EXCEPTION_TYPES.map(({ value, label }) => ({ value, label }))}
-                    onChange={(value?: ProductionExceptionType) => {
-                        setType(value);
-                        setPage(1);
-                    }}
-                />
-                <Select
-                    allowClear
-                    placeholder="异常状态"
-                    className="w-32"
-                    options={PRODUCTION_EXCEPTION_STATUSES.map(({ value, label }) => ({ value, label }))}
-                    onChange={(value?: ProductionExceptionStatus) => {
-                        setStatus(value);
-                        setPage(1);
-                    }}
-                />
-                <Select
-                    allowClear
-                    showSearch
-                    optionFilterProp="label"
-                    placeholder="筛选生产订单"
-                    className="w-60"
-                    loading={options.isLoading}
-                    value={orderId}
-                    options={(options.data?.orders ?? []).map((order) => ({
-                        value: order.id,
-                        label: `${order.code} ${order.product.name}`,
-                    }))}
-                    onChange={(value?: number) => {
-                        setOrderId(value);
-                        setPage(1);
-                    }}
-                />
-                <DatePicker.RangePicker
-                    onChange={(value) => {
-                        setDates(value?.[0] && value[1] ? [value[0], value[1]] : null);
-                        setPage(1);
-                    }}
-                />
-            </Space>
-            <Table<ProductionException>
+            {canRead ? (
+                <>
+                    <Space className="mb-4" wrap>
+                        <Select
+                            allowClear
+                            placeholder="异常类型"
+                            className="w-32"
+                            options={PRODUCTION_EXCEPTION_TYPES.map(({ value, label }) => ({ value, label }))}
+                            onChange={(value?: ProductionExceptionType) => {
+                                setType(value);
+                                setPage(1);
+                            }}
+                        />
+                        <Select
+                            allowClear
+                            placeholder="异常状态"
+                            className="w-32"
+                            options={PRODUCTION_EXCEPTION_STATUSES.map(({ value, label }) => ({ value, label }))}
+                            onChange={(value?: ProductionExceptionStatus) => {
+                                setStatus(value);
+                                setPage(1);
+                            }}
+                        />
+                        <Select
+                            allowClear
+                            showSearch
+                            filterOption={false}
+                            onSearch={setOrderKeyword}
+                            placeholder="筛选生产订单"
+                            className="w-60"
+                            loading={options.isLoading}
+                            value={orderId}
+                            options={(options.data?.orders ?? []).map((order) => ({
+                                value: order.id,
+                                label: `${order.code} ${order.product.name}`,
+                            }))}
+                            onChange={(value?: number) => {
+                                setOrderId(value);
+                                setPage(1);
+                            }}
+                        />
+                        <DatePicker.RangePicker
+                            onChange={(value) => {
+                                setDates(value?.[0] && value[1] ? [value[0], value[1]] : null);
+                                setPage(1);
+                            }}
+                        />
+                    </Space>
+                    <Table<ProductionException>
                 rowKey="id"
                 loading={exceptions.isLoading}
                 dataSource={exceptions.data?.items ?? []}
@@ -355,7 +364,11 @@ export default function ProductionExceptionsPage() {
                         ),
                     },
                 ]}
-            />
+                    />
+                </>
+            ) : (
+                <Empty description="暂无生产异常查看权限" />
+            )}
             {reporting && (
                 <ReportExceptionModal
                     saving={report.isPending}

@@ -1,8 +1,9 @@
 import { useQuery } from '@tanstack/react-query';
 import { App, Button, Form, Input, Modal, Select, Space, Tag, Upload } from 'antd';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { getProductionExceptionOptions, PRODUCTION_EXCEPTION_TYPES } from '@/api/production';
 import type { ProductionExceptionPayload } from '@/api/production';
+import { useDebouncedValue } from '@/hooks/use-debounced-value';
 
 export default function ReportExceptionModal({
     saving,
@@ -16,24 +17,38 @@ export default function ReportExceptionModal({
     const { message } = App.useApp();
     const [form] = Form.useForm<ProductionExceptionPayload>();
     const [files, setFiles] = useState<File[]>([]);
+    // beforeUpload runs once per selected file, so the ref enforces the cap within a batch.
+    const filesRef = useRef<File[]>([]);
+    const [orderKeyword, setOrderKeyword] = useState('');
+    const debouncedOrderKeyword = useDebouncedValue(orderKeyword);
     const orderId = Form.useWatch<number | undefined>('production_order_id', form);
     const orders = useQuery({
-        queryKey: ['production', 'exceptions', 'options'],
-        queryFn: () => getProductionExceptionOptions(),
+        queryKey: ['production', 'exceptions', 'options', 'orders', debouncedOrderKeyword],
+        queryFn: () => getProductionExceptionOptions(undefined, debouncedOrderKeyword, 'orders'),
+        staleTime: 30_000,
+    });
+    const globalRecords = useQuery({
+        queryKey: ['production', 'exceptions', 'options', 'process-records', null],
+        queryFn: () => getProductionExceptionOptions(undefined, undefined, 'process_records'),
+        enabled: orderId === undefined,
+        staleTime: 30_000,
     });
     const orderOptions = useQuery({
-        queryKey: ['production', 'exceptions', 'options', orderId],
-        queryFn: () => getProductionExceptionOptions(orderId),
+        queryKey: ['production', 'exceptions', 'options', 'process-records', orderId ?? 'none'],
+        queryFn: () => getProductionExceptionOptions(orderId, undefined, 'process_records'),
         enabled: orderId !== undefined,
+        staleTime: 30_000,
     });
 
     const beforeUpload = (file: File) => {
-        if (files.length >= 5) {
+        if (filesRef.current.length >= 5) {
             message.error('最多上传 5 张图片');
             return Upload.LIST_IGNORE;
         }
 
-        setFiles((current) => [...current, file]);
+        const next = [...filesRef.current, file];
+        filesRef.current = next;
+        setFiles(next);
 
         return false;
     };
@@ -86,7 +101,8 @@ export default function ReportExceptionModal({
                     <Select
                         allowClear
                         showSearch
-                        optionFilterProp="label"
+                        filterOption={false}
+                        onSearch={setOrderKeyword}
                         placeholder="请选择生产订单"
                         loading={orders.isLoading}
                         options={(orders.data?.orders ?? []).map((order) => ({
@@ -105,10 +121,10 @@ export default function ReportExceptionModal({
                         showSearch
                         optionFilterProp="label"
                         placeholder="可不选，关联到具体工序"
-                        loading={orderOptions.isLoading}
+                        loading={orderId === undefined ? globalRecords.isLoading : orderOptions.isLoading}
                         notFoundContent={orderId ? '该订单暂无工序执行记录' : '暂无工序执行记录'}
                         options={((orderId === undefined
-                            ? orders.data?.process_records
+                            ? globalRecords.data?.process_records
                             : orderOptions.data?.process_records) ?? []).map((record) => ({
                             value: record.id,
                             label: `${record.production_order ? `${record.production_order.code} · ` : ''}${record.route_operation.sequence}. ${record.route_operation.process.name}${record.sn ? `（${record.sn}）` : ''}`,
@@ -138,7 +154,11 @@ export default function ReportExceptionModal({
                                     <Tag
                                         key={`${file.name}-${index}`}
                                         closable
-                                        onClose={() => setFiles((current) => current.filter((_, i) => i !== index))}
+                                        onClose={() => {
+                                            const next = filesRef.current.filter((_, i) => i !== index);
+                                            filesRef.current = next;
+                                            setFiles(next);
+                                        }}
                                     >
                                         {file.name}
                                     </Tag>
