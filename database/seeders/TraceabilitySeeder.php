@@ -20,6 +20,14 @@ use RuntimeException;
 
 class TraceabilitySeeder extends Seeder
 {
+    private const EXECUTABLE_STATUSES = [
+        ProductionOrder::RELEASED,
+        ProductionOrder::IN_PROGRESS,
+        ProductionOrder::PAUSED,
+        ProductionOrder::COMPLETED,
+        ProductionOrder::CLOSED,
+    ];
+
     public function __construct(private readonly InventoryService $inventories) {}
 
     public function run(): void
@@ -35,6 +43,7 @@ class TraceabilitySeeder extends Seeder
         DB::transaction(function () use ($operator, $beforeBalances): void {
             ProductionOrder::query()
                 ->with('bom.items')
+                ->whereIn('status', self::EXECUTABLE_STATUSES)
                 ->orderBy('id')
                 ->each(fn (ProductionOrder $order) => $this->seedRequisition($order, $operator->id));
 
@@ -166,7 +175,10 @@ class TraceabilitySeeder extends Seeder
      */
     private function bindSerialNumbers(): void
     {
-        $orders = ProductionOrder::query()->orderBy('id')->get();
+        $orders = ProductionOrder::query()
+            ->whereIn('status', self::EXECUTABLE_STATUSES)
+            ->orderBy('id')
+            ->get();
 
         foreach ($orders as $order) {
             $tasks = ProductionTask::query()
@@ -176,6 +188,7 @@ class TraceabilitySeeder extends Seeder
             $records = ProcessRecord::query()
                 ->whereIn('production_task_id', $tasks->keys())
                 ->where('sequence', '>=', 2)
+                ->with('routeOperation.process')
                 ->orderBy('sequence')
                 ->orderBy('id')
                 ->get();
@@ -185,23 +198,27 @@ class TraceabilitySeeder extends Seeder
                 ->orderBy('id')
                 ->get();
 
-            foreach ($sns as $index => $sn) {
-                $record = $records->get($index);
-                $task = $record === null ? null : $tasks->get($record->production_task_id);
+            foreach ($records as $index => $record) {
+                $sn = $sns->get($index % max(1, $sns->count()));
+                $task = $tasks->get($record->production_task_id);
 
-                if ($record === null || $task === null) {
-                    break;
+                if ($sn === null || $task === null) {
+                    continue;
                 }
+
+                $requiresInspection = $record->requiresInspection();
+                $completedAt = now()->subDays(2)->addHour();
 
                 $record->update([
                     'sn' => $sn->sn,
-                    'status' => ProcessRecord::TRANSFERRED,
+                    'status' => $requiresInspection ? ProcessRecord::INSPECTED : ProcessRecord::TRANSFERRED,
                     'employee_id' => $record->employee_id ?? $task->owner_id,
                     'team_id' => $record->team_id ?? $task->team_id,
                     'started_at' => $record->started_at ?? now()->subDays(2),
-                    'completed_at' => $record->completed_at ?? now()->subDays(2)->addHour(),
-                    'submitted_at' => $record->submitted_at ?? now()->subDays(2)->addHours(2),
-                    'received_at' => $record->received_at ?? now()->subDays(2)->addHours(3),
+                    'completed_at' => $record->completed_at ?? $completedAt,
+                    'inspected_at' => $requiresInspection ? ($record->inspected_at ?? $completedAt->addMinutes(30)) : null,
+                    'submitted_at' => $requiresInspection ? null : ($record->submitted_at ?? now()->subDays(2)->addHours(2)),
+                    'received_at' => $requiresInspection ? null : ($record->received_at ?? now()->subDays(2)->addHours(3)),
                 ]);
             }
         }
