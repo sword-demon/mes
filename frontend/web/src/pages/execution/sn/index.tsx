@@ -38,6 +38,7 @@ export default function ProductSnPage() {
     const canBind = can(user, 'button.production.sns.bind');
     const canPrint = can(user, 'button.production.sns.print');
     const canVoid = can(user, 'button.production.sns.void');
+    const canTrace = can(user, 'traceability.forward.show');
     const [page, setPage] = useState(1);
     const [keyword, setKeyword] = useState('');
     const [status, setStatus] = useState<ProductSnStatus>();
@@ -233,6 +234,14 @@ export default function ProductSnPage() {
                                 {canVoid && record.status === 'active' && (
                                     <Button type="link" danger onClick={() => setVoidTarget(record)}>
                                         作废
+                                    </Button>
+                                )}
+                                {canTrace && (
+                                    <Button
+                                        type="link"
+                                        href={`/traceability/forward?sn=${encodeURIComponent(record.sn)}`}
+                                    >
+                                        追溯
                                     </Button>
                                 )}
                             </Space>

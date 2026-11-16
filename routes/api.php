@@ -1,5 +1,6 @@
 <?php
 
+use App\Core\Exceptions\ApiException;
 use App\Modules\Bom\Controller\BomController;
 use App\Modules\Bom\Controller\BomItemController;
 use App\Modules\Equipment\Controller\EquipmentAlarmController;
@@ -37,6 +38,7 @@ use App\Modules\System\Controller\MenuController;
 use App\Modules\System\Controller\PermissionController;
 use App\Modules\System\Controller\RoleController;
 use App\Modules\System\Controller\UserController;
+use App\Modules\Traceability\Controller\ForwardTraceController;
 use Illuminate\Support\Facades\Route;
 
 Route::post('/auth/tokens', [AccessTokenController::class, 'store'])
@@ -84,6 +86,14 @@ Route::middleware(['auth:sanctum', 'active'])->group(function (): void {
         Route::post('/defective-products/{defective}/recheck', [DefectiveProductController::class, 'recheck'])
             ->middleware('permission:quality.defects.recheck')->name('defective-products.recheck');
     });
+
+    Route::prefix('traceability')->name('api.traceability.')->group(function (): void {
+        Route::get('/sn/{productSn}', [ForwardTraceController::class, 'show'])
+            ->middleware('permission:traceability.forward.show')
+            ->missing(fn () => throw new ApiException('SN 不存在', 404, status: 404))
+            ->name('forward.show');
+    });
+
     Route::get('/me', [MeController::class, 'show'])->name('api.me');
 
     Route::delete('/auth/tokens', [AccessTokenController::class, 'destroy'])

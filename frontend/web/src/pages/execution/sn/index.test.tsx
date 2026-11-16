@@ -129,6 +129,7 @@ describe('SN 管理页', () => {
         expect(document.body.textContent).toContain('MAT-LOT-001');
         expect(document.body.textContent).not.toContain('生成 SN');
         expect(document.body.textContent).not.toContain('作废');
+        expect(document.querySelector('a[href^="/traceability/forward"]')).toBeNull();
     });
 
     it('offers generate, bind, label and void actions to a permitted operator', async () => {
@@ -141,6 +142,7 @@ describe('SN 管理页', () => {
                     'button.production.sns.bind',
                     'button.production.sns.print',
                     'button.production.sns.void',
+                    'traceability.forward.show',
                 ],
             }),
         });
@@ -151,6 +153,11 @@ describe('SN 管理页', () => {
         expect(document.body.textContent).toContain('绑定');
         expect(document.body.textContent).toContain('标签');
         expect(document.body.textContent).toContain('作废');
+        expect(
+            document.querySelector(
+                `a[href="/traceability/forward?sn=${productSn.sn}"]`,
+            ),
+        ).not.toBeNull();
     });
 
     it('loads the printable label when the operator asks for it', async () => {

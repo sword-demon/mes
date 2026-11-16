@@ -32,6 +32,7 @@ import QualityStandards from '@/pages/quality/standards';
 import QualityRecords from '@/pages/quality/records';
 import QualityTasks from '@/pages/quality/tasks';
 import QualityDefects from '@/pages/quality/defects';
+import ForwardTrace from '@/pages/traceability/forward';
 import { useAuthStore } from '@/stores/auth';
 import { findMenu, firstMenuPath } from '@/utils/permission';
 
@@ -74,6 +75,7 @@ const pages: Record<string, () => ReactNode> = {
     '/quality/tasks': QualityTasks,
     '/quality/records': QualityRecords,
     '/quality/defects': QualityDefects,
+    '/traceability/forward': ForwardTrace,
 };
 
 /**
