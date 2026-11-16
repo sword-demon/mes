@@ -72,6 +72,7 @@ async function render(permissions: string[]) {
             data = {
                 items: [equipment],
                 status_counts: { running: 1, idle: 0, fault: 0, repair: 0, offline: 0 },
+                max_history_seconds: 31 * 24 * 60 * 60,
             };
         }
 
@@ -81,14 +82,11 @@ async function render(permissions: string[]) {
                 start_at: '2026-11-16T00:00:00Z',
                 end_at: '2026-11-16T06:00:00Z',
                 items: [{
-                    id: 1,
                     recorded_at: '2026-11-16T05:00:00Z',
-                    status: 'running',
                     temperature: 66.5,
                     speed: 1320,
                     pressure: 0.82,
                     output: 912,
-                    runtime_seconds: 3600,
                 }],
             };
         }
@@ -138,9 +136,18 @@ it('hides history curves without the history permission', async () => {
     expect(requests.some((request) => request.url === '/equipments/1/history')).toBe(false);
 });
 
-it('warns and loads nothing without the monitor permission', async () => {
+it('loads the equipment list for history-only users', async () => {
+    await render(['equipment.history.index']);
+
+    expect(document.body.textContent).toContain('EQ-SMT-01');
+    expect(document.querySelectorAll('[data-testid="chart"]')).toHaveLength(4);
+    expect(requests.some((request) => request.url === '/equipments/monitor')).toBe(true);
+    expect(requests.some((request) => request.url === '/equipments/1/history')).toBe(true);
+});
+
+it('warns and loads nothing without monitoring or history permission', async () => {
     await render([]);
 
-    expect(document.body.textContent).toContain('没有设备监控权限');
+    expect(document.body.textContent).toContain('没有设备监控或历史数据权限');
     expect(requests).toHaveLength(0);
 });

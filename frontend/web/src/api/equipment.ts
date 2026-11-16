@@ -83,9 +83,12 @@ export type EquipmentMetric = {
     runtime_seconds: number | null;
 };
 
-export type EquipmentHistorySample = EquipmentMetric & {
-    id: number;
-    status: EquipmentStatus;
+export type EquipmentHistorySample = {
+    recorded_at: string;
+    temperature: number;
+    speed: number;
+    pressure: number;
+    output: number;
 };
 
 export type MonitorEquipment = Equipment & {
@@ -95,6 +98,7 @@ export type MonitorEquipment = Equipment & {
 export type EquipmentMonitorData = {
     items: MonitorEquipment[];
     status_counts: Record<EquipmentStatus, number>;
+    max_history_seconds: number;
 };
 
 export type EquipmentHistoryData = {

@@ -97,6 +97,15 @@ class Equipment extends Model
     }
 
     /**
+     * @param  Builder<Equipment>  $query
+     * @return Builder<Equipment>
+     */
+    public function scopeEnabled(Builder $query): Builder
+    {
+        return $query->where('enabled', true);
+    }
+
+    /**
      * @return BelongsTo<Workshop, $this>
      */
     public function workshop(): BelongsTo
@@ -128,7 +137,7 @@ class Equipment extends Model
         return $this->hasOne(EquipmentData::class)
             ->ofMany(
                 ['recorded_at' => 'max'],
-                fn (Builder $query) => $query->where('message_type', 'data'),
+                fn (Builder $query) => $query->where('message_type', EquipmentData::TYPE_DATA),
             );
     }
 

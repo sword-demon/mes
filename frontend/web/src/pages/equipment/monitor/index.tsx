@@ -139,12 +139,13 @@ export default function EquipmentMonitor() {
     const user = useAuthStore((state) => state.user);
     const canMonitor = can(user, 'equipment.monitor.index');
     const canHistory = can(user, 'equipment.history.index');
+    const canRead = canMonitor || canHistory;
     const [selectedId, setSelectedId] = useState<number>();
     const [range, setRange] = useState<[Dayjs, Dayjs]>(() => defaultRange());
     const monitor = useQuery({
         queryKey: ['equipment', 'monitor'],
         queryFn: getEquipmentMonitor,
-        enabled: canMonitor,
+        enabled: canRead,
         refetchInterval: 5000,
     });
     const equipments = monitor.data?.items ?? [];
@@ -164,8 +165,8 @@ export default function EquipmentMonitor() {
         }
     }, [equipments, selectedId]);
 
-    if (!canMonitor) {
-        return <Alert type="warning" showIcon title="没有设备监控权限" />;
+    if (!canRead) {
+        return <Alert type="warning" showIcon title="没有设备监控或历史数据权限" />;
     }
 
     function changeRange(value: [Dayjs | null, Dayjs | null] | null) {
@@ -173,8 +174,10 @@ export default function EquipmentMonitor() {
             return;
         }
 
-        if (value[1].diff(value[0], 'second') > 86400) {
-            message.warning('查询时间区间不能超过 24 小时');
+        const maxHistorySeconds = monitor.data?.max_history_seconds;
+
+        if (maxHistorySeconds !== undefined && value[1].diff(value[0], 'second') > maxHistorySeconds) {
+            message.warning(`查询时间区间不能超过 ${Math.round(maxHistorySeconds / 86400)} 天`);
             return;
         }
 
@@ -247,6 +250,8 @@ export default function EquipmentMonitor() {
                                     { label: '最近 1 小时', value: [now.subtract(1, 'hour'), now] },
                                     { label: '最近 6 小时', value: [now.subtract(6, 'hour'), now] },
                                     { label: '最近 24 小时', value: [now.subtract(24, 'hour'), now] },
+                                    { label: '最近 7 天', value: [now.subtract(7, 'day'), now] },
+                                    { label: '最近 30 天', value: [now.subtract(30, 'day'), now] },
                                 ]}
                             />
                         </Space>

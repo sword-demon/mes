@@ -34,6 +34,20 @@ class EquipmentData extends Model
     /** @use HasFactory<EquipmentDataFactory> */
     use HasFactory;
 
+    public const string TYPE_DATA = 'data';
+
+    public const string TYPE_STATUS = 'status';
+
+    public const string TYPE_ALARM = 'alarm';
+
+    public const array MESSAGE_TYPES = [self::TYPE_STATUS, self::TYPE_DATA, self::TYPE_ALARM];
+
+    public const int MAX_HISTORY_DAYS = 31;
+
+    public const int MAX_HISTORY_SECONDS = self::MAX_HISTORY_DAYS * 86400;
+
+    public const int HISTORY_POINT_LIMIT = 500;
+
     /**
      * @return BelongsTo<Equipment, $this>
      */

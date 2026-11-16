@@ -92,7 +92,7 @@ class EquipmentController extends Controller
     public function monitor(): JsonResponse
     {
         $statusRows = Equipment::query()
-            ->where('enabled', true)
+            ->enabled()
             ->selectRaw('status, COUNT(*) as aggregate')
             ->groupBy('status')
             ->pluck('aggregate', 'status');
@@ -104,17 +104,16 @@ class EquipmentController extends Controller
             }
         }
 
-        // shortcut: one page covers a demo factory's fleet; add paging when it grows.
         $equipments = Equipment::query()
-            ->where('enabled', true)
+            ->enabled()
             ->with([...self::RELATIONS, 'latestData'])
             ->orderBy('id')
-            ->limit(200)
             ->get();
 
         return ApiResponse::success([
             'items' => EquipmentResource::collection($equipments)->resolve(),
             'status_counts' => $statusCounts,
+            'max_history_seconds' => EquipmentData::MAX_HISTORY_SECONDS,
         ]);
     }
 
@@ -131,20 +130,11 @@ class EquipmentController extends Controller
         $start = CarbonImmutable::parse($data['start_at'])->utc();
         $end = CarbonImmutable::parse($data['end_at'])->utc();
 
-        if ((int) $start->diffInSeconds($end) > 86400) {
-            throw new ApiException('查询时间区间不能超过 24 小时', 422);
+        if ((int) $start->diffInSeconds($end) > EquipmentData::MAX_HISTORY_SECONDS) {
+            throw new ApiException('查询时间区间不能超过 '.EquipmentData::MAX_HISTORY_DAYS.' 天', 422);
         }
 
-        // shortcut: raw samples are capped at 24h; bucket them once longer ranges are needed.
-        $samples = EquipmentData::query()
-            ->where('equipment_id', $equipment->id)
-            ->where('message_type', 'data')
-            ->whereBetween('recorded_at', [
-                $start->format('Y-m-d H:i:s.u'),
-                $end->format('Y-m-d H:i:s.u'),
-            ])
-            ->orderBy('recorded_at')
-            ->get(['id', 'recorded_at', 'status', 'temperature', 'speed', 'pressure', 'output', 'runtime_seconds']);
+        $samples = $this->equipments->history($equipment, $start, $end);
 
         return ApiResponse::success([
             'equipment' => [
@@ -156,16 +146,7 @@ class EquipmentController extends Controller
             ],
             'start_at' => $start->toISOString(),
             'end_at' => $end->toISOString(),
-            'items' => $samples->map(fn (EquipmentData $sample): array => [
-                'id' => $sample->id,
-                'recorded_at' => $sample->recorded_at->toISOString(),
-                'status' => $sample->status,
-                'temperature' => $sample->temperature,
-                'speed' => $sample->speed,
-                'pressure' => $sample->pressure,
-                'output' => $sample->output,
-                'runtime_seconds' => $sample->runtime_seconds,
-            ])->values(),
+            'items' => $samples,
         ]);
     }
 

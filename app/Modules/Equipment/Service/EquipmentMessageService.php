@@ -19,7 +19,7 @@ class EquipmentMessageService
         $parts = explode('/', $topic);
 
         if (count($parts) !== 4 || $parts[0] !== 'mes' || $parts[1] !== config('mqtt.factory')
-            || ! in_array($parts[3], ['status', 'data', 'alarm'], true)) {
+            || ! in_array($parts[3], EquipmentData::MESSAGE_TYPES, true)) {
             throw ValidationException::withMessages(['topic' => '设备 MQTT 主题无效']);
         }
 
@@ -42,7 +42,7 @@ class EquipmentMessageService
             'pressure' => ['required', 'numeric', 'between:0,9999999.999'],
             'output' => ['required', 'integer', 'between:0,4294967295'],
             'runtime_seconds' => ['sometimes', 'integer', 'between:0,4294967295'],
-            ...($parts[3] === 'alarm' ? [
+            ...($parts[3] === EquipmentData::TYPE_ALARM ? [
                 'alarm_code' => ['required', 'string', 'max:64'],
                 'message' => ['required', 'string', 'max:1000'],
                 'level' => ['required', Rule::in(['info', 'warning', 'critical'])],
@@ -86,7 +86,7 @@ class EquipmentMessageService
                 'pressure' => $data['pressure'],
                 'output' => $data['output'],
                 'runtime_seconds' => $data['runtime_seconds'] ?? null,
-                'alarm' => $parts[3] === 'alarm' ? [
+                'alarm' => $parts[3] === EquipmentData::TYPE_ALARM ? [
                     'code' => $data['alarm_code'],
                     'message' => $data['message'],
                     'level' => $data['level'],
