@@ -33,6 +33,7 @@ const equipment = {
     model: 'SMT-X200',
     status: 'running',
     status_label: '运行',
+    enabled: true,
     workshop_id: 1,
     workshop: { id: 1, code: 'WS01', name: '一号车间' },
     production_line_id: 2,

@@ -153,12 +153,20 @@ export default function EquipmentLedger() {
         enabled: canRead,
     });
     const stop = useMutation({
-        mutationFn: (record: Equipment) => updateEquipment(record.id, { status: 'offline' }),
+        mutationFn: (record: Equipment) => updateEquipment(record.id, { enabled: false, status: 'offline' }),
         onSuccess: async () => {
             await client.invalidateQueries({ queryKey: ['equipment'] });
             message.success('设备已停用');
         },
         onError: (error) => message.error(error instanceof ApiRequestError ? error.message : '停用失败'),
+    });
+    const enable = useMutation({
+        mutationFn: (record: Equipment) => updateEquipment(record.id, { enabled: true, status: 'idle' }),
+        onSuccess: async () => {
+            await client.invalidateQueries({ queryKey: ['equipment'] });
+            message.success('设备已启用');
+        },
+        onError: (error) => message.error(error instanceof ApiRequestError ? error.message : '启用失败'),
     });
     const lineOptions = (options.data?.production_lines ?? [])
         .filter((line) => workshopId === undefined || line.workshop_id === workshopId)
@@ -243,7 +251,9 @@ export default function EquipmentLedger() {
                     {
                         title: '状态',
                         width: 90,
-                        render: (_, record) => <Tag color={statusColor[record.status]}>{record.status_label}</Tag>,
+                        render: (_, record) => record.enabled
+                            ? <Tag color={statusColor[record.status]}>{record.status_label}</Tag>
+                            : <Tag>已停用</Tag>,
                     },
                     {
                         title: '负责人',
@@ -258,7 +268,7 @@ export default function EquipmentLedger() {
                                 <Can code="button.equipment.ledger.update">
                                     <Button type="link" onClick={() => setEditing(record)}>编辑</Button>
                                 </Can>
-                                {record.status !== 'offline' && (
+                                {record.enabled ? (
                                     <Can code="button.equipment.ledger.update">
                                         <Popconfirm
                                             title="停用后设备将变为离线，不再出现在报工与工序下拉中"
@@ -267,6 +277,17 @@ export default function EquipmentLedger() {
                                             onConfirm={() => stop.mutate(record)}
                                         >
                                             <Button type="link" danger>停用</Button>
+                                        </Popconfirm>
+                                    </Can>
+                                ) : (
+                                    <Can code="button.equipment.ledger.update">
+                                        <Popconfirm
+                                            title="启用后设备将恢复为待机状态"
+                                            okText="启用"
+                                            cancelText="取消"
+                                            onConfirm={() => enable.mutate(record)}
+                                        >
+                                            <Button type="link">启用</Button>
                                         </Popconfirm>
                                     </Can>
                                 )}

@@ -29,6 +29,7 @@ export type Equipment = {
     model: string;
     status: EquipmentStatus;
     status_label: string;
+    enabled: boolean;
     workshop_id: number;
     workshop?: { id: number; code: string; name: string };
     production_line_id: number;
@@ -62,6 +63,7 @@ export type EquipmentPayload = {
     production_line_id: number;
     model: string;
     status?: EquipmentStatus;
+    enabled?: boolean;
     owner_id: number;
 };
 

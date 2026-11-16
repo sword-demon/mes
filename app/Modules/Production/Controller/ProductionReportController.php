@@ -6,6 +6,7 @@ use App\Core\Services\EntityService;
 use App\Http\Controllers\Controller;
 use App\Http\Responses\ApiResponse;
 use App\Modules\Equipment\Model\Equipment;
+use App\Modules\Equipment\Resource\EquipmentResource;
 use App\Modules\Organization\Model\Employee;
 use App\Modules\Production\FormRequest\StoreProductionReportRequest;
 use App\Modules\Production\Model\ProductionReport;
@@ -117,16 +118,7 @@ class ProductionReportController extends Controller
             ->orderBy('id')
             ->limit(200)
             ->get()
-            ->map(fn (Equipment $equipment): array => [
-                'id' => $equipment->id,
-                'code' => $equipment->code,
-                'name' => $equipment->name,
-                'type' => $equipment->type,
-                'model' => $equipment->model,
-                'production_line_id' => $equipment->production_line_id,
-                'status' => $equipment->status,
-                'status_label' => $equipment->statusLabel(),
-            ]);
+            ->map(fn (Equipment $equipment): array => EquipmentResource::make($equipment)->resolve());
 
         return ApiResponse::success([
             'tasks' => $tasks,

@@ -83,6 +83,7 @@ function CreateReportModal({
                 onValuesChange={(changed) => {
                     if ('production_task_id' in changed) {
                         form.setFieldValue('route_operation_id', undefined);
+                        form.setFieldValue('equipment_id', undefined);
                     }
                 }}
                 onFinish={(values) =>

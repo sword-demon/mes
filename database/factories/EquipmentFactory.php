@@ -27,6 +27,7 @@ class EquipmentFactory extends EloquentFactory
                 ->value('workshop_id'),
             'model' => strtoupper(fake()->bothify('MDL-###')),
             'status' => Equipment::IDLE,
+            'enabled' => true,
             'owner_id' => Employee::factory(),
         ];
     }

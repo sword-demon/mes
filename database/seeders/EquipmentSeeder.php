@@ -49,6 +49,7 @@ class EquipmentSeeder extends Seeder
                     'production_line_id' => $line->id,
                     'model' => $definition['model'],
                     'status' => $definition['status'],
+                    'enabled' => true,
                     'owner_id' => $owner->id,
                 ],
             );

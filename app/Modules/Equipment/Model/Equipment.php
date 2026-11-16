@@ -24,11 +24,12 @@ use Illuminate\Support\Carbon;
  * @property int $production_line_id
  * @property string $model
  * @property string $status
+ * @property bool $enabled
  * @property int|null $owner_id
  * @property Carbon|null $created_at
  * @property Carbon|null $updated_at
  */
-#[Fillable(['code', 'name', 'type', 'workshop_id', 'production_line_id', 'model', 'status', 'owner_id'])]
+#[Fillable(['code', 'name', 'type', 'workshop_id', 'production_line_id', 'model', 'status', 'enabled', 'owner_id'])]
 #[Table('mes_equipments')]
 #[UseFactory(EquipmentFactory::class)]
 class Equipment extends Model
@@ -77,6 +78,7 @@ class Equipment extends Model
      */
     protected $attributes = [
         'status' => self::IDLE,
+        'enabled' => true,
     ];
 
     public function statusLabel(): string
@@ -90,7 +92,7 @@ class Equipment extends Model
      */
     public function scopeAvailable(Builder $query): Builder
     {
-        return $query->whereIn('status', [self::RUNNING, self::IDLE]);
+        return $query->where('enabled', true)->whereIn('status', [self::RUNNING, self::IDLE]);
     }
 
     /**
@@ -123,6 +125,7 @@ class Equipment extends Model
     protected function casts(): array
     {
         return [
+            'enabled' => 'boolean',
             'owner_id' => 'integer',
         ];
     }

@@ -9,6 +9,27 @@ use App\Modules\Organization\Model\ProductionLine;
 class EquipmentService
 {
     /**
+     * @throws ApiException
+     */
+    public function available(
+        int $equipmentId,
+        ?int $productionLineId = null,
+        string $unavailableMessage = '设备不存在或当前不可用',
+    ): Equipment {
+        $equipment = Equipment::query()->available()->whereKey($equipmentId)->first();
+
+        if ($equipment === null) {
+            throw new ApiException($unavailableMessage, 422);
+        }
+
+        if ($productionLineId !== null && $equipment->production_line_id !== $productionLineId) {
+            throw new ApiException('设备不属于该生产任务的产线', 422);
+        }
+
+        return $equipment;
+    }
+
+    /**
      * @param  array<string, mixed>  $data
      *
      * @throws ApiException

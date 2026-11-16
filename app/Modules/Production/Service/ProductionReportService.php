@@ -3,7 +3,7 @@
 namespace App\Modules\Production\Service;
 
 use App\Core\Exceptions\ApiException;
-use App\Modules\Equipment\Model\Equipment;
+use App\Modules\Equipment\Service\EquipmentService;
 use App\Modules\Organization\Model\Employee;
 use App\Modules\Process\Model\RouteOperation;
 use App\Modules\Production\Model\ProductionOrder;
@@ -13,6 +13,8 @@ use Illuminate\Support\Facades\DB;
 
 class ProductionReportService
 {
+    public function __construct(private readonly EquipmentService $equipments) {}
+
     public const array REPORTABLE_ORDER_STATUSES = [
         ProductionOrder::RELEASED,
         ProductionOrder::IN_PROGRESS,
@@ -49,19 +51,12 @@ class ProductionReportService
             $equipmentId = $data['equipment_id'] ?? null;
 
             if ($equipmentId !== null) {
-                $equipment = Equipment::query()
-                    ->available()
-                    ->whereKey($equipmentId)
-                    ->first();
-
-                if ($equipment === null) {
-                    throw new ApiException('设备不存在或当前不可用，不能报工', 422);
-                }
-
-                if ($equipment->production_line_id !== $order->production_line_id) {
-                    throw new ApiException('设备不属于该生产任务的产线', 422);
-                }
-
+                $lineId = $task->production_line_id ?? $order->production_line_id;
+                $equipment = $this->equipments->available(
+                    (int) $equipmentId,
+                    $lineId,
+                    '设备不存在或当前不可用，不能报工',
+                );
                 $equipmentId = $equipment->id;
             }
 

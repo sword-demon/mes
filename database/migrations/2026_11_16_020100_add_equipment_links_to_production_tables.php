@@ -28,6 +28,10 @@ return new class extends Migration
         // SQLite cannot add foreign keys to existing tables; app validation covers
         // the test path while MySQL keeps referential integrity.
         if (DB::getDriverName() !== 'sqlite') {
+            $this->nullOrphanEquipmentIds('mes_production_reports');
+            $this->nullOrphanEquipmentIds('mes_process_records');
+            $this->nullOrphanEquipmentIds('mes_product_sns');
+
             Schema::table('mes_production_reports', function (Blueprint $table) {
                 $table->foreign('equipment_id', 'mes_production_reports_equipment_id_foreign')
                     ->references('id')->on('mes_equipments')->nullOnDelete();
@@ -76,5 +80,16 @@ return new class extends Migration
             $table->dropIndex('mes_production_reports_equipment_id_index');
             $table->dropColumn('equipment_id');
         });
+    }
+
+    private function nullOrphanEquipmentIds(string $table): void
+    {
+        DB::table($table)
+            ->whereNotNull('equipment_id')
+            ->whereNotExists(fn ($query) => $query
+                ->select(DB::raw(1))
+                ->from('mes_equipments')
+                ->whereColumn('mes_equipments.id', "{$table}.equipment_id"))
+            ->update(['equipment_id' => null]);
     }
 };

@@ -32,9 +32,11 @@ it('creates, edits and stops equipment with its workshop, line and owner', funct
     bearer($actor)->putJson("/api/v1/equipments/{$created['id']}", [
         'name' => 'SMT 贴片机二号',
         'status' => Equipment::OFFLINE,
+        'enabled' => false,
     ])->assertOk()
         ->assertJsonPath('data.name', 'SMT 贴片机二号')
         ->assertJsonPath('data.status', Equipment::OFFLINE)
+        ->assertJsonPath('data.enabled', false)
         ->assertJsonPath('data.status_label', '离线');
 
     $this->assertDatabaseHas('mes_equipments', [
@@ -42,8 +44,16 @@ it('creates, edits and stops equipment with its workshop, line and owner', funct
         'code' => 'EQ-SMT-01',
         'name' => 'SMT 贴片机二号',
         'status' => Equipment::OFFLINE,
+        'enabled' => false,
         'owner_id' => $owner->id,
     ]);
+
+    bearer($actor)->putJson("/api/v1/equipments/{$created['id']}", [
+        'enabled' => true,
+        'status' => Equipment::IDLE,
+    ])->assertOk()
+        ->assertJsonPath('data.enabled', true)
+        ->assertJsonPath('data.status', Equipment::IDLE);
 });
 
 it('rejects a production line that belongs to another workshop', function () {
@@ -65,6 +75,26 @@ it('rejects a production line that belongs to another workshop', function () {
         ->assertJsonPath('message', '所属产线不属于所选车间');
 
     expect(Equipment::query()->count())->toBe(0);
+});
+
+it('rejects updating equipment onto a line from another workshop', function () {
+    $actor = userWithPermissions(['equipment.ledger.update']);
+    $firstWorkshop = Workshop::factory()->create();
+    $secondWorkshop = Workshop::factory()->create();
+    $line = ProductionLine::factory()->create(['workshop_id' => $firstWorkshop->id]);
+    $owner = Employee::factory()->create();
+    $equipment = Equipment::factory()->create([
+        'workshop_id' => $firstWorkshop->id,
+        'production_line_id' => $line->id,
+        'owner_id' => $owner->id,
+    ]);
+
+    bearer($actor)->putJson("/api/v1/equipments/{$equipment->id}", [
+        'workshop_id' => $secondWorkshop->id,
+    ])->assertStatus(422)
+        ->assertJsonPath('message', '所属产线不属于所选车间');
+
+    expect($equipment->refresh()->workshop_id)->toBe($firstWorkshop->id);
 });
 
 it('filters the ledger by workshop, line, type, status and keyword', function () {
@@ -129,6 +159,14 @@ it('serves available equipment options to report and flow users', function () {
         'workshop_id' => $workshop->id,
         'production_line_id' => $line->id,
         'status' => Equipment::FAULT,
+        'owner_id' => $owner->id,
+    ]);
+    Equipment::factory()->create([
+        'code' => 'EQ-DISABLED-01',
+        'workshop_id' => $workshop->id,
+        'production_line_id' => $line->id,
+        'status' => Equipment::RUNNING,
+        'enabled' => false,
         'owner_id' => $owner->id,
     ]);
 

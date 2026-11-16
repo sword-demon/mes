@@ -24,6 +24,7 @@ class EquipmentResource extends JsonResource
             'model' => $this->model,
             'status' => $this->status,
             'status_label' => $this->statusLabel(),
+            'enabled' => $this->enabled,
             'workshop_id' => $this->workshop_id,
             'workshop' => $this->whenLoaded('workshop', fn () => [
                 'id' => $this->workshop->id,

@@ -236,6 +236,24 @@ it('refuses reporting on equipment from another production line', function () {
     expect(ProductionReport::query()->count())->toBe(0);
 });
 
+it('uses the assigned task line when it differs from the order line', function () {
+    [$task, $operation, $employee] = reportReferences();
+    $taskLine = ProductionLine::factory()->create();
+    $task->forceFill(['production_line_id' => $taskLine->id])->save();
+    $equipment = Equipment::factory()->create([
+        'production_line_id' => $taskLine->id,
+        'workshop_id' => $taskLine->workshop_id,
+        'status' => Equipment::RUNNING,
+    ]);
+    $actor = userWithPermissions(['production.reports.create']);
+
+    bearer($actor)->postJson('/api/v1/production/reports', [
+        ...reportPayload($task, $operation, $employee),
+        'equipment_id' => $equipment->id,
+    ])->assertOk()
+        ->assertJsonPath('data.equipment_id', $equipment->id);
+});
+
 it('lists reports filtered by task, order and type', function () {
     [$task, $operation, $employee] = reportReferences();
     $actor = userWithPermissions(['production.reports.index']);

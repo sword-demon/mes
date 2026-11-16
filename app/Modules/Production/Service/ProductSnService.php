@@ -3,7 +3,7 @@
 namespace App\Modules\Production\Service;
 
 use App\Core\Exceptions\ApiException;
-use App\Modules\Equipment\Model\Equipment;
+use App\Modules\Equipment\Service\EquipmentService;
 use App\Modules\Organization\Model\Employee;
 use App\Modules\Production\Model\ProductionBatch;
 use App\Modules\Production\Model\ProductionOrder;
@@ -14,6 +14,8 @@ use Illuminate\Support\Facades\DB;
 
 class ProductSnService
 {
+    public function __construct(private readonly EquipmentService $equipments) {}
+
     public const array GENERATABLE_ORDER_STATUSES = [
         ProductionOrder::RELEASED,
         ProductionOrder::IN_PROGRESS,
@@ -76,7 +78,9 @@ class ProductSnService
                 $this->ensureActiveEmployee((int) $employeeId);
             }
 
-            $this->ensureAvailableEquipment($equipmentId);
+            if ($equipmentId !== null) {
+                $this->equipments->available((int) $equipmentId);
+            }
 
             $locked->update(array_filter([
                 'material_batch_no' => $materialBatchNo,
@@ -174,7 +178,9 @@ class ProductSnService
             $this->ensureActiveEmployee((int) $employeeId);
         }
 
-        $this->ensureAvailableEquipment($data['equipment_id'] ?? null);
+        if (($data['equipment_id'] ?? null) !== null) {
+            $this->equipments->available((int) $data['equipment_id']);
+        }
 
         $batch = ProductionBatch::query()->create([
             'code' => $this->nextBatchCode($order),
@@ -232,28 +238,6 @@ class ProductSnService
         return 'MES'.$day->format('Ymd').str_pad((string) $sequence, 6, '0', STR_PAD_LEFT);
     }
 
-    /**
-     * @throws ApiException
-     */
-    private function ensureAvailableEquipment(mixed $equipmentId): void
-    {
-        if ($equipmentId === null) {
-            return;
-        }
-
-        $exists = Equipment::query()
-            ->available()
-            ->whereKey($equipmentId)
-            ->exists();
-
-        if (! $exists) {
-            throw new ApiException('设备不存在或当前不可用', 422);
-        }
-    }
-
-    /**
-     * @throws ApiException
-     */
     private function ensureActiveEmployee(int $employeeId): void
     {
         $exists = Employee::query()

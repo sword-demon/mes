@@ -3,7 +3,7 @@
 namespace App\Modules\Production\Service;
 
 use App\Core\Exceptions\ApiException;
-use App\Modules\Equipment\Model\Equipment;
+use App\Modules\Equipment\Service\EquipmentService;
 use App\Modules\Organization\Model\Employee;
 use App\Modules\Process\Model\RouteOperation;
 use App\Modules\Production\Model\ProcessRecord;
@@ -14,6 +14,8 @@ use Illuminate\Support\Facades\DB;
 
 class ProcessRecordService
 {
+    public function __construct(private readonly EquipmentService $equipments) {}
+
     /**
      * A task inherits its whole route, so every step is visible as 待加工 from
      * the moment the task exists instead of appearing only after it starts.
@@ -87,22 +89,14 @@ class ProcessRecordService
             $equipmentId = $data['equipment_id'] ?? $locked->equipment_id;
 
             if ($equipmentId !== null) {
-                $equipment = Equipment::query()
-                    ->available()
-                    ->whereKey($equipmentId)
-                    ->first();
-
-                if ($equipment === null) {
-                    throw new ApiException('设备不存在或当前不可用，不能开始工序', 422);
-                }
-
                 $orderLineId = $task->production_line_id
                     ?? ProductionOrder::query()->whereKey($task->production_order_id)->value('production_line_id');
 
-                if ($orderLineId !== null && $equipment->production_line_id !== (int) $orderLineId) {
-                    throw new ApiException('设备不属于该生产任务的产线', 422);
-                }
-
+                $equipment = $this->equipments->available(
+                    (int) $equipmentId,
+                    $orderLineId !== null ? (int) $orderLineId : null,
+                    '设备不存在或当前不可用，不能开始工序',
+                );
                 $equipmentId = $equipment->id;
             }
 
