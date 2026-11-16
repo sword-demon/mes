@@ -1,5 +1,6 @@
 <?php
 
+use App\Modules\Inventory\Model\Inventory;
 use App\Modules\Material\Model\Material;
 use App\Modules\Organization\Model\Employee;
 use App\Modules\Organization\Model\Team;
@@ -12,6 +13,10 @@ use App\Modules\System\Model\OperationLog;
 use App\Modules\System\Model\Permission;
 use App\Modules\System\Model\Role;
 use App\Modules\System\Model\User;
+use App\Modules\System\Service\LoginLogService;
+use App\Modules\System\Service\OperationLogService;
+use App\Modules\System\ValueObject\OperationLogEntry;
+use RuntimeException;
 
 it('records successful and failed login attempts with account, ip and result', function () {
     $user = User::factory()->create([
@@ -202,6 +207,159 @@ it('records an operation log when user roles are assigned', function () {
         ]);
 });
 
+it('truncates an oversized login account to the audit column limit', function () {
+    app(LoginLogService::class)->record(str_repeat('a', 300), null, false, '账号不存在');
+
+    expect(mb_strlen(LoginLog::query()->sole()->account))->toBe(255);
+});
+
+it('truncates an oversized operation object name to the audit column limit', function () {
+    $actor = User::factory()->create();
+
+    app(OperationLogService::class)->record(new OperationLogEntry(
+        action: 'smoke.test',
+        actionName: '冒烟测试',
+        objectType: '库存',
+        objectId: 1,
+        objectName: str_repeat('长', 300),
+    ), $actor);
+
+    expect(mb_strlen(OperationLog::query()->sole()->object_name))->toBe(255);
+});
+
+it('rolls back a role assignment when the audit log fails', function () {
+    $target = User::factory()->create();
+    $role = Role::factory()->create();
+    $actor = userWithPermissions(['system.users.assign-roles']);
+
+    $this->mock(OperationLogService::class, function ($mock): void {
+        $mock->shouldReceive('record')->once()->andThrow(new RuntimeException('audit unavailable'));
+    });
+
+    $this->withoutExceptionHandling();
+
+    expect(fn () => bearer($actor)->putJson("/api/v1/system/users/{$target->id}/roles", [
+        'role_ids' => [$role->id],
+    ]))->toThrow(RuntimeException::class);
+
+    expect($target->roles()->count())->toBe(0);
+});
+
+it('records operation logs for user creation, update and password reset', function () {
+    $role = Role::factory()->create();
+    $actor = userWithPermissions([
+        'system.users.create',
+        'system.users.update',
+        'system.users.reset-password',
+        'system.users.assign-roles',
+    ]);
+
+    $userId = bearer($actor)->postJson('/api/v1/system/users', [
+        'name' => '王五',
+        'email' => 'wangwu@mes.test',
+        'password' => 'Password123!',
+        'role_ids' => [$role->id],
+    ])->assertOk()->json('data.id');
+
+    bearer($actor)->putJson("/api/v1/system/users/{$userId}", [
+        'name' => '王五改',
+    ])->assertOk();
+
+    bearer($actor)->putJson("/api/v1/system/users/{$userId}/password", [
+        'password' => 'NewPassword123!',
+    ])->assertOk();
+
+    expect(OperationLog::query()->orderBy('id')->pluck('action')->all())->toBe([
+        'system.user.created',
+        'system.user.updated',
+        'system.user.password-reset',
+    ]);
+});
+
+it('records operation logs for outbound and adjustment inventory movements', function () {
+    [$warehouse, $location] = inventoryLocation();
+    $material = Material::factory()->create(['batch_managed' => false]);
+    Inventory::factory()->create([
+        'material_id' => $material->id,
+        'location_id' => $location->id,
+        'current_quantity' => 20,
+        'frozen_quantity' => 0,
+    ]);
+    $actor = userWithPermissions(['inventory.outbound', 'inventory.adjust']);
+
+    bearer($actor)->postJson('/api/v1/inventory/outbound', [
+        'material_id' => $material->id,
+        'warehouse_id' => $warehouse->id,
+        'location_id' => $location->id,
+        'quantity' => 5,
+    ])->assertOk();
+
+    bearer($actor)->postJson('/api/v1/inventory/adjust', [
+        'material_id' => $material->id,
+        'warehouse_id' => $warehouse->id,
+        'location_id' => $location->id,
+        'current_quantity' => 12,
+    ])->assertOk();
+
+    $logs = OperationLog::query()->orderBy('id')->get();
+
+    expect($logs[0]->action)->toBe('inventory.outbound')
+        ->and($logs[0]->action_name)->toBe('库存出库')
+        ->and($logs[0]->changes['当前库存'])->toBe(['before' => '20.000', 'after' => '15.000'])
+        ->and($logs[1]->action)->toBe('inventory.adjustment')
+        ->and($logs[1]->action_name)->toBe('库存调整')
+        ->and($logs[1]->changes['当前库存'])->toBe(['before' => '15.000', 'after' => '12.000']);
+});
+
+it('lists login logs and filters by account, result and date', function () {
+    $viewer = userWithPermissions(['system.logs.index']);
+    $success = LoginLog::factory()->create([
+        'account' => 'alice@mes.test',
+        'success' => true,
+        'message' => '登录成功',
+    ]);
+    $success->forceFill(['created_at' => '2026-11-15 10:00:00'])->save();
+    $failure = LoginLog::factory()->create([
+        'account' => 'bob@mes.test',
+        'success' => false,
+        'message' => '密码错误',
+    ]);
+    $failure->forceFill(['created_at' => '2026-11-16 10:00:00'])->save();
+
+    bearer($viewer)->getJson('/api/v1/system/login-logs')
+        ->assertOk()
+        ->assertJsonPath('data.meta.total', 2)
+        ->assertJsonPath('data.items.0.account', 'bob@mes.test');
+
+    bearer($viewer)->getJson('/api/v1/system/login-logs?'.http_build_query([
+        'account' => 'alice',
+    ]))->assertOk()
+        ->assertJsonPath('data.meta.total', 1)
+        ->assertJsonPath('data.items.0.success', true);
+
+    bearer($viewer)->getJson('/api/v1/system/login-logs?'.http_build_query([
+        'success' => '0',
+    ]))->assertOk()
+        ->assertJsonPath('data.meta.total', 1)
+        ->assertJsonPath('data.items.0.account', 'bob@mes.test');
+
+    bearer($viewer)->getJson('/api/v1/system/login-logs?'.http_build_query([
+        'start_date' => '2026-11-16',
+        'end_date' => '2026-11-16',
+    ]))->assertOk()->assertJsonPath('data.meta.total', 1);
+
+    bearer($viewer)->getJson('/api/v1/system/login-logs')
+        ->assertOk()
+        ->assertJsonPath('data.items.0.message', '密码错误');
+});
+
+it('denies the login log list without the log permission', function () {
+    bearer(userWithPermissions([], 'login_denied'))
+        ->getJson('/api/v1/system/login-logs')
+        ->assertForbidden()
+        ->assertJsonPath('code', 403);
+});
+
 it('denies the operation log list without the log permission', function () {
     bearer(userWithPermissions([], 'audit_denied'))
         ->getJson('/api/v1/system/operation-logs')
@@ -215,7 +373,7 @@ it('lists operation logs and filters by user, action and date', function () {
     $viewer->update(['name' => '张三']);
 
     $make = function (User $user, string $action, string $actionName, string $createdAt): OperationLog {
-        $log = OperationLog::query()->create([
+        return OperationLog::factory()->create([
             'user_id' => $user->id,
             'user_name' => $user->name,
             'action' => $action,
@@ -226,10 +384,8 @@ it('lists operation logs and filters by user, action and date', function () {
             'summary' => $actionName.'：生产订单 PO-001',
             'changes' => ['状态' => ['before' => '草稿', 'after' => '待审核']],
             'ip' => '127.0.0.1',
+            'created_at' => $createdAt,
         ]);
-        $log->forceFill(['created_at' => $createdAt])->save();
-
-        return $log;
     };
 
     $make($viewer, 'production.order.transition', '订单状态流转', '2026-11-14 10:00:00');

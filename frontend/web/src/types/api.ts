@@ -101,3 +101,13 @@ export type OperationLogOptions = {
     users: { id: number; name: string }[];
     actions: { action: string; action_name: string }[];
 };
+
+export type LoginLog = {
+    id: number;
+    user_id: number | null;
+    account: string;
+    ip: string;
+    success: boolean;
+    message: string;
+    created_at: string;
+};

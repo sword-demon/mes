@@ -8,6 +8,7 @@ use App\Modules\Inventory\Model\InventoryTransaction;
 use App\Modules\Inventory\Model\StorageLocation;
 use App\Modules\Material\Model\Material;
 use App\Modules\System\Service\OperationLogService;
+use App\Modules\System\ValueObject\OperationLogEntry;
 use Illuminate\Support\Facades\DB;
 
 class InventoryService
@@ -129,7 +130,7 @@ class InventoryService
                 'created_by_id' => $operatorId,
             ]);
 
-            $this->operationLogs->record(
+            $this->operationLogs->record(new OperationLogEntry(
                 action: 'inventory.'.$businessType,
                 actionName: match ($businessType) {
                     InventoryTransaction::INBOUND => '库存入库',
@@ -141,7 +142,7 @@ class InventoryService
                 objectName: $material->code.' '.$material->name.' / '.$location->code.($batchNo !== '' ? ' / 批次 '.$batchNo : ''),
                 before: ['当前库存' => $this->decimal($before)],
                 after: ['当前库存' => $this->decimal($after)],
-            );
+            ));
 
             return $inventory;
         });

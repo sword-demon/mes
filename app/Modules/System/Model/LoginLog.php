@@ -2,8 +2,11 @@
 
 namespace App\Modules\System\Model;
 
+use Database\Factories\LoginLogFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\Table;
+use Illuminate\Database\Eloquent\Attributes\UseFactory;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Support\Carbon;
@@ -19,8 +22,12 @@ use Illuminate\Support\Carbon;
  */
 #[Fillable(['user_id', 'account', 'ip', 'success', 'message'])]
 #[Table('sys_login_logs')]
+#[UseFactory(LoginLogFactory::class)]
 class LoginLog extends Model
 {
+    /** @use HasFactory<LoginLogFactory> */
+    use HasFactory;
+
     public const UPDATED_AT = null;
 
     /**

@@ -1,6 +1,7 @@
 import { api } from './client';
 import type {
     DepartmentNode,
+    LoginLog,
     OperationLog,
     OperationLogOptions,
     Paginated,
@@ -61,4 +62,14 @@ export function listOperationLogs(params: {
 
 export function getOperationLogOptions() {
     return api.get<OperationLogOptions>('/system/operation-logs/options');
+}
+
+export function listLoginLogs(params: {
+    page?: number;
+    account?: string;
+    success?: boolean;
+    start_date?: string;
+    end_date?: string;
+} = {}) {
+    return api.get<Paginated<LoginLog>>('/system/login-logs', params);
 }

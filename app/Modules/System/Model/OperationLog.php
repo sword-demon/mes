@@ -2,8 +2,11 @@
 
 namespace App\Modules\System\Model;
 
+use Database\Factories\OperationLogFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\Table;
+use Illuminate\Database\Eloquent\Attributes\UseFactory;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Support\Carbon;
@@ -35,8 +38,12 @@ use Illuminate\Support\Carbon;
     'ip',
 ])]
 #[Table('sys_operation_logs')]
+#[UseFactory(OperationLogFactory::class)]
 class OperationLog extends Model
 {
+    /** @use HasFactory<OperationLogFactory> */
+    use HasFactory;
+
     public const UPDATED_AT = null;
 
     /**

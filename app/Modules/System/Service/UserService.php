@@ -4,7 +4,9 @@ namespace App\Modules\System\Service;
 
 use App\Core\Exceptions\ApiException;
 use App\Modules\System\Model\User;
+use App\Modules\System\ValueObject\OperationLogEntry;
 use Illuminate\Pagination\LengthAwarePaginator;
+use Illuminate\Support\Facades\DB;
 
 class UserService
 {
@@ -41,18 +43,20 @@ class UserService
     {
         $this->access->ensureCanGrantRoles($actor, $roleIds);
 
-        $user = User::query()->create($data);
-        $user->roles()->sync($roleIds);
+        return DB::transaction(function () use ($data, $roleIds): User {
+            $user = User::query()->create($data);
+            $user->roles()->sync($roleIds);
 
-        $this->operationLogs->record(
-            action: 'system.user.created',
-            actionName: '新增用户',
-            objectType: '用户',
-            objectId: $user->id,
-            objectName: $user->name,
-        );
+            $this->operationLogs->record(new OperationLogEntry(
+                action: 'system.user.created',
+                actionName: '新增用户',
+                objectType: '用户',
+                objectId: $user->id,
+                objectName: $user->name,
+            ));
 
-        return $user->load('roles');
+            return $user->load('roles');
+        });
     }
 
     /**
@@ -66,38 +70,42 @@ class UserService
             throw new ApiException('不能停用当前登录账号', 403, status: 403);
         }
 
-        $user->loadMissing('roles');
-        $before = $this->snapshot($user);
-        $user->update($data);
-        $user->load('roles');
+        return DB::transaction(function () use ($user, $data): User {
+            $user->loadMissing('roles');
+            $before = $this->snapshot($user);
+            $user->update($data);
+            $user->load('roles');
 
-        $this->operationLogs->record(
-            action: 'system.user.updated',
-            actionName: '编辑用户',
-            objectType: '用户',
-            objectId: $user->id,
-            objectName: $user->name,
-            before: $before,
-            after: $this->snapshot($user),
-        );
+            $this->operationLogs->record(new OperationLogEntry(
+                action: 'system.user.updated',
+                actionName: '编辑用户',
+                objectType: '用户',
+                objectId: $user->id,
+                objectName: $user->name,
+                before: $before,
+                after: $this->snapshot($user),
+            ));
 
-        return $user;
+            return $user;
+        });
     }
 
     public function resetPassword(User $actor, User $user, string $password): void
     {
         $this->access->ensureCanManageUser($actor, $user);
 
-        $user->update(['password' => $password]);
-        $user->tokens()->delete();
+        DB::transaction(function () use ($user, $password): void {
+            $user->update(['password' => $password]);
+            $user->tokens()->delete();
 
-        $this->operationLogs->record(
-            action: 'system.user.password-reset',
-            actionName: '重置密码',
-            objectType: '用户',
-            objectId: $user->id,
-            objectName: $user->name,
-        );
+            $this->operationLogs->record(new OperationLogEntry(
+                action: 'system.user.password-reset',
+                actionName: '重置密码',
+                objectType: '用户',
+                objectId: $user->id,
+                objectName: $user->name,
+            ));
+        });
     }
 
     /**
@@ -108,22 +116,24 @@ class UserService
         $this->access->ensureCanManageUser($actor, $user);
         $this->access->ensureCanGrantRoles($actor, $roleIds);
 
-        $user->load('roles');
-        $before = $this->snapshot($user);
-        $user->roles()->sync($roleIds);
-        $user->load('roles');
+        return DB::transaction(function () use ($user, $roleIds): User {
+            $user->load('roles');
+            $before = $this->snapshot($user);
+            $user->roles()->sync($roleIds);
+            $user->load('roles');
 
-        $this->operationLogs->record(
-            action: 'system.user.roles-assigned',
-            actionName: '分配角色',
-            objectType: '用户',
-            objectId: $user->id,
-            objectName: $user->name,
-            before: $before,
-            after: $this->snapshot($user),
-        );
+            $this->operationLogs->record(new OperationLogEntry(
+                action: 'system.user.roles-assigned',
+                actionName: '分配角色',
+                objectType: '用户',
+                objectId: $user->id,
+                objectName: $user->name,
+                before: $before,
+                after: $this->snapshot($user),
+            ));
 
-        return $user;
+            return $user;
+        });
     }
 
     /**

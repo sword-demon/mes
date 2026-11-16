@@ -10,6 +10,7 @@ use App\Modules\Production\Model\ProductionOrder;
 use App\Modules\Production\Model\ProductionReport;
 use App\Modules\Production\Model\ProductionTask;
 use App\Modules\System\Service\OperationLogService;
+use App\Modules\System\ValueObject\OperationLogEntry;
 use Illuminate\Support\Facades\DB;
 
 class ProductionReportService
@@ -97,7 +98,7 @@ class ProductionReportService
             $producedBefore = $task->produced_quantity;
             $this->shiftQuantities($task, $order, $quantity, $qualified, $defective);
 
-            $this->operationLogs->record(
+            $this->operationLogs->record(new OperationLogEntry(
                 action: 'production.report.create',
                 actionName: '生产报工',
                 objectType: '生产报工',
@@ -105,7 +106,7 @@ class ProductionReportService
                 objectName: $report->code,
                 before: ['任务累计产量' => $producedBefore],
                 after: ['任务累计产量' => $task->produced_quantity],
-            );
+            ));
 
             return $report;
         });
@@ -144,7 +145,7 @@ class ProductionReportService
                 -$this->milli($locked->defective_quantity),
             );
 
-            $this->operationLogs->record(
+            $this->operationLogs->record(new OperationLogEntry(
                 action: 'production.report.reverse',
                 actionName: '冲销报工',
                 objectType: '生产报工',
@@ -152,7 +153,7 @@ class ProductionReportService
                 objectName: $locked->code,
                 before: ['报工状态' => $typeBefore, '任务累计产量' => $producedBefore],
                 after: ['报工状态' => $locked->typeLabel(), '任务累计产量' => $task->produced_quantity],
-            );
+            ));
 
             return $locked;
         });

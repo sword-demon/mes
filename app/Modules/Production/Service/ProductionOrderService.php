@@ -9,6 +9,7 @@ use App\Modules\Process\Model\ProcessRoute;
 use App\Modules\Product\Model\Product;
 use App\Modules\Production\Model\ProductionOrder;
 use App\Modules\System\Service\OperationLogService;
+use App\Modules\System\ValueObject\OperationLogEntry;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
@@ -112,7 +113,7 @@ class ProductionOrderService
             $before = $locked->statusLabel();
             $locked->transitionTo($target);
 
-            $this->operationLogs->record(
+            $this->operationLogs->record(new OperationLogEntry(
                 action: 'production.order.transition',
                 actionName: '订单状态流转',
                 objectType: '生产订单',
@@ -120,7 +121,7 @@ class ProductionOrderService
                 objectName: $locked->code,
                 before: ['状态' => $before],
                 after: ['状态' => $locked->statusLabel()],
-            );
+            ));
 
             return $locked;
         });

@@ -6,7 +6,9 @@ use App\Core\Exceptions\ApiException;
 use App\Modules\System\Model\Permission;
 use App\Modules\System\Model\Role;
 use App\Modules\System\Model\User;
+use App\Modules\System\ValueObject\OperationLogEntry;
 use Illuminate\Pagination\LengthAwarePaginator;
+use Illuminate\Support\Facades\DB;
 
 class RoleService
 {
@@ -58,18 +60,20 @@ class RoleService
     {
         $this->ensureReservedCodeIsNotUsed($data['code'] ?? null);
 
-        $role = Role::query()->create($data);
-        $role->permissions()->sync($permissionIds);
+        return DB::transaction(function () use ($data, $permissionIds): Role {
+            $role = Role::query()->create($data);
+            $role->permissions()->sync($permissionIds);
 
-        $this->operationLogs->record(
-            action: 'system.role.created',
-            actionName: '新增角色',
-            objectType: '角色',
-            objectId: $role->id,
-            objectName: $role->name,
-        );
+            $this->operationLogs->record(new OperationLogEntry(
+                action: 'system.role.created',
+                actionName: '新增角色',
+                objectType: '角色',
+                objectId: $role->id,
+                objectName: $role->name,
+            ));
 
-        return $role->load('permissions');
+            return $role->load('permissions');
+        });
     }
 
     /**
@@ -90,27 +94,29 @@ class RoleService
             throw new ApiException('超级管理员角色编码为系统保留，不能使用', 403, status: 403);
         }
 
-        $role->loadMissing('permissions');
-        $before = $this->snapshot($role);
-        $role->update($data);
+        return DB::transaction(function () use ($role, $data, $permissionIds): Role {
+            $role->loadMissing('permissions');
+            $before = $this->snapshot($role);
+            $role->update($data);
 
-        if ($permissionIds !== null) {
-            $role->permissions()->sync($permissionIds);
-        }
+            if ($permissionIds !== null) {
+                $role->permissions()->sync($permissionIds);
+            }
 
-        $role->load('permissions');
+            $role->load('permissions');
 
-        $this->operationLogs->record(
-            action: 'system.role.updated',
-            actionName: '编辑角色',
-            objectType: '角色',
-            objectId: $role->id,
-            objectName: $role->name,
-            before: $before,
-            after: $this->snapshot($role),
-        );
+            $this->operationLogs->record(new OperationLogEntry(
+                action: 'system.role.updated',
+                actionName: '编辑角色',
+                objectType: '角色',
+                objectId: $role->id,
+                objectName: $role->name,
+                before: $before,
+                after: $this->snapshot($role),
+            ));
 
-        return $role;
+            return $role;
+        });
     }
 
     public function delete(Role $role): void
@@ -123,15 +129,17 @@ class RoleService
             throw new ApiException('角色已分配给用户，不能删除', 403, status: 403);
         }
 
-        $role->delete();
+        DB::transaction(function () use ($role): void {
+            $role->delete();
 
-        $this->operationLogs->record(
-            action: 'system.role.deleted',
-            actionName: '删除角色',
-            objectType: '角色',
-            objectId: $role->id,
-            objectName: $role->name,
-        );
+            $this->operationLogs->record(new OperationLogEntry(
+                action: 'system.role.deleted',
+                actionName: '删除角色',
+                objectType: '角色',
+                objectId: $role->id,
+                objectName: $role->name,
+            ));
+        });
     }
 
     /**
