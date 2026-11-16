@@ -27,6 +27,7 @@ class EquipmentDataFactory extends Factory
             'speed' => fake()->numberBetween(800, 1400),
             'pressure' => fake()->randomFloat(2, 0.4, 0.8),
             'output' => fake()->numberBetween(0, 1000),
+            'runtime_seconds' => fake()->numberBetween(0, 86400),
             'alarm' => null,
         ];
     }

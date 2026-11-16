@@ -21,11 +21,12 @@ use Illuminate\Support\Carbon;
  * @property int $speed
  * @property float $pressure
  * @property int $output
+ * @property int|null $runtime_seconds
  * @property array{code: string, message: string, level: string}|null $alarm
  * @property Carbon|null $created_at
  * @property Carbon|null $updated_at
  */
-#[Fillable(['equipment_id', 'message_type', 'recorded_at', 'status', 'temperature', 'speed', 'pressure', 'output', 'alarm'])]
+#[Fillable(['equipment_id', 'message_type', 'recorded_at', 'status', 'temperature', 'speed', 'pressure', 'output', 'runtime_seconds', 'alarm'])]
 #[Table('mes_equipment_data', dateFormat: 'Y-m-d H:i:s.u')]
 #[UseFactory(EquipmentDataFactory::class)]
 class EquipmentData extends Model
@@ -53,6 +54,7 @@ class EquipmentData extends Model
             'speed' => 'integer',
             'pressure' => 'float',
             'output' => 'integer',
+            'runtime_seconds' => 'integer',
             'alarm' => 'array',
         ];
     }

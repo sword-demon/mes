@@ -39,6 +39,7 @@ it('consumes real MQTT packets from EMQX through the Artisan command', function 
                 'speed' => 0,
                 'pressure' => 0,
                 'output' => 120,
+                'runtime_seconds' => 3600,
                 'alarm_code' => 'device_fault',
                 'message' => '设备故障',
                 'level' => 'critical',
@@ -59,6 +60,7 @@ it('consumes real MQTT packets from EMQX through the Artisan command', function 
     expect(EquipmentData::query()->pluck('message_type')->sort()->values()->all())->toBe(['alarm', 'data', 'status']);
     expect($equipment->fresh()->status)->toBe(Equipment::FAULT);
     expect(EquipmentData::query()->where('message_type', 'alarm')->firstOrFail()->alarm['code'])->toBe('device_fault');
+    expect(EquipmentData::query()->pluck('runtime_seconds')->all())->toBe([3600, 3600, 3600]);
 })->skip(fn () => getenv('MQTT_PROTOCOL_TESTS') !== '1', 'Set MQTT_PROTOCOL_TESTS=1 with local EMQX running.');
 
 it('ingests the running Compose simulator telemetry for all five ledger devices', function () {
@@ -85,6 +87,7 @@ it('ingests the running Compose simulator telemetry for all five ledger devices'
         $equipment = Equipment::query()->where('code', $code)->firstOrFail();
         $latest = EquipmentData::query()->where('equipment_id', $equipment->id)->latest('recorded_at')->firstOrFail();
         expect($equipment->status)->toBe($latest->status);
+        expect($latest->runtime_seconds)->toBeInt()->toBeGreaterThanOrEqual(0);
     }
 })->skip(fn () => getenv('MQTT_PROTOCOL_TESTS') !== '1', 'Set MQTT_PROTOCOL_TESTS=1 with Compose simulator running.');
 

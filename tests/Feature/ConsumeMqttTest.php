@@ -61,7 +61,8 @@ it('consumes the three MQTT topics into history and updates equipment through th
     expect($equipment->fresh()->enabled)->toBeFalse();
 });
 
-it('ignores an invalid message and continues consuming the next valid one', function () {
+it('ignores an invalid message and continues consuming the next valid one', function (string $invalidMessage) {
+    $this->travelTo('2026-11-16 04:00:00');
     config(['mqtt.factory' => 'F001']);
     $equipment = Equipment::factory()->create(['code' => 'EQ-SMT-01']);
     $callbacks = [];
@@ -70,8 +71,8 @@ it('ignores an invalid message and continues consuming the next valid one', func
     $client->shouldReceive('subscribe')->times(3)->andReturnUsing(function (string $topic, callable $callback) use (&$callbacks): void {
         $callbacks[] = $callback;
     });
-    $client->shouldReceive('loop')->once()->andReturnUsing(function () use (&$callbacks): void {
-        $callbacks[0]('mes/F001/EQ-SMT-01/status', '{invalid');
+    $client->shouldReceive('loop')->once()->andReturnUsing(function () use (&$callbacks, $invalidMessage): void {
+        $callbacks[0]('mes/F001/EQ-SMT-01/status', $invalidMessage);
         $callbacks[1]('mes/F001/EQ-SMT-01/data', json_encode([
             'device_code' => 'EQ-SMT-01',
             'timestamp' => '2026-11-16T04:00:00+00:00',
@@ -92,6 +93,19 @@ it('ignores an invalid message and continues consuming the next valid one', func
 
     $this->assertDatabaseCount('mes_equipment_data', 1);
     expect($equipment->fresh()->status)->toBe(Equipment::RUNNING);
+})->with(function () {
+    yield 'malformed JSON' => ['{invalid'];
+    foreach (['2099-01-01T00:00:00Z', '9999-12-31T23:59:59-14:00', '1000-01-01T00:00:00+14:00', '2026-11-16T04:00:00-99:00'] as $timestamp) {
+        yield $timestamp => [json_encode([
+            'device_code' => 'EQ-SMT-01',
+            'timestamp' => $timestamp,
+            'status' => 'fault',
+            'temperature' => 30,
+            'speed' => 0,
+            'pressure' => 0,
+            'output' => 120,
+        ], JSON_THROW_ON_ERROR)];
+    }
 });
 
 it('reports a connection failure and exits unsuccessfully without writing history', function () {

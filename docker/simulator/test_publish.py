@@ -102,6 +102,7 @@ class SimulatorTest(unittest.TestCase):
         with patch.object(simulator, "FACTORY", "TEST-FACTORY"), \
              patch.object(simulator.random, "choices", return_value=["fault"]), \
              patch.object(simulator.random, "uniform", return_value=30.0), \
+             patch.object(simulator.time, "monotonic", return_value=100.0), \
              patch.object(simulator, "datetime") as clock:
             clock.now.return_value = datetime(2026, 11, 16, 4, 0, tzinfo=timezone.utc)
             self.run_simulator(client)
@@ -124,6 +125,7 @@ class SimulatorTest(unittest.TestCase):
             "speed": 800,
             "pressure": 0.4,
             "output": 0,
+            "runtime_seconds": 0,
         })
         expected = {
             "device_code": "TEST-001",
@@ -133,6 +135,7 @@ class SimulatorTest(unittest.TestCase):
             "speed": 0,
             "pressure": 0.0,
             "output": 0,
+            "runtime_seconds": 0,
         }
         self.assertEqual(messages[1][1], expected)
         self.assertEqual(messages[2][1], expected)
@@ -166,6 +169,38 @@ class SimulatorTest(unittest.TestCase):
         ])
         self.assertEqual([payload["output"] for payload in data], [3, 3, 3, 3, 3, 5, 5, 5])
         self.assertEqual([payload["speed"] for payload in data], [1000, 0, 0, 0, 0, 1100, 0, 0])
+
+    def test_runtime_uses_elapsed_monotonic_time_and_pauses_when_not_running(self):
+        client = self.client()
+        clock_values = iter([105.5, 112.0, 120.0, 130.0, 135.5, 142.0, 150.0, 155.0])
+        clock = 100.0
+        cycles = 0
+        simulator.stop = False
+
+        def next_cycle(_):
+            nonlocal clock, cycles
+            cycles += 1
+            clock = next(clock_values)
+            simulator.stop = cycles == 8
+
+        with patch.object(simulator, "DEVICES", ["TEST-001"]), \
+             patch.object(simulator, "FACTORY", "TEST-FACTORY"), \
+             patch.object(simulator.time, "monotonic", side_effect=lambda: clock), \
+             patch.object(simulator.time, "sleep", side_effect=next_cycle), \
+             patch.object(simulator.random, "choices", side_effect=[
+                 ["running"], ["fault"], ["maintenance"], ["maintenance"],
+                 ["standby"], ["running"], ["offline"], ["offline"],
+             ]), patch.object(simulator.random, "randint", side_effect=[1000, 3, 1100, 2]), \
+             patch.object(simulator.random, "uniform", side_effect=[
+                 50.0, 0.6, 30.0, 28.0, 27.0, 26.0, 55.0, 0.7, 25.0, 24.0,
+             ]):
+            simulator.simulate(client)
+
+        messages = [(call.args[0], json.loads(call.args[1])) for call in client.publish.call_args_list]
+        samples = [payload for destination, payload in messages if destination.endswith("/data")]
+        self.assertEqual([payload["runtime_seconds"] for payload in samples], [0, 5, 5, 5, 5, 5, 12, 12])
+        self.assertEqual(messages[0][1]["runtime_seconds"], 0)
+        self.assertTrue(all("runtime_seconds" in payload for _, payload in messages))
 
 
 if __name__ == "__main__":

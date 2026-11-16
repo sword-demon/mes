@@ -142,6 +142,8 @@ def main():
 def simulate(client):
     states = {device: RUNNING for device in DEVICES}
     output = {device: 0 for device in DEVICES}
+    runtime = {device: 0.0 for device in DEVICES}
+    sampled_at = {device: time.monotonic() for device in DEVICES}
 
     # 先发一次初始状态，消费者才有基线，不必等第一次状态跃迁。
     for device in DEVICES:
@@ -153,6 +155,7 @@ def simulate(client):
             "speed": 800,
             "pressure": 0.4,
             "output": output[device],
+            "runtime_seconds": 0,
         }
         publish(
             client,
@@ -163,6 +166,12 @@ def simulate(client):
     while not stop:
         for device in DEVICES:
             previous = states[device]
+            sampled_now = time.monotonic()
+
+            if previous == RUNNING:
+                runtime[device] += sampled_now - sampled_at[device]
+
+            sampled_at[device] = sampled_now
             current = pick_state(previous)
             states[device] = current
 
@@ -184,6 +193,7 @@ def simulate(client):
                 "speed": speed,
                 "pressure": pressure,
                 "output": output[device],
+                "runtime_seconds": int(runtime[device]),
             }
 
             if current != previous:

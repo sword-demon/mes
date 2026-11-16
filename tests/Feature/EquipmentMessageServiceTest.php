@@ -5,6 +5,99 @@ use App\Modules\Equipment\Model\EquipmentData;
 use App\Modules\Equipment\Service\EquipmentMessageService;
 use Illuminate\Validation\ValidationException;
 
+it('rejects a device clock more than five minutes ahead without blocking the next valid state', function () {
+    $this->travelTo('2026-11-16 04:00:00');
+    config(['mqtt.factory' => 'F001']);
+    $equipment = Equipment::factory()->create(['code' => 'EQ-SMT-01']);
+    $messages = app(EquipmentMessageService::class);
+    $payload = [
+        'device_code' => 'EQ-SMT-01',
+        'timestamp' => '2099-01-01T00:00:00Z',
+        'status' => Equipment::RUNNING,
+        'temperature' => 30,
+        'speed' => 0,
+        'pressure' => 0,
+        'output' => 120,
+    ];
+
+    expect(fn () => $messages->consume('mes/F001/EQ-SMT-01/status', json_encode($payload, JSON_THROW_ON_ERROR)))
+        ->toThrow(ValidationException::class);
+    $messages->consume('mes/F001/EQ-SMT-01/status', json_encode([
+        ...$payload, 'timestamp' => '2026-11-16T04:00:00Z', 'status' => Equipment::OFFLINE,
+    ], JSON_THROW_ON_ERROR));
+
+    $this->assertDatabaseCount('mes_equipment_data', 1);
+    expect($equipment->fresh()->status)->toBe(Equipment::OFFLINE);
+});
+
+it('recovers current state even when an old consumer already saved a future sample', function () {
+    $this->travelTo('2026-11-16 04:00:00');
+    config(['mqtt.factory' => 'F001']);
+    $equipment = Equipment::factory()->create(['code' => 'EQ-SMT-01', 'status' => Equipment::RUNNING]);
+    EquipmentData::factory()->create(['equipment_id' => $equipment->id, 'recorded_at' => '2099-01-01 00:00:00']);
+
+    app(EquipmentMessageService::class)->consume('mes/F001/EQ-SMT-01/status', json_encode([
+        'device_code' => 'EQ-SMT-01',
+        'timestamp' => '2026-11-16T04:00:00Z',
+        'status' => Equipment::OFFLINE,
+        'temperature' => 30,
+        'speed' => 0,
+        'pressure' => 0,
+        'output' => 120,
+    ], JSON_THROW_ON_ERROR));
+
+    expect($equipment->fresh()->status)->toBe(Equipment::OFFLINE);
+    $this->assertDatabaseCount('mes_equipment_data', 2);
+});
+
+it('allows a five minute clock skew but rejects one microsecond beyond it', function () {
+    $this->travelTo('2026-11-16 04:00:00');
+    config(['mqtt.factory' => 'F001']);
+    Equipment::factory()->create(['code' => 'EQ-SMT-01']);
+    $messages = app(EquipmentMessageService::class);
+    $payload = [
+        'device_code' => 'EQ-SMT-01',
+        'timestamp' => '2026-11-16T04:05:00Z',
+        'status' => Equipment::RUNNING,
+        'temperature' => 30,
+        'speed' => 0,
+        'pressure' => 0,
+        'output' => 120,
+    ];
+
+    $sample = $messages->consume('mes/F001/EQ-SMT-01/data', json_encode($payload, JSON_THROW_ON_ERROR));
+
+    expect($sample->recorded_at->format('H:i:s'))->toBe('04:05:00');
+    expect(fn () => $messages->consume('mes/F001/EQ-SMT-01/data', json_encode([
+        ...$payload, 'timestamp' => '2026-11-16T04:05:00.000001+00:00',
+    ], JSON_THROW_ON_ERROR)))->toThrow(ValidationException::class);
+    $this->assertDatabaseCount('mes_equipment_data', 1);
+});
+
+it('treats UTC dates outside the database range as invalid messages', function (string $timestamp) {
+    $this->travelTo('2026-11-16 04:00:00');
+    config(['mqtt.factory' => 'F001']);
+    $equipment = Equipment::factory()->create(['code' => 'EQ-SMT-01']);
+
+    expect(fn () => app(EquipmentMessageService::class)->consume('mes/F001/EQ-SMT-01/data', json_encode([
+        'device_code' => 'EQ-SMT-01',
+        'timestamp' => $timestamp,
+        'status' => Equipment::RUNNING,
+        'temperature' => 30,
+        'speed' => 0,
+        'pressure' => 0,
+        'output' => 120,
+    ], JSON_THROW_ON_ERROR)))->toThrow(ValidationException::class);
+
+    $this->assertDatabaseCount('mes_equipment_data', 0);
+    expect($equipment->fresh()->status)->toBe(Equipment::IDLE);
+})->with([
+    'UTC conversion exceeds year 9999' => '9999-12-31T23:59:59-14:00',
+    'UTC conversion precedes year 1000' => '1000-01-01T00:00:00+14:00',
+    'year zero' => '0000-01-01T00:00:00Z',
+    'invalid timezone offset' => '2026-11-16T04:00:00-99:00',
+]);
+
 it('saves a telemetry sample and updates the equipment state without enabling it', function () {
     config(['mqtt.factory' => 'F001']);
     $equipment = Equipment::factory()->create([
@@ -30,6 +123,7 @@ it('saves a telemetry sample and updates the equipment state without enabling it
     expect($sample->speed)->toBe(1200);
     expect($sample->pressure)->toBe(0.85);
     expect($sample->output)->toBe(120);
+    expect($sample->fresh()->runtime_seconds)->toBeNull();
     $this->assertDatabaseHas('mes_equipment_data', [
         'equipment_id' => $equipment->id,
         'message_type' => 'data',
@@ -39,6 +133,27 @@ it('saves a telemetry sample and updates the equipment state without enabling it
     expect($equipment->fresh()->status)->toBe(Equipment::RUNNING);
     expect($equipment->fresh()->enabled)->toBeFalse();
 });
+
+it('preserves cumulative runtime in seconds for each MQTT message type', function (string $kind) {
+    config(['mqtt.factory' => 'F001']);
+    Equipment::factory()->create(['code' => 'EQ-SMT-01']);
+
+    $sample = app(EquipmentMessageService::class)->consume("mes/F001/EQ-SMT-01/{$kind}", json_encode([
+        'device_code' => 'EQ-SMT-01',
+        'timestamp' => '2026-11-16T04:00:00Z',
+        'status' => Equipment::RUNNING,
+        'temperature' => 60,
+        'speed' => 1200,
+        'pressure' => 0.7,
+        'output' => 120,
+        'runtime_seconds' => 3600,
+        'alarm_code' => 'over_speed',
+        'message' => '转速超限',
+        'level' => 'warning',
+    ], JSON_THROW_ON_ERROR));
+
+    expect($sample->fresh()->runtime_seconds)->toBe(3600);
+})->with(['status', 'data', 'alarm']);
 
 it('normalizes simulator states when consuming status messages', function (string $incoming, string $expected) {
     config(['mqtt.factory' => 'F001']);
@@ -167,6 +282,9 @@ it('rejects malformed messages without changing equipment or history', function 
         'negative pressure' => ['pressure' => -1],
         'negative output' => ['output' => -1],
         'overflowing output' => ['output' => 4294967296],
+        'negative runtime' => ['runtime_seconds' => -1],
+        'fractional runtime' => ['runtime_seconds' => 1.5],
+        'overflowing runtime' => ['runtime_seconds' => 4294967296],
         'relative timestamp' => ['timestamp' => 'tomorrow'],
         'invalid calendar date' => ['timestamp' => '2026-02-30T04:00:00+00:00'],
     ] as $name => $changes) {
@@ -177,6 +295,26 @@ it('rejects malformed messages without changing equipment or history', function 
     yield 'invalid alarm level' => ['mes/F001/EQ-SMT-01/alarm', json_encode([
         ...$valid, 'alarm_code' => 'device_fault', 'message' => '设备故障', 'level' => 'urgent',
     ], JSON_THROW_ON_ERROR)];
+});
+
+it('accepts the earliest storable UTC date', function () {
+    $this->travelTo('2026-11-16 04:00:00');
+    config(['mqtt.factory' => 'F001']);
+    Equipment::factory()->create(['code' => 'EQ-SMT-01']);
+
+    $sample = app(EquipmentMessageService::class)->consume('mes/F001/EQ-SMT-01/data', json_encode([
+        'device_code' => 'EQ-SMT-01',
+        'timestamp' => '1000-01-01T00:00:00Z',
+        'status' => Equipment::RUNNING,
+        'temperature' => 30,
+        'speed' => 0,
+        'pressure' => 0,
+        'output' => 0,
+        'runtime_seconds' => 0,
+    ], JSON_THROW_ON_ERROR));
+
+    expect($sample->fresh()->recorded_at->format('Y-m-d H:i:s'))->toBe('1000-01-01 00:00:00');
+    expect($sample->runtime_seconds)->toBe(0);
 });
 
 it('rejects a message for an unknown equipment code without creating equipment', function () {

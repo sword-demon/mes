@@ -5,6 +5,7 @@ namespace App\Modules\Equipment\Service;
 use App\Modules\Equipment\Model\Equipment;
 use App\Modules\Equipment\Model\EquipmentData;
 use Carbon\CarbonImmutable;
+use Carbon\Exceptions\InvalidFormatException;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Validation\Rule;
@@ -40,6 +41,7 @@ class EquipmentMessageService
             'speed' => ['required', 'integer', 'between:0,4294967295'],
             'pressure' => ['required', 'numeric', 'between:0,9999999.999'],
             'output' => ['required', 'integer', 'between:0,4294967295'],
+            'runtime_seconds' => ['sometimes', 'integer', 'between:0,4294967295'],
             ...($parts[3] === 'alarm' ? [
                 'alarm_code' => ['required', 'string', 'max:64'],
                 'message' => ['required', 'string', 'max:1000'],
@@ -51,9 +53,22 @@ class EquipmentMessageService
             'maintenance' => Equipment::REPAIR,
             default => $data['status'],
         };
-        $recordedAt = CarbonImmutable::parse($data['timestamp'])->utc();
+        try {
+            $recordedAt = CarbonImmutable::parse($data['timestamp'])->utc();
+        } catch (InvalidFormatException) {
+            throw ValidationException::withMessages(['timestamp' => '设备采集时间无效']);
+        }
+        $latestAllowed = now()->addMinutes(5);
 
-        return DB::transaction(function () use ($data, $parts, $recordedAt): EquipmentData {
+        if ($recordedAt->year < 1000 || $recordedAt->year > 9999) {
+            throw ValidationException::withMessages(['timestamp' => '设备采集时间超出可存储范围']);
+        }
+
+        if ($recordedAt->greaterThan($latestAllowed)) {
+            throw ValidationException::withMessages(['timestamp' => '设备采集时间不得超前服务器时间五分钟以上']);
+        }
+
+        return DB::transaction(function () use ($data, $parts, $recordedAt, $latestAllowed): EquipmentData {
             $equipment = Equipment::query()->where('code', $data['device_code'])->lockForUpdate()->first();
 
             if ($equipment === null) {
@@ -70,6 +85,7 @@ class EquipmentMessageService
                 'speed' => $data['speed'],
                 'pressure' => $data['pressure'],
                 'output' => $data['output'],
+                'runtime_seconds' => $data['runtime_seconds'] ?? null,
                 'alarm' => $parts[3] === 'alarm' ? [
                     'code' => $data['alarm_code'],
                     'message' => $data['message'],
@@ -80,6 +96,7 @@ class EquipmentMessageService
             if ($sample->wasRecentlyCreated && ! EquipmentData::query()
                 ->where('equipment_id', $equipment->id)
                 ->where('recorded_at', '>', $recordedAt->format('Y-m-d H:i:s.u'))
+                ->where('recorded_at', '<=', $latestAllowed->format('Y-m-d H:i:s.u'))
                 ->exists()) {
                 $equipment->update(['status' => $sample->status]);
             }
