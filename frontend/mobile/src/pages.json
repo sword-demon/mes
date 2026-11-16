@@ -1,0 +1,36 @@
+{
+    "easycom": {
+        "autoscan": true,
+        "custom": {
+            "^u--(.*)": "uview-plus/components/u-$1/u-$1.vue",
+            "^up-(.*)": "uview-plus/components/u-$1/u-$1.vue",
+            "^u-([^-].*)": "uview-plus/components/u-$1/u-$1.vue"
+        }
+    },
+    "pages": [
+        {
+            "path": "pages/login/index",
+            "style": {
+                "navigationBarTitleText": "登录"
+            }
+        },
+        {
+            "path": "pages/production/report/index",
+            "style": {
+                "navigationBarTitleText": "生产报工"
+            }
+        },
+        {
+            "path": "pages/production/scan/index",
+            "style": {
+                "navigationBarTitleText": "SN 扫码"
+            }
+        }
+    ],
+    "globalStyle": {
+        "navigationBarTextStyle": "black",
+        "navigationBarTitleText": "MES 移动端",
+        "navigationBarBackgroundColor": "#F5F6F8",
+        "backgroundColor": "#F5F6F8"
+    }
+}

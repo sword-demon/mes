@@ -1,0 +1,17 @@
+{
+    "name": "MES 移动端",
+    "appid": "",
+    "description": "MES 移动端骨架",
+    "versionName": "0.1.0",
+    "versionCode": "1",
+    "transformPx": false,
+    "app-plus": {
+        "usingComponents": true,
+        "compilerVersion": 3
+    },
+    "h5": {
+        "router": {
+            "mode": "hash"
+        }
+    }
+}
