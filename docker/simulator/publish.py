@@ -145,17 +145,19 @@ def simulate(client):
 
     # 先发一次初始状态，消费者才有基线，不必等第一次状态跃迁。
     for device in DEVICES:
+        initial = {
+            "device_code": device,
+            "timestamp": now(),
+            "status": states[device],
+            "temperature": 35.0,
+            "speed": 800,
+            "pressure": 0.4,
+            "output": output[device],
+        }
         publish(
             client,
             topic(device, "status"),
-            json.dumps(
-                {
-                    "device_code": device,
-                    "timestamp": now(),
-                    "status": states[device],
-                },
-                ensure_ascii=False,
-            ),
+            json.dumps(initial, ensure_ascii=False),
         )
 
     while not stop:
@@ -166,16 +168,6 @@ def simulate(client):
 
             timestamp = now()
 
-            if current != previous:
-                publish(
-                    client,
-                    topic(device, "status"),
-                    json.dumps(
-                        {"device_code": device, "timestamp": timestamp, "status": current},
-                        ensure_ascii=False,
-                    ),
-                )
-
             running = current in PRODUCTIVE_STATES
             temperature = round(random.uniform(*TEMPERATURE_RANGE), 1) if running else round(random.uniform(20.0, 40.0), 1)
             speed = random.randint(*SPEED_RANGE) if running else 0
@@ -184,21 +176,27 @@ def simulate(client):
             if running:
                 output[device] += random.randint(1, 5)
 
+            payload = {
+                "device_code": device,
+                "timestamp": timestamp,
+                "status": current,
+                "temperature": temperature,
+                "speed": speed,
+                "pressure": pressure,
+                "output": output[device],
+            }
+
+            if current != previous:
+                publish(
+                    client,
+                    topic(device, "status"),
+                    json.dumps(payload, ensure_ascii=False),
+                )
+
             publish(
                 client,
                 topic(device, "data"),
-                json.dumps(
-                    {
-                        "device_code": device,
-                        "timestamp": timestamp,
-                        "status": current,
-                        "temperature": temperature,
-                        "speed": speed,
-                        "pressure": pressure,
-                        "output": output[device],
-                    },
-                    ensure_ascii=False,
-                ),
+                json.dumps(payload, ensure_ascii=False),
             )
 
             alarm = None
@@ -218,8 +216,7 @@ def simulate(client):
                     topic(device, "alarm"),
                     json.dumps(
                         {
-                            "device_code": device,
-                            "timestamp": timestamp,
+                            **payload,
                             "alarm_code": alarm,
                             "message": ALARM_MESSAGES[alarm],
                             "level": "critical" if current == FAULT else "warning",
