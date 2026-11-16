@@ -12,7 +12,9 @@ import { currentUserFixture } from '@/test/fixtures';
 import type { MenuNode } from '@/types/api';
 
 vi.mock('@/components/echart', () => ({
-    default: () => <div data-testid="chart" />,
+    default: ({ option }: { option: unknown }) => (
+        <div data-testid="chart" data-option={JSON.stringify(option)} />
+    ),
 }));
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -254,6 +256,15 @@ function card(title: string) {
         .find((item) => item.textContent?.includes(title));
 }
 
+function chartOption(title: string) {
+    const chart = card(title)?.querySelector('[data-testid="chart"]');
+
+    return JSON.parse(chart?.getAttribute('data-option') ?? '{}') as {
+        xAxis?: { data?: unknown[] };
+        series?: { data?: unknown[] }[];
+    };
+}
+
 afterEach(async () => {
     await act(async () => root?.unmount());
     client?.clear();
@@ -283,6 +294,33 @@ it('renders the six statistics, five charts and four latest lists', async () => 
     expect(document.body.textContent).toContain('ALM-DEMO-001');
 });
 
+it('maps the API payloads into the five chart options', async () => {
+    await render();
+
+    const trend = chartOption('近七天生产趋势');
+    expect(trend.xAxis?.data).toEqual([
+        '11-11', '11-12', '11-13', '11-14', '11-15', '11-16', '11-17',
+    ]);
+    expect(trend.series?.[0].data).toEqual([120, 140, 130, 150, 160, 150, 130]);
+
+    const lines = chartOption('各产线产量对比');
+    expect(lines.xAxis?.data).toEqual(['SMT 一线', '总装二线']);
+    expect(lines.series?.[0].data).toEqual([500, 480]);
+
+    expect(chartOption('产品合格率').series?.[0].data).toEqual([{ value: 96.94 }]);
+    expect(chartOption('设备状态分布').series?.[0].data).toEqual([
+        { name: '运行', value: 8, itemStyle: { color: '#52c41a' } },
+        { name: '待机', value: 2, itemStyle: { color: '#1677ff' } },
+        { name: '故障', value: 1, itemStyle: { color: '#ff4d4f' } },
+        { name: '维修', value: 1, itemStyle: { color: '#faad14' } },
+        { name: '离线', value: 0, itemStyle: { color: '#8c8c8c' } },
+    ]);
+    expect(chartOption('不良原因分布').series?.[0].data).toEqual([
+        { name: '表面划伤', value: 20 },
+        { name: '尺寸超差', value: 10 },
+    ]);
+});
+
 it.each([
     ['最新订单', 'PO-DEMO-001', '/production/orders', '订单列表页'],
     ['最新报工', 'PR-DEMO-001', '/production/reports', '报工记录页'],
@@ -302,6 +340,22 @@ it.each([
 
     expect(document.querySelector('[data-testid="location"]')?.textContent).toBe(path);
     expect(document.body.textContent).toContain(pageText);
+});
+
+it('opens a latest list row with the keyboard', async () => {
+    await render();
+    const row = [...document.querySelectorAll<HTMLTableRowElement>('tr')]
+        .find((item) => item.textContent?.includes('PO-DEMO-001'));
+
+    expect(row).toBeDefined();
+
+    await act(async () => {
+        row?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+        await new Promise((resolve) => setTimeout(resolve, 20));
+    });
+
+    expect(document.querySelector('[data-testid="location"]')?.textContent)
+        .toBe('/production/orders');
 });
 
 it('shows friendly empty states instead of charts or errors when there is no data', async () => {
@@ -395,4 +449,15 @@ it('shows an error instead of zeros when today statistics fail', async () => {
     expect(document.body.textContent).toContain('今日数据加载失败：服务不可用');
     expect(card('今日订单')?.textContent).toContain('-');
     expect(card('今日订单')?.textContent).not.toContain('12');
+});
+
+it('shows chart and list errors without taking down the dashboard', async () => {
+    await render({}, defaultMenus, [
+        '/dashboard/production-trend',
+        '/dashboard/latest-orders',
+    ]);
+
+    expect(card('近七天生产趋势')?.textContent).toContain('服务不可用');
+    expect(card('最新订单')?.textContent).toContain('服务不可用');
+    expect(card('今日订单')?.textContent).toContain('12');
 });

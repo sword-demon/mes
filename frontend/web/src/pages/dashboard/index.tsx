@@ -1,5 +1,4 @@
 import { useQuery } from '@tanstack/react-query';
-import type { UseQueryResult } from '@tanstack/react-query';
 import {
     CheckCircleOutlined,
     ClockCircleOutlined,
@@ -8,25 +7,8 @@ import {
     FileTextOutlined,
     ThunderboltOutlined,
 } from '@ant-design/icons';
-import {
-    Alert,
-    Button,
-    Card,
-    Col,
-    Empty,
-    Row,
-    Space,
-    Spin,
-    Statistic,
-    Table,
-    Tag,
-    Typography,
-} from 'antd';
-import type { TableProps } from 'antd';
+import { Alert, Col, Row, Space, Typography } from 'antd';
 import dayjs from 'dayjs';
-import type { EChartsOption } from 'echarts';
-import type { ReactNode } from 'react';
-import { useNavigate } from 'react-router';
 import {
     getDashboardEquipmentStatus,
     getDashboardLineComparison,
@@ -40,343 +22,25 @@ import {
 } from '@/api/dashboard';
 import type {
     DashboardEquipmentStatus,
-    DashboardEquipmentStatusItem,
-    DashboardLineComparison,
-    DashboardList,
     DashboardQuality,
     DashboardToday,
-    DashboardTrend,
 } from '@/api/dashboard';
-import {
-    EQUIPMENT_ALARM_LEVELS,
-    EQUIPMENT_ALARM_STATUSES,
-} from '@/api/equipment';
-import type { EquipmentAlarm, EquipmentStatus } from '@/api/equipment';
-import {
-    PRODUCTION_EXCEPTION_STATUSES,
-    PRODUCTION_ORDER_STATUSES,
-} from '@/api/production';
-import type {
-    ProductionException,
-    ProductionOrder,
-    ProductionReport,
-} from '@/api/production';
-import EChart from '@/components/echart';
 import { useAuthStore } from '@/stores/auth';
-import { can, findMenu } from '@/utils/permission';
-
-const equipmentStatusColors: Record<EquipmentStatus, string> = {
-    running: '#52c41a',
-    idle: '#1677ff',
-    fault: '#ff4d4f',
-    repair: '#faad14',
-    offline: '#8c8c8c',
-};
-
-const orderStatusColors = Object.fromEntries(
-    PRODUCTION_ORDER_STATUSES.map(({ value, color }) => [value, color]),
-);
-const exceptionStatusColors = Object.fromEntries(
-    PRODUCTION_EXCEPTION_STATUSES.map(({ value, color }) => [value, color]),
-);
-const alarmLevelColors = Object.fromEntries(
-    EQUIPMENT_ALARM_LEVELS.map(({ value, color }) => [value, color]),
-);
-const alarmStatusColors = Object.fromEntries(
-    EQUIPMENT_ALARM_STATUSES.map(({ value, color }) => [value, color]),
-);
-
-const quantity = (value: string | number): string =>
-    Number(value).toLocaleString('zh-CN', { maximumFractionDigits: 3 });
-
-const formatTime = (value: string | null | undefined): string =>
-    value ? dayjs(value).format('MM-DD HH:mm') : '-';
-
-const errorMessage = (error: unknown): string =>
-    error instanceof Error ? error.message : '加载失败';
-
-function ChartCard({
-    title,
-    loading,
-    error,
-    empty,
-    emptyText,
-    option,
-}: {
-    title: string;
-    loading: boolean;
-    error: unknown;
-    empty: boolean;
-    emptyText: string;
-    option: EChartsOption;
-}) {
-    return (
-        <Card title={title} className="h-full">
-            {loading ? (
-                <div className="flex h-64 items-center justify-center">
-                    <Spin />
-                </div>
-            ) : error ? (
-                <Alert type="error" showIcon title={errorMessage(error)} />
-            ) : empty ? (
-                <Empty
-                    className="my-16"
-                    image={Empty.PRESENTED_IMAGE_SIMPLE}
-                    description={emptyText}
-                />
-            ) : (
-                <EChart className="h-64 w-full" option={option} />
-            )}
-        </Card>
-    );
-}
-
-function LatestList<T extends { id: number }>({
-    title,
-    path,
-    query,
-    columns,
-    emptyText,
-}: {
-    title: string;
-    path: string;
-    query: UseQueryResult<DashboardList<T>>;
-    columns: TableProps<T>['columns'];
-    emptyText: string;
-}) {
-    const navigate = useNavigate();
-    const user = useAuthStore((state) => state.user);
-    const accessible = user !== null && findMenu(user.menus, path) !== null;
-
-    return (
-        <Card
-            title={title}
-            className="h-full"
-            extra={accessible ? (
-                <Button type="link" className="px-0" onClick={() => navigate(path)}>
-                    查看全部
-                </Button>
-            ) : undefined}
-        >
-            {query.isError ? (
-                <Alert type="error" showIcon title={errorMessage(query.error)} />
-            ) : (
-                <Table<T>
-                    rowKey="id"
-                    size="small"
-                    loading={query.isLoading}
-                    columns={columns}
-                    dataSource={query.data?.items ?? []}
-                    pagination={false}
-                    scroll={{ x: 640 }}
-                    locale={{ emptyText }}
-                    onRow={accessible ? () => ({
-                        onClick: () => navigate(path),
-                        style: { cursor: 'pointer' },
-                    }) : undefined}
-                />
-            )}
-        </Card>
-    );
-}
-
-function StatisticsCard({
-    title,
-    value,
-    icon,
-    color,
-}: {
-    title: string;
-    value: number | string;
-    icon: ReactNode;
-    color: string;
-}) {
-    return (
-        <Card>
-            <Statistic
-                title={title}
-                value={value}
-                prefix={<span style={{ color }}>{icon}</span>}
-            />
-        </Card>
-    );
-}
-
-function trendOption(data: DashboardTrend): EChartsOption {
-    return {
-        tooltip: { trigger: 'axis' },
-        grid: { left: 48, right: 16, top: 24, bottom: 32 },
-        xAxis: {
-            type: 'category',
-            boundaryGap: false,
-            data: data.items.map((item) => dayjs(item.date).format('MM-DD')),
-        },
-        yAxis: { type: 'value', name: '数量' },
-        series: [{
-            name: '生产数量',
-            type: 'line',
-            smooth: true,
-            symbol: 'circle',
-            symbolSize: 6,
-            areaStyle: { opacity: 0.14 },
-            data: data.items.map((item) => Number(item.quantity)),
-        }],
-    };
-}
-
-function lineComparisonOption(data: DashboardLineComparison): EChartsOption {
-    return {
-        tooltip: { trigger: 'axis' },
-        grid: { left: 48, right: 16, top: 24, bottom: 48 },
-        xAxis: {
-            type: 'category',
-            data: data.items.map((item) => item.name),
-            axisLabel: { interval: 0, rotate: data.items.length > 5 ? 30 : 0 },
-        },
-        yAxis: { type: 'value', name: '数量' },
-        series: [{
-            name: '生产数量',
-            type: 'bar',
-            barMaxWidth: 40,
-            itemStyle: { color: '#1677ff', borderRadius: [4, 4, 0, 0] },
-            data: data.items.map((item) => Number(item.quantity)),
-        }],
-    };
-}
-
-function qualifiedRateOption(data: DashboardQuality): EChartsOption {
-    return {
-        series: [{
-            type: 'gauge',
-            startAngle: 210,
-            endAngle: -30,
-            min: 0,
-            max: 100,
-            progress: { show: true, width: 14, itemStyle: { color: '#52c41a' } },
-            axisLine: { lineStyle: { width: 14 } },
-            axisTick: { show: false },
-            splitLine: { show: false },
-            axisLabel: { show: false },
-            pointer: { show: false },
-            detail: {
-                valueAnimation: true,
-                formatter: '{value}%',
-                fontSize: 26,
-                offsetCenter: [0, 0],
-            },
-            data: [{ value: Number(data.qualified_rate) }],
-        }],
-    };
-}
-
-function equipmentStatusOption(data: DashboardEquipmentStatus): EChartsOption {
-    return {
-        tooltip: { trigger: 'item' },
-        legend: { bottom: 0 },
-        series: [{
-            name: '设备状态',
-            type: 'pie',
-            radius: ['42%', '68%'],
-            center: ['50%', '44%'],
-            label: { formatter: '{b}\n{c} 台' },
-            data: data.items.map((item: DashboardEquipmentStatusItem) => ({
-                name: item.label,
-                value: item.count,
-                itemStyle: { color: equipmentStatusColors[item.status] },
-            })),
-        }],
-    };
-}
-
-function defectReasonOption(data: DashboardQuality): EChartsOption {
-    return {
-        tooltip: { trigger: 'item' },
-        legend: { type: 'scroll', bottom: 0 },
-        series: [{
-            name: '不良数量',
-            type: 'pie',
-            radius: ['42%', '68%'],
-            center: ['50%', '44%'],
-            label: { formatter: '{b}\n{c}' },
-            data: data.defect_reasons.map((item) => ({
-                name: item.name,
-                value: Number(item.quantity),
-            })),
-        }],
-    };
-}
-
-const orderColumns: TableProps<ProductionOrder>['columns'] = [
-    { title: '订单编号', dataIndex: 'code', width: 160 },
-    { title: '产品', width: 130, render: (_, order) => order.product?.name ?? '-' },
-    { title: '产线', width: 110, render: (_, order) => order.production_line?.name ?? '-' },
-    {
-        title: '计划数量',
-        width: 100,
-        render: (_, order) => quantity(order.planned_quantity),
-    },
-    {
-        title: '状态',
-        width: 90,
-        render: (_, order) => (
-            <Tag color={orderStatusColors[order.status]}>{order.status_label}</Tag>
-        ),
-    },
-];
-
-const reportColumns: TableProps<ProductionReport>['columns'] = [
-    { title: '报工编号', dataIndex: 'code', width: 170 },
-    { title: '任务', width: 160, render: (_, report) => report.production_task?.code ?? '-' },
-    { title: '产品', width: 130, render: (_, report) => report.product?.name ?? '-' },
-    { title: '数量', width: 90, render: (_, report) => quantity(report.quantity) },
-    {
-        title: '报工时间',
-        width: 120,
-        render: (_, report) => formatTime(report.reported_at),
-    },
-];
-
-const exceptionColumns: TableProps<ProductionException>['columns'] = [
-    { title: '异常编号', dataIndex: 'code', width: 160 },
-    { title: '类型', dataIndex: 'type_label', width: 100 },
-    { title: '订单', width: 150, render: (_, exception) => exception.production_order?.code ?? '-' },
-    {
-        title: '状态',
-        width: 90,
-        render: (_, exception) => (
-            <Tag color={exceptionStatusColors[exception.status]}>{exception.status_label}</Tag>
-        ),
-    },
-    {
-        title: '上报时间',
-        width: 120,
-        render: (_, exception) => formatTime(exception.reported_at),
-    },
-];
-
-const alarmColumns: TableProps<EquipmentAlarm>['columns'] = [
-    { title: '告警编号', dataIndex: 'code', width: 160 },
-    { title: '设备', width: 160, render: (_, alarm) => `${alarm.equipment.code} ${alarm.equipment.name}` },
-    {
-        title: '等级',
-        width: 90,
-        render: (_, alarm) => (
-            <Tag color={alarmLevelColors[alarm.level]}>{alarm.level_label}</Tag>
-        ),
-    },
-    {
-        title: '状态',
-        width: 90,
-        render: (_, alarm) => (
-            <Tag color={alarmStatusColors[alarm.status]}>{alarm.status_label}</Tag>
-        ),
-    },
-    {
-        title: '触发时间',
-        width: 120,
-        render: (_, alarm) => formatTime(alarm.triggered_at),
-    },
-];
+import { can } from '@/utils/permission';
+import {
+    defectReasonOption,
+    equipmentStatusOption,
+    lineComparisonOption,
+    qualifiedRateOption,
+    trendOption,
+} from './chart-options';
+import { ChartCard, LatestList, StatisticsCard } from './components';
+import {
+    alarmColumns,
+    exceptionColumns,
+    orderColumns,
+    reportColumns,
+} from './table-columns';
 
 export default function Dashboard() {
     const user = useAuthStore((state) => state.user);
@@ -454,6 +118,8 @@ export default function Dashboard() {
     const linesEmpty = (lines.data?.items.length ?? 0) === 0
         || (lines.data?.items.every((item) => Number(item.quantity) === 0) ?? false);
     const statValue = (value: number | string) => today.data ? value : '-';
+    const errorMessage = (error: unknown): string =>
+        error instanceof Error ? error.message : '加载失败';
 
     return (
         <>

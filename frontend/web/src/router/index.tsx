@@ -48,6 +48,9 @@ function RequireAuth({ children }: { children: ReactNode }) {
  */
 const pages: Record<string, () => ReactNode> = {
     '/dashboard/overview': Dashboard,
+    '/dashboard/trend': () => <Navigate to="/dashboard/overview" replace />,
+    '/dashboard/quality': () => <Navigate to="/dashboard/overview" replace />,
+    '/dashboard/equipment': () => <Navigate to="/dashboard/overview" replace />,
     '/basic-data/factories': Factories,
     '/basic-data/workshops': Workshops,
     '/basic-data/lines': ProductionLines,
