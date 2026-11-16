@@ -3,6 +3,7 @@
 use App\Core\Exceptions\ApiException;
 use App\Modules\Bom\Controller\BomController;
 use App\Modules\Bom\Controller\BomItemController;
+use App\Modules\Dashboard\Controller\DashboardController;
 use App\Modules\Equipment\Controller\EquipmentAlarmController;
 use App\Modules\Equipment\Controller\EquipmentController;
 use App\Modules\Inventory\Controller\InventoryAlertController;
@@ -47,6 +48,27 @@ Route::post('/auth/tokens', [AccessTokenController::class, 'store'])
     ->name('api.auth.tokens.store');
 
 Route::middleware(['auth:sanctum', 'active'])->group(function (): void {
+    Route::prefix('dashboard')->name('api.dashboard.')->group(function (): void {
+        Route::get('/today', [DashboardController::class, 'today'])
+            ->middleware('permission:dashboard.overview')->name('today');
+        Route::get('/production-trend', [DashboardController::class, 'productionTrend'])
+            ->middleware('permission:dashboard.trend')->name('production-trend');
+        Route::get('/production-lines', [DashboardController::class, 'productionLines'])
+            ->middleware('permission:dashboard.trend')->name('production-lines');
+        Route::get('/quality', [DashboardController::class, 'quality'])
+            ->middleware('permission:dashboard.quality')->name('quality');
+        Route::get('/equipment-status', [DashboardController::class, 'equipmentStatus'])
+            ->middleware('permission:dashboard.equipment')->name('equipment-status');
+        Route::get('/latest-orders', [DashboardController::class, 'latestOrders'])
+            ->middleware('permission:dashboard.overview')->name('latest-orders');
+        Route::get('/latest-reports', [DashboardController::class, 'latestReports'])
+            ->middleware('permission:dashboard.overview')->name('latest-reports');
+        Route::get('/latest-exceptions', [DashboardController::class, 'latestExceptions'])
+            ->middleware('permission:dashboard.overview')->name('latest-exceptions');
+        Route::get('/latest-alarms', [DashboardController::class, 'latestAlarms'])
+            ->middleware('permission:dashboard.overview')->name('latest-alarms');
+    });
+
     Route::prefix('quality')->name('api.quality.')->group(function (): void {
         Route::get('/defect-codes', [DefectCodeController::class, 'index'])
             ->middleware('permission:quality.defect-codes.index')->name('defect-codes.index');

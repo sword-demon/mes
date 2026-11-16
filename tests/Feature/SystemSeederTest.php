@@ -98,6 +98,22 @@ test('the equipment manager can monitor equipment and read its history', functio
         ->toContain('equipment.alarms.close');
 });
 
+test('roles with the dashboard menu receive the dashboard read permissions', function () {
+    $this->seed(SystemSeeder::class);
+
+    $manager = User::query()->where('email', 'equipment1@mes.test')->firstOrFail();
+    $permissions = collect(bearer($manager)
+        ->getJson('/api/v1/me')
+        ->assertOk()
+        ->json('data.permissions'))->all();
+
+    expect($permissions)
+        ->toContain('dashboard.overview')
+        ->toContain('dashboard.trend')
+        ->toContain('dashboard.quality')
+        ->toContain('dashboard.equipment');
+});
+
 test('forward traceability is granted only to factory-scoped roles', function () {
     $this->seed(SystemSeeder::class);
 

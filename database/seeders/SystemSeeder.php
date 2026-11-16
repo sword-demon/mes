@@ -84,6 +84,10 @@ class SystemSeeder extends Seeder
      * API permissions keyed by permission code.
      */
     private const API_PERMISSIONS = [
+        'dashboard.overview' => '驾驶舱总览',
+        'dashboard.trend' => '驾驶舱生产趋势与产线对比',
+        'dashboard.quality' => '驾驶舱质量统计',
+        'dashboard.equipment' => '驾驶舱设备状态统计',
         'quality.standards.index' => '检验标准列表',
         'quality.standards.create' => '新增检验标准',
         'quality.standards.update' => '编辑与停用检验标准',
@@ -385,6 +389,17 @@ class SystemSeeder extends Seeder
                 : array_merge(...array_map(fn (string $root) => $menuPermissions[$root] ?? [], $definition['menus']));
 
             $api = $definition['api'];
+
+            if (is_array($api) && in_array('dashboard', $definition['menus'], true)) {
+                foreach (array_keys(self::API_PERMISSIONS) as $apiCode) {
+                    if (! str_starts_with($apiCode, 'dashboard.')) {
+                        continue;
+                    }
+
+                    $codes[] = $apiCode;
+                    $codes[] = "button.{$apiCode}";
+                }
+            }
 
             if (in_array('basic', $definition['menus'], true)) {
                 // These roles see the basic-data menus, so they need the read

@@ -12,6 +12,29 @@ use Illuminate\Support\Collection;
 class EquipmentService
 {
     /**
+     * Enabled equipment only; disabled records stay out of every dashboard total.
+     *
+     * @return array<string, int>
+     */
+    public function statusCounts(): array
+    {
+        $counts = array_fill_keys(Equipment::STATUSES, 0);
+
+        Equipment::query()
+            ->enabled()
+            ->selectRaw('status, COUNT(*) as aggregate')
+            ->groupBy('status')
+            ->pluck('aggregate', 'status')
+            ->each(function (mixed $count, string $status) use (&$counts): void {
+                if (array_key_exists($status, $counts)) {
+                    $counts[$status] = (int) $count;
+                }
+            });
+
+        return $counts;
+    }
+
+    /**
      * @throws ApiException
      */
     public function available(

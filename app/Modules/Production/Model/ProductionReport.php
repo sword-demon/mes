@@ -10,6 +10,7 @@ use Database\Factories\ProductionReportFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\Table;
 use Illuminate\Database\Eloquent\Attributes\UseFactory;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -77,6 +78,14 @@ class ProductionReport extends Model
     public static function codeFor(string $taskCode, int $sequence): string
     {
         return $taskCode.'-R'.str_pad((string) $sequence, 2, '0', STR_PAD_LEFT);
+    }
+
+    /**
+     * @param  Builder<ProductionReport>  $query
+     */
+    public function scopeEffective(Builder $query): void
+    {
+        $query->where($query->qualifyColumn('type'), '!=', self::REVERSED);
     }
 
     public function typeLabel(): string

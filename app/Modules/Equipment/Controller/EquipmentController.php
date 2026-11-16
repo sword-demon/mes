@@ -110,20 +110,7 @@ class EquipmentController extends Controller
         ];
 
         if ($canMonitor) {
-            $statusRows = Equipment::query()
-                ->enabled()
-                ->selectRaw('status, COUNT(*) as aggregate')
-                ->groupBy('status')
-                ->pluck('aggregate', 'status');
-            $statusCounts = array_fill_keys(Equipment::STATUSES, 0);
-
-            foreach ($statusRows as $status => $count) {
-                if (array_key_exists($status, $statusCounts)) {
-                    $statusCounts[$status] = (int) $count;
-                }
-            }
-
-            $data['status_counts'] = $statusCounts;
+            $data['status_counts'] = $this->equipments->statusCounts();
         }
 
         return ApiResponse::success($data);
