@@ -13,6 +13,7 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Support\Carbon;
 
 /**
@@ -117,6 +118,18 @@ class Equipment extends Model
     public function owner(): BelongsTo
     {
         return $this->belongsTo(Employee::class, 'owner_id');
+    }
+
+    /**
+     * @return HasOne<EquipmentData, $this>
+     */
+    public function latestData(): HasOne
+    {
+        return $this->hasOne(EquipmentData::class)
+            ->ofMany(
+                ['recorded_at' => 'max'],
+                fn (Builder $query) => $query->where('message_type', 'data'),
+            );
     }
 
     /**

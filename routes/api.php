@@ -309,6 +309,10 @@ Route::middleware(['auth:sanctum', 'active'])->group(function (): void {
         Route::get('/options', [EquipmentController::class, 'options'])
             ->middleware('permission:equipment.ledger.index|production.reports.create|production.flows.start')
             ->name('options');
+        Route::get('/monitor', [EquipmentController::class, 'monitor'])
+            ->middleware('permission:equipment.monitor.index')->name('monitor');
+        Route::get('/{equipment}/history', [EquipmentController::class, 'history'])
+            ->middleware('permission:equipment.history.index')->name('history');
         Route::get('/', [EquipmentController::class, 'index'])
             ->middleware('permission:equipment.ledger.index')->name('index');
         Route::post('/', [EquipmentController::class, 'store'])

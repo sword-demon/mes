@@ -74,6 +74,41 @@ export type EquipmentOptions = {
     equipments: Equipment[];
 };
 
+export type EquipmentMetric = {
+    recorded_at: string;
+    temperature: number;
+    speed: number;
+    pressure: number;
+    output: number;
+    runtime_seconds: number | null;
+};
+
+export type EquipmentHistorySample = EquipmentMetric & {
+    id: number;
+    status: EquipmentStatus;
+};
+
+export type MonitorEquipment = Equipment & {
+    latest_data: EquipmentMetric | null;
+};
+
+export type EquipmentMonitorData = {
+    items: MonitorEquipment[];
+    status_counts: Record<EquipmentStatus, number>;
+};
+
+export type EquipmentHistoryData = {
+    equipment: Pick<Equipment, 'id' | 'code' | 'name' | 'status' | 'status_label'>;
+    start_at: string;
+    end_at: string;
+    items: EquipmentHistorySample[];
+};
+
+export type EquipmentHistoryParams = {
+    start_at: string;
+    end_at: string;
+};
+
 export function listEquipments(params: EquipmentParams = {}) {
     return api.get<Paginated<Equipment>>('/equipments', params);
 }
@@ -88,4 +123,12 @@ export function createEquipment(payload: EquipmentPayload) {
 
 export function updateEquipment(id: number, payload: Partial<EquipmentPayload>) {
     return api.put<Equipment>(`/equipments/${id}`, payload);
+}
+
+export function getEquipmentMonitor() {
+    return api.get<EquipmentMonitorData>('/equipments/monitor');
+}
+
+export function getEquipmentHistory(id: number, params: EquipmentHistoryParams) {
+    return api.get<EquipmentHistoryData>(`/equipments/${id}/history`, params);
 }

@@ -43,6 +43,14 @@ class EquipmentResource extends JsonResource
                 'employee_no' => $this->owner->employee_no,
                 'name' => $this->owner->name,
             ]),
+            'latest_data' => $this->whenLoaded('latestData', fn () => $this->latestData === null ? null : [
+                'recorded_at' => $this->latestData->recorded_at->toISOString(),
+                'temperature' => $this->latestData->temperature,
+                'speed' => $this->latestData->speed,
+                'pressure' => $this->latestData->pressure,
+                'output' => $this->latestData->output,
+                'runtime_seconds' => $this->latestData->runtime_seconds,
+            ]),
             'created_at' => $this->created_at,
             'updated_at' => $this->updated_at,
         ];

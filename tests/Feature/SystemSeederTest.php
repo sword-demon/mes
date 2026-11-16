@@ -80,6 +80,20 @@ test('the workshop director is scoped to its own production line', function () {
         ->assertJsonPath('data.data_scope', 'line');
 });
 
+test('the equipment manager can monitor equipment and read its history', function () {
+    $this->seed(SystemSeeder::class);
+
+    $manager = User::query()->where('email', 'equipment1@mes.test')->firstOrFail();
+    $permissions = collect($this->withToken($manager->createToken('web')->plainTextToken)
+        ->getJson('/api/v1/me')
+        ->assertOk()
+        ->json('data.permissions'))->all();
+
+    expect($permissions)
+        ->toContain('equipment.monitor.index')
+        ->toContain('equipment.history.index');
+});
+
 test('the process engineer can read and edit processes and routes', function () {
     $this->seed(SystemSeeder::class);
 
