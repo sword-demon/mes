@@ -123,6 +123,27 @@ test('forward traceability is granted only to factory-scoped roles', function ()
         ->and($inspectorMenus)->not->toContain('追溯管理');
 });
 
+test('backward traceability is granted to the roles that can open the traceability menu', function () {
+    $this->seed(SystemSeeder::class);
+
+    foreach (['quality.manager@mes.test', 'production@mes.test', 'warehouse1@mes.test'] as $email) {
+        $user = User::query()->where('email', $email)->firstOrFail();
+        $permissions = collect(bearer($user)
+            ->getJson('/api/v1/me')
+            ->assertOk()
+            ->json('data.permissions'))->all();
+
+        expect($permissions)->toContain('traceability.backward.show');
+    }
+
+    $inspector = User::query()->where('email', 'quality1@mes.test')->firstOrFail();
+    $inspectorPermissions = collect(bearer($inspector)
+        ->getJson('/api/v1/me')
+        ->json('data.permissions'))->all();
+
+    expect($inspectorPermissions)->not->toContain('traceability.backward.show');
+});
+
 test('the process engineer can read and edit processes and routes', function () {
     $this->seed(SystemSeeder::class);
 

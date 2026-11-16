@@ -134,3 +134,66 @@ export type ForwardTrace = {
 export function getForwardTrace(sn: string) {
     return api.get<ForwardTrace>(`/traceability/sn/${encodeURIComponent(sn)}`);
 }
+
+export type BackwardTraceProductSn = {
+    id: number;
+    sn: string;
+    status: string;
+    status_label: string;
+    material_batch_no: string | null;
+    printed_at: string | null;
+    voided_at: string | null;
+    void_reason: string | null;
+    created_at: string;
+};
+
+export type BackwardTraceBatch = {
+    id: number;
+    code: string;
+    quantity: number;
+    issued_quantity: string;
+    material: TraceMaterial;
+    production_order: {
+        id: number;
+        code: string;
+        status: string;
+        status_label: string;
+        planned_quantity: string;
+        produced_quantity: string;
+        product: {
+            id: number;
+            code: string;
+            name: string;
+            model: string | null;
+            specification: string | null;
+            unit: string;
+        };
+    };
+    product_sns: BackwardTraceProductSn[];
+};
+
+export type BackwardTrace = {
+    batch_no: string;
+    has_data: boolean;
+    message: string | null;
+    data_granularity: {
+        linkage: 'material_requisition';
+        production_batches: 'order';
+        product_sns: 'sn';
+    };
+    scope_note: string;
+    summary: {
+        material_count: number;
+        production_order_count: number;
+        production_batch_count: number;
+        sn_count: number;
+    };
+    materials: TraceMaterial[];
+    production_batches: BackwardTraceBatch[];
+};
+
+export function getBackwardTrace(batchNo: string) {
+    return api.get<BackwardTrace>(
+        `/traceability/material/${encodeURIComponent(batchNo)}`,
+    );
+}

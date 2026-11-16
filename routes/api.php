@@ -38,6 +38,7 @@ use App\Modules\System\Controller\MenuController;
 use App\Modules\System\Controller\PermissionController;
 use App\Modules\System\Controller\RoleController;
 use App\Modules\System\Controller\UserController;
+use App\Modules\Traceability\Controller\BackwardTraceController;
 use App\Modules\Traceability\Controller\ForwardTraceController;
 use Illuminate\Support\Facades\Route;
 
@@ -92,6 +93,9 @@ Route::middleware(['auth:sanctum', 'active'])->group(function (): void {
             ->middleware('permission:traceability.forward.show')
             ->missing(fn () => throw new ApiException('SN 不存在', 404, status: 404))
             ->name('forward.show');
+        Route::get('/material/{batch}', [BackwardTraceController::class, 'show'])
+            ->middleware('permission:traceability.backward.show')
+            ->name('backward.show');
     });
 
     Route::get('/me', [MeController::class, 'show'])->name('api.me');
