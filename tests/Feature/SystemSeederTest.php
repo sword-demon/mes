@@ -91,7 +91,11 @@ test('the equipment manager can monitor equipment and read its history', functio
 
     expect($permissions)
         ->toContain('equipment.monitor.index')
-        ->toContain('equipment.history.index');
+        ->toContain('equipment.history.index')
+        ->toContain('equipment.alarms.index')
+        ->toContain('equipment.alarms.confirm')
+        ->toContain('equipment.alarms.process')
+        ->toContain('equipment.alarms.close');
 });
 
 test('the process engineer can read and edit processes and routes', function () {

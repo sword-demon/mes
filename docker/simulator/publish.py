@@ -46,15 +46,21 @@ ALARM_MESSAGES = {
     "device_fault": "设备故障",
 }
 
-# 量程与告警阈值集中在一处，避免生成区间和判定条件各自漂移。
+# 量程与分级告警阈值集中在一处，与 Laravel 侧保持同一口径。
 TEMPERATURE_RANGE = (35.0, 70.0)
 SPEED_RANGE = (800, 1500)
 PRESSURE_RANGE = (0.4, 0.9)
 
 THRESHOLDS = {
-    "over_temperature": 68.0,
-    "over_speed": 1450,
-    "over_pressure": 0.85,
+    "over_temperature": {"info": 60.0, "warning": 64.0, "critical": 68.0},
+    "over_speed": {"info": 1200, "warning": 1350, "critical": 1450},
+    "over_pressure": {"info": 0.70, "warning": 0.80, "critical": 0.85},
+}
+
+ALARM_METRICS = {
+    "over_temperature": "temperature",
+    "over_speed": "speed",
+    "over_pressure": "pressure",
 }
 
 stop = False
@@ -210,15 +216,26 @@ def simulate(client):
             )
 
             alarm = None
+            level = None
 
-            if temperature > THRESHOLDS["over_temperature"]:
-                alarm = "over_temperature"
-            elif speed > THRESHOLDS["over_speed"]:
-                alarm = "over_speed"
-            elif pressure > THRESHOLDS["over_pressure"]:
-                alarm = "over_pressure"
-            elif current == FAULT:
+            for alarm_code, metric in ALARM_METRICS.items():
+                measured = payload[metric]
+                level = next(
+                    (
+                        candidate
+                        for candidate in ("critical", "warning", "info")
+                        if measured > THRESHOLDS[alarm_code][candidate]
+                    ),
+                    None,
+                )
+
+                if level is not None:
+                    alarm = alarm_code
+                    break
+
+            if alarm is None and current == FAULT:
                 alarm = "device_fault"
+                level = "critical"
 
             if alarm:
                 publish(
@@ -229,7 +246,7 @@ def simulate(client):
                             **payload,
                             "alarm_code": alarm,
                             "message": ALARM_MESSAGES[alarm],
-                            "level": "critical" if current == FAULT else "warning",
+                            "level": level,
                         },
                         ensure_ascii=False,
                     ),

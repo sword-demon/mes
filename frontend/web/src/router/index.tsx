@@ -14,6 +14,7 @@ import MaterialRequisitions from '@/pages/material/requisitions';
 import MaterialReturns from '@/pages/material/returns';
 import EquipmentLedger from '@/pages/equipment/ledger';
 import EquipmentMonitor from '@/pages/equipment/monitor';
+import EquipmentAlarms from '@/pages/equipment/alarms';
 import ProductionLines from '@/pages/basic-data/production-lines';
 import Products from '@/pages/basic-data/products';
 import Teams from '@/pages/basic-data/teams';
@@ -59,6 +60,7 @@ const pages: Record<string, () => ReactNode> = {
     '/equipment/ledger': EquipmentLedger,
     '/equipment/monitor': EquipmentMonitor,
     '/equipment/history': EquipmentMonitor,
+    '/equipment/alarms': EquipmentAlarms,
     '/basic-data/products': Products,
     '/production/orders': ProductionOrders,
     '/production/tasks': ProductionTasks,

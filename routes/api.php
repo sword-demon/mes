@@ -2,6 +2,7 @@
 
 use App\Modules\Bom\Controller\BomController;
 use App\Modules\Bom\Controller\BomItemController;
+use App\Modules\Equipment\Controller\EquipmentAlarmController;
 use App\Modules\Equipment\Controller\EquipmentController;
 use App\Modules\Inventory\Controller\InventoryAlertController;
 use App\Modules\Inventory\Controller\InventoryController;
@@ -306,6 +307,16 @@ Route::middleware(['auth:sanctum', 'active'])->group(function (): void {
     });
 
     Route::prefix('equipments')->name('api.equipments.')->group(function (): void {
+        Route::get('/alarms/options', [EquipmentAlarmController::class, 'options'])
+            ->middleware('permission:equipment.alarms.index')->name('alarms.options');
+        Route::post('/alarms/{alarm}/confirm', [EquipmentAlarmController::class, 'confirm'])
+            ->middleware('permission:equipment.alarms.confirm')->name('alarms.confirm');
+        Route::post('/alarms/{alarm}/process', [EquipmentAlarmController::class, 'process'])
+            ->middleware('permission:equipment.alarms.process')->name('alarms.process');
+        Route::post('/alarms/{alarm}/close', [EquipmentAlarmController::class, 'close'])
+            ->middleware('permission:equipment.alarms.close')->name('alarms.close');
+        Route::get('/alarms', [EquipmentAlarmController::class, 'index'])
+            ->middleware('permission:equipment.alarms.index')->name('alarms.index');
         Route::get('/options', [EquipmentController::class, 'options'])
             ->middleware('permission:equipment.ledger.index|production.reports.create|production.flows.start')
             ->name('options');

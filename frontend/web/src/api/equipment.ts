@@ -113,6 +113,64 @@ export type EquipmentHistoryParams = {
     end_at: string;
 };
 
+export const EQUIPMENT_ALARM_LEVELS = [
+    { value: 'info', label: '提示', color: 'blue' },
+    { value: 'warning', label: '警告', color: 'orange' },
+    { value: 'critical', label: '严重', color: 'red' },
+] as const;
+
+export type EquipmentAlarmLevel = (typeof EQUIPMENT_ALARM_LEVELS)[number]['value'];
+
+export const EQUIPMENT_ALARM_STATUSES = [
+    { value: 'pending', label: '待确认', color: 'red' },
+    { value: 'confirmed', label: '已确认', color: 'orange' },
+    { value: 'processing', label: '处理中', color: 'blue' },
+    { value: 'closed', label: '已关闭', color: 'green' },
+] as const;
+
+export type EquipmentAlarmStatus = (typeof EQUIPMENT_ALARM_STATUSES)[number]['value'];
+export type EquipmentAlarmMetric = 'temperature' | 'speed' | 'pressure';
+
+export type EquipmentAlarm = {
+    id: number;
+    code: string;
+    equipment_id: number;
+    equipment_data_id: number | null;
+    metric: EquipmentAlarmMetric;
+    metric_label: string;
+    metric_unit: string;
+    level: EquipmentAlarmLevel;
+    level_label: string;
+    status: EquipmentAlarmStatus;
+    status_label: string;
+    threshold: number;
+    measured_value: number;
+    handling_note: string | null;
+    confirmed_by: { id: number; name: string } | null;
+    confirmed_at: string | null;
+    handled_by: { id: number; name: string } | null;
+    handled_at: string | null;
+    closed_at: string | null;
+    triggered_at: string;
+    equipment: Pick<Equipment, 'id' | 'code' | 'name' | 'type' | 'status' | 'status_label'>;
+    created_at: string;
+    updated_at: string;
+};
+
+export type EquipmentAlarmParams = {
+    page?: number;
+    per_page?: number;
+    equipment_id?: number;
+    level?: EquipmentAlarmLevel;
+    status?: EquipmentAlarmStatus;
+    start_date?: string;
+    end_date?: string;
+};
+
+export type EquipmentAlarmOptions = {
+    equipments: { id: number; code: string; name: string; status: EquipmentStatus; status_label: string }[];
+};
+
 export function listEquipments(params: EquipmentParams = {}) {
     return api.get<Paginated<Equipment>>('/equipments', params);
 }
@@ -135,4 +193,24 @@ export function getEquipmentMonitor() {
 
 export function getEquipmentHistory(id: number, params: EquipmentHistoryParams) {
     return api.get<EquipmentHistoryData>(`/equipments/${id}/history`, params);
+}
+
+export function listEquipmentAlarms(params: EquipmentAlarmParams = {}) {
+    return api.get<Paginated<EquipmentAlarm>>('/equipments/alarms', params);
+}
+
+export function getEquipmentAlarmOptions() {
+    return api.get<EquipmentAlarmOptions>('/equipments/alarms/options');
+}
+
+export function confirmEquipmentAlarm(id: number) {
+    return api.post<EquipmentAlarm>(`/equipments/alarms/${id}/confirm`);
+}
+
+export function processEquipmentAlarm(id: number, handlingNote: string) {
+    return api.post<EquipmentAlarm>(`/equipments/alarms/${id}/process`, { handling_note: handlingNote });
+}
+
+export function closeEquipmentAlarm(id: number, handlingNote?: string) {
+    return api.post<EquipmentAlarm>(`/equipments/alarms/${id}/close`, { handling_note: handlingNote });
 }

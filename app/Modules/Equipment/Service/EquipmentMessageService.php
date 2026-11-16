@@ -14,6 +14,10 @@ use JsonException;
 
 class EquipmentMessageService
 {
+    public function __construct(
+        private readonly EquipmentAlarmService $alarms,
+    ) {}
+
     public function consume(string $topic, string $message): EquipmentData
     {
         $parts = explode('/', $topic);
@@ -99,6 +103,10 @@ class EquipmentMessageService
                 ->where('recorded_at', '<=', $latestAllowed->format('Y-m-d H:i:s.u'))
                 ->exists()) {
                 $equipment->update(['status' => $sample->status]);
+            }
+
+            if ($sample->wasRecentlyCreated) {
+                $this->alarms->evaluate($sample);
             }
 
             return $sample;
