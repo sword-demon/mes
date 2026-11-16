@@ -151,8 +151,10 @@ export type BackwardTraceBatch = {
     id: number;
     code: string;
     quantity: number;
-    issued_quantity: string;
-    material: TraceMaterial;
+    materials: {
+        material: TraceMaterial;
+        issued_quantity: string;
+    }[];
     production_order: {
         id: number;
         code: string;

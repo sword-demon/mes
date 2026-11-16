@@ -10,13 +10,15 @@ use App\Modules\Production\Model\ProductionBatch;
 use App\Modules\Production\Model\ProductionOrder;
 use App\Modules\Traceability\Data\BackwardTraceBatchData;
 use App\Modules\Traceability\Data\BackwardTraceData;
+use App\Modules\Traceability\Data\BackwardTraceMaterialUsage;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Support\Collection;
 
 /**
  * Rebuilds the material-to-product relation from the material-issue ledger, so the
- * trace never depends on a hand-maintained snapshot.
+ * trace never depends on a hand-maintained snapshot. Issues are recorded per
+ * order, so every SN-bearing batch of an affected order is in scope.
  */
 class BackwardTraceService
 {
@@ -40,7 +42,7 @@ class BackwardTraceService
             ->get()
             ->keyBy('code');
 
-        /** @var array<string, array{order: ProductionOrder, material: Material, issued_milli: int}> $usage */
+        /** @var array<int, array{order: ProductionOrder, materials: array<int, array{material: Material, issued_milli: int}>}> $usage */
         $usage = [];
 
         foreach ($transactions as $transaction) {
@@ -50,13 +52,16 @@ class BackwardTraceService
                 continue;
             }
 
-            $key = $requisition->production_order_id.':'.$transaction->material_id;
-            $usage[$key] ??= [
+            $orderId = $requisition->production_order_id;
+            $usage[$orderId] ??= [
                 'order' => $requisition->productionOrder,
+                'materials' => [],
+            ];
+            $usage[$orderId]['materials'][$transaction->material_id] ??= [
                 'material' => $transaction->material,
                 'issued_milli' => 0,
             ];
-            $usage[$key]['issued_milli'] -= Quantity::toMilli($transaction->quantity);
+            $usage[$orderId]['materials'][$transaction->material_id]['issued_milli'] -= Quantity::toMilli($transaction->quantity);
         }
 
         if ($usage === []) {
@@ -65,27 +70,30 @@ class BackwardTraceService
 
         $batchesByOrder = ProductionBatch::query()
             ->with(['productSns' => fn (HasMany $query) => $query->orderBy('id')])
-            ->whereIn('production_order_id', array_map(
-                fn (array $row): int => $row['order']->id,
-                $usage,
-            ))
+            ->whereIn('production_order_id', array_keys($usage))
             ->orderBy('id')
             ->get()
             ->groupBy('production_order_id');
 
         $rows = [];
 
-        foreach ($usage as $row) {
-            foreach ($batchesByOrder->get($row['order']->id, collect()) as $batch) {
+        foreach ($usage as $orderUsage) {
+            $materialUsages = collect($orderUsage['materials'])
+                ->map(fn (array $usage): BackwardTraceMaterialUsage => new BackwardTraceMaterialUsage(
+                    $usage['material'],
+                    Quantity::toDecimal($usage['issued_milli']),
+                ))
+                ->values();
+
+            foreach ($batchesByOrder->get($orderUsage['order']->id, collect()) as $batch) {
                 if ($batch->productSns->isEmpty()) {
                     continue;
                 }
 
                 $rows[] = new BackwardTraceBatchData(
                     $batch,
-                    $row['order'],
-                    $row['material'],
-                    Quantity::toDecimal($row['issued_milli']),
+                    $orderUsage['order'],
+                    $materialUsages,
                     $batch->productSns,
                 );
             }
@@ -96,7 +104,8 @@ class BackwardTraceService
 
         return new BackwardTraceData(
             $batchNo,
-            $rows->map(fn (BackwardTraceBatchData $row): Material => $row->material)
+            $rows->flatMap(fn (BackwardTraceBatchData $row) => $row->materials)
+                ->map(fn (BackwardTraceMaterialUsage $usage): Material => $usage->material)
                 ->unique('id')
                 ->values()
                 ->all(),

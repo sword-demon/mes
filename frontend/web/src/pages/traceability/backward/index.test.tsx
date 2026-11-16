@@ -41,9 +41,9 @@ const trace = {
         product_sns: 'sn',
     },
     scope_note:
-        '物料按生产订单发料，未细分到生产批次；以下列出关联订单中已生成产品 SN 的生产批次。',
+        '物料按生产订单发料，未细分到生产批次；同一批次号可能对应多个物料，结果按生产批次汇总并列出全部物料用量。',
     summary: {
-        material_count: 1,
+        material_count: 2,
         production_order_count: 1,
         production_batch_count: 1,
         sn_count: 2,
@@ -56,20 +56,41 @@ const trace = {
             unit: 'kg',
             batch_managed: true,
         },
+        {
+            id: 10,
+            code: 'MAT-BATCH-02',
+            name: '批次辅料',
+            unit: 'kg',
+            batch_managed: true,
+        },
     ],
     production_batches: [
         {
             id: 6,
             code: 'PB-BATCH-01',
             quantity: 2,
-            issued_quantity: '18.000',
-            material: {
-                id: 9,
-                code: 'MAT-BATCH-01',
-                name: '批次物料',
-                unit: 'kg',
-                batch_managed: true,
-            },
+            materials: [
+                {
+                    material: {
+                        id: 9,
+                        code: 'MAT-BATCH-01',
+                        name: '批次物料',
+                        unit: 'kg',
+                        batch_managed: true,
+                    },
+                    issued_quantity: '18.000',
+                },
+                {
+                    material: {
+                        id: 10,
+                        code: 'MAT-BATCH-02',
+                        name: '批次辅料',
+                        unit: 'kg',
+                        batch_managed: true,
+                    },
+                    issued_quantity: '5.000',
+                },
+            ],
             production_order: {
                 id: 11,
                 code: 'PO-BATCH-001',
@@ -146,12 +167,30 @@ async function renderPage(entry: string) {
     await flush();
 }
 
+async function expandFirstRow() {
+    const expandButton = document.querySelector<HTMLElement>(
+        '.ant-table-row-expand-icon',
+    );
+
+    expect(expandButton).not.toBeNull();
+
+    await act(async () => {
+        expandButton?.click();
+    });
+    await flush();
+}
+
 describe('物料反向追溯页', () => {
     beforeEach(() => {
         originalAdapter = http.defaults.adapter;
         useAuthStore.setState({
             token: 'token',
-            user: currentUserFixture({ permissions: ['traceability.backward.show'] }),
+            user: currentUserFixture({
+                permissions: [
+                    'traceability.backward.show',
+                    'traceability.forward.show',
+                ],
+            }),
         });
         http.defaults.adapter = async (config) => {
             if (config.url === `/traceability/material/${encodeURIComponent(batchNo)}`) {
@@ -198,27 +237,40 @@ describe('物料反向追溯页', () => {
             'PO-BATCH-001',
             '智能电表',
             '18.000',
-            '物料按生产订单发料，未细分到生产批次；以下列出关联订单中已生成产品 SN 的生产批次。',
+            'MAT-BATCH-02',
+            '5.000',
+            '物料按生产订单发料，未细分到生产批次；同一批次号可能对应多个物料，结果按生产批次汇总并列出全部物料用量。',
         ]) {
             expect(document.body.textContent).toContain(text);
         }
 
         expect(document.body.textContent).not.toContain('SN-BATCH-001');
 
-        const expandButton = document.querySelector<HTMLElement>(
-            '.ant-table-row-expand-icon',
-        );
-
-        expect(expandButton).not.toBeNull();
-
-        await act(async () => {
-            expandButton?.click();
-        });
-        await flush();
+        await expandFirstRow();
 
         expect(document.body.textContent).toContain('SN-BATCH-001');
         expect(document.body.textContent).toContain('SN-BATCH-002');
         expect(document.body.textContent).toContain('已作废');
+        expect(
+            document.querySelector('a[href^="/traceability/forward"]'),
+        ).not.toBeNull();
+    });
+
+    it('hides the forward trace link without the forward trace permission', async () => {
+        useAuthStore.setState({
+            token: 'token',
+            user: currentUserFixture({
+                permissions: ['traceability.backward.show'],
+            }),
+        });
+
+        await renderPage(`/traceability/backward?batch_no=${batchNo}`);
+        await expandFirstRow();
+
+        expect(document.body.textContent).toContain('SN-BATCH-001');
+        expect(
+            document.querySelector('a[href^="/traceability/forward"]'),
+        ).toBeNull();
     });
 
     it('shows an empty result when the material batch has no products', async () => {

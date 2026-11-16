@@ -221,9 +221,9 @@ it('returns the product serial numbers grouped by production batch for a materia
         ->assertJsonPath('data.materials.0.code', 'MAT-BATCH-01')
         ->assertJsonCount(2, 'data.production_batches')
         ->assertJsonPath('data.production_batches.0.production_order.code', $case['order']->code)
-        ->assertJsonPath('data.production_batches.0.material.code', 'MAT-BATCH-01')
+        ->assertJsonPath('data.production_batches.0.materials.0.material.code', 'MAT-BATCH-01')
         ->assertJsonPath('data.production_batches.0.code', 'PB-BATCH-01')
-        ->assertJsonPath('data.production_batches.0.issued_quantity', '18.000')
+        ->assertJsonPath('data.production_batches.0.materials.0.issued_quantity', '18.000')
         ->assertJsonCount(2, 'data.production_batches.0.product_sns')
         ->assertJsonPath('data.production_batches.0.product_sns.0.sn', 'SN-BATCH-001')
         ->assertJsonPath('data.production_batches.0.product_sns.0.material_batch_no', null)
@@ -231,14 +231,89 @@ it('returns the product serial numbers grouped by production batch for a materia
         ->assertJsonPath('data.production_batches.0.product_sns.1.status', ProductSn::VOIDED)
         ->assertJsonPath('data.production_batches.1.production_order.code', $case['otherOrder']->code)
         ->assertJsonPath('data.production_batches.1.code', 'PB-BATCH-02')
-        ->assertJsonPath('data.production_batches.1.issued_quantity', '5.000')
+        ->assertJsonPath('data.production_batches.1.materials.0.issued_quantity', '5.000')
         ->assertJsonCount(1, 'data.production_batches.1.product_sns')
         ->assertJsonPath('data.production_batches.1.product_sns.0.sn', 'SN-BATCH-003');
 
-    expect($response->json('data.production_batches'))
-        ->not->toContain(['code' => $case['emptyBatch']->code])
-        ->and($response->json('data.production_batches.0.product_sns'))
-        ->not->toContain(['sn' => $case['unrelatedSn']->sn]);
+    $response->assertJsonMissing(['code' => $case['emptyBatch']->code])
+        ->assertJsonMissing(['sn' => $case['unrelatedSn']->sn]);
+});
+
+it('deduplicates summary counts when one batch number spans multiple materials', function () {
+    [, $location] = inventoryLocation('WH-DEDUPE', 'D-01');
+    $userId = User::factory()->create()->id;
+    $order = ProductionOrder::factory()->create(['status' => ProductionOrder::IN_PROGRESS]);
+    $materials = collect(['MAT-DEDUPE-A', 'MAT-DEDUPE-B'])
+        ->map(fn (string $code): Material => Material::factory()->create([
+            'code' => $code,
+            'name' => "去重物料 {$code}",
+            'batch_managed' => true,
+        ]));
+
+    $requisition = MaterialRequisition::query()->create([
+        'code' => 'MR-DEDUPE-01',
+        'production_order_id' => $order->id,
+        'status' => MaterialRequisition::ISSUED,
+        'created_by_id' => $userId,
+    ]);
+
+    foreach ($materials as $material) {
+        $inventory = Inventory::factory()->create([
+            'material_id' => $material->id,
+            'location_id' => $location->id,
+            'batch_no' => 'LOT-DEDUPE-001',
+            'current_quantity' => 95,
+        ]);
+        MaterialRequisitionItem::query()->create([
+            'requisition_id' => $requisition->id,
+            'material_id' => $material->id,
+            'requested_quantity' => 5,
+            'issued_quantity' => 5,
+        ]);
+        InventoryTransaction::query()->create([
+            'inventory_id' => $inventory->id,
+            'material_id' => $material->id,
+            'business_type' => InventoryTransaction::OUTBOUND,
+            'quantity' => -5,
+            'before_quantity' => 100,
+            'after_quantity' => 95,
+            'reference_no' => $requisition->code,
+            'remark' => '生产发料',
+            'created_by_id' => $userId,
+        ]);
+    }
+
+    $batch = ProductionBatch::factory()->create([
+        'code' => 'PB-DEDUPE-01',
+        'production_order_id' => $order->id,
+        'quantity' => 2,
+    ]);
+    ProductSn::factory()->create([
+        'sn' => 'SN-DEDUPE-001',
+        'production_order_id' => $order->id,
+        'production_batch_id' => $batch->id,
+    ]);
+    ProductSn::factory()->create([
+        'sn' => 'SN-DEDUPE-002',
+        'production_order_id' => $order->id,
+        'production_batch_id' => $batch->id,
+    ]);
+
+    $actor = userWithPermissions(backwardTracePermissions());
+
+    bearer($actor)
+        ->getJson('/api/v1/traceability/material/LOT-DEDUPE-001')
+        ->assertOk()
+        ->assertJsonCount(1, 'data.production_batches')
+        ->assertJsonPath('data.summary.material_count', 2)
+        ->assertJsonPath('data.summary.production_order_count', 1)
+        ->assertJsonPath('data.summary.production_batch_count', 1)
+        ->assertJsonPath('data.summary.sn_count', 2)
+        ->assertJsonPath('data.production_batches.0.id', $batch->id)
+        ->assertJsonCount(2, 'data.production_batches.0.materials')
+        ->assertJsonPath('data.production_batches.0.materials.0.material.code', 'MAT-DEDUPE-A')
+        ->assertJsonPath('data.production_batches.0.materials.1.material.code', 'MAT-DEDUPE-B')
+        ->assertJsonCount(2, 'data.production_batches.0.product_sns');
 });
 
 it('returns 200 with an empty result when the material batch has no products', function () {

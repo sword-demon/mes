@@ -6,6 +6,7 @@ use App\Modules\Material\Model\Material;
 use App\Modules\Production\Model\ProductSn;
 use App\Modules\Traceability\Data\BackwardTraceBatchData;
 use App\Modules\Traceability\Data\BackwardTraceData;
+use App\Modules\Traceability\Data\BackwardTraceMaterialUsage;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 
@@ -21,11 +22,16 @@ class BackwardTraceResource extends JsonResource
      */
     public function toArray(Request $request): array
     {
-        $snCount = $this->trace->rows->sum(
-            fn (BackwardTraceBatchData $row): int => $row->productSns->count(),
-        );
+        $snCount = $this->trace->rows
+            ->flatMap(fn (BackwardTraceBatchData $row) => $row->productSns->pluck('id'))
+            ->unique()
+            ->count();
         $orderCount = $this->trace->rows
             ->map(fn (BackwardTraceBatchData $row): int => $row->order->id)
+            ->unique()
+            ->count();
+        $batchCount = $this->trace->rows
+            ->map(fn (BackwardTraceBatchData $row): int => $row->batch->id)
             ->unique()
             ->count();
 
@@ -38,11 +44,11 @@ class BackwardTraceResource extends JsonResource
                 'production_batches' => 'order',
                 'product_sns' => 'sn',
             ],
-            'scope_note' => '物料按生产订单发料，未细分到生产批次；以下列出关联订单中已生成产品 SN 的生产批次。',
+            'scope_note' => '物料按生产订单发料，未细分到生产批次；同一批次号可能对应多个物料，结果按生产批次汇总并列出全部物料用量。',
             'summary' => [
                 'material_count' => count($this->trace->materials),
                 'production_order_count' => $orderCount,
-                'production_batch_count' => $this->trace->rows->count(),
+                'production_batch_count' => $batchCount,
                 'sn_count' => $snCount,
             ],
             'materials' => array_map(
@@ -65,8 +71,13 @@ class BackwardTraceResource extends JsonResource
             'id' => $row->batch->id,
             'code' => $row->batch->code,
             'quantity' => $row->batch->quantity,
-            'issued_quantity' => $row->issuedQuantity,
-            'material' => $this->materialRef($row->material),
+            'materials' => $row->materials
+                ->map(fn (BackwardTraceMaterialUsage $usage): array => [
+                    'material' => $this->materialRef($usage->material),
+                    'issued_quantity' => $usage->issuedQuantity,
+                ])
+                ->values()
+                ->all(),
             'production_order' => [
                 'id' => $row->order->id,
                 'code' => $row->order->code,

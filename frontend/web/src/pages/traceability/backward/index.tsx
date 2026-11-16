@@ -21,7 +21,9 @@ import type {
     BackwardTraceBatch,
     BackwardTraceProductSn,
 } from '@/api/traceability';
+import { useAuthStore } from '@/stores/auth';
 import { ApiRequestError } from '@/utils/api-error';
+import { can } from '@/utils/permission';
 
 const formatTime = (value: string | null | undefined): string =>
     value ? dayjs(value).format('YYYY-MM-DD HH:mm:ss') : '-';
@@ -126,7 +128,7 @@ function TraceResult({ data }: { data: BackwardTrace }) {
             {data.has_data ? (
                 <Card title="受影响生产批次" size="small">
                     <Table<BackwardTraceBatch>
-                        rowKey={(record) => `${record.material.id}-${record.id}`}
+                        rowKey="id"
                         size="small"
                         pagination={false}
                         dataSource={data.production_batches}
@@ -151,11 +153,18 @@ function TraceResult({ data }: { data: BackwardTrace }) {
                             },
                             { title: '生产批次', dataIndex: 'code' },
                             {
-                                title: '物料',
-                                render: (_, record) =>
-                                    `${record.material.code} ${record.material.name}`,
+                                title: '物料用量',
+                                render: (_, record) => (
+                                    <Space orientation="vertical" size={0}>
+                                        {record.materials.map((usage) => (
+                                            <span key={usage.material.id}>
+                                                {usage.material.code} {usage.material.name} ×{' '}
+                                                {usage.issued_quantity}
+                                            </span>
+                                        ))}
+                                    </Space>
+                                ),
                             },
-                            { title: '该订单领用', dataIndex: 'issued_quantity' },
                             {
                                 title: '产品 SN',
                                 render: (_, record) => record.product_sns.length,
@@ -171,6 +180,9 @@ function TraceResult({ data }: { data: BackwardTrace }) {
 }
 
 function ProductSnTable({ rows }: { rows: BackwardTraceProductSn[] }) {
+    const user = useAuthStore((state) => state.user);
+    const canForwardTrace = can(user, 'traceability.forward.show');
+
     return (
         <Table<BackwardTraceProductSn>
             rowKey="id"
@@ -200,13 +212,16 @@ function ProductSnTable({ rows }: { rows: BackwardTraceProductSn[] }) {
                 },
                 {
                     title: '操作',
-                    render: (_, record) => (
-                        <Typography.Link
-                            href={`/traceability/forward?sn=${encodeURIComponent(record.sn)}`}
-                        >
-                            正向追溯
-                        </Typography.Link>
-                    ),
+                    render: (_, record) =>
+                        canForwardTrace ? (
+                            <Typography.Link
+                                href={`/traceability/forward?sn=${encodeURIComponent(record.sn)}`}
+                            >
+                                正向追溯
+                            </Typography.Link>
+                        ) : (
+                            '-'
+                        ),
                 },
             ]}
         />
