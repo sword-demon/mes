@@ -2,6 +2,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { App as AntdApp } from 'antd';
 import { act } from 'react';
 import { createRoot } from 'react-dom/client';
+import type { Root } from 'react-dom/client';
 import { MemoryRouter } from 'react-router';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import ForwardTracePage from './index';
@@ -33,6 +34,12 @@ const sn = 'MES20261116000001';
 const trace = {
     has_data: true,
     message: null,
+    data_granularity: {
+        materials: 'order',
+        inspections: 'sn',
+        order_inspections: 'order',
+        defects: 'batch',
+    },
     sn: {
         id: 1,
         sn,
@@ -97,6 +104,7 @@ const trace = {
             quantity: 2,
             loss_rate: 0,
             issued_quantity: '18.000',
+            scope: 'order',
         },
     ],
     route: {
@@ -192,6 +200,8 @@ const trace = {
             created_at: '2026-11-16T02:20:00Z',
             updated_at: '2026-11-16T02:30:00Z',
         },
+    ],
+    order_inspections: [
         {
             id: 52,
             inspection_type: 'oqc',
@@ -248,16 +258,20 @@ const trace = {
 };
 
 let originalAdapter: typeof http.defaults.adapter;
+let root: Root | undefined;
+let queryClient: QueryClient | undefined;
 
 async function renderPage(entry: string) {
     const container = document.createElement('div');
     document.body.append(container);
-    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    queryClient = client;
+    root = createRoot(container);
 
     await act(async () => {
-        createRoot(container).render(
+        root?.render(
             <MemoryRouter initialEntries={[entry]}>
-                <QueryClientProvider client={queryClient}>
+                <QueryClientProvider client={client}>
                     <AntdApp>
                         <ForwardTracePage />
                     </AntdApp>
@@ -304,6 +318,10 @@ describe('产品正向追溯页', () => {
     });
 
     afterEach(() => {
+        act(() => root?.unmount());
+        queryClient?.clear();
+        root = undefined;
+        queryClient = undefined;
         http.defaults.adapter = originalAdapter;
         document.body.innerHTML = '';
     });
@@ -328,6 +346,7 @@ describe('产品正向追溯页', () => {
             'EQ-TRACE',
             '质量检验记录',
             '订单级',
+            '订单级检验',
             '不良处理记录',
             '焊点虚焊',
         ]) {
@@ -349,9 +368,10 @@ describe('产品正向追溯页', () => {
                 data: {
                     ...trace,
                     has_data: false,
-                    message: '该 SN 暂无可追溯的生产执行记录',
+                    message: '该 SN 尚无绑定 SN 的工序执行记录，以下为订单与批次信息',
                     process_records: [],
                     inspections: [],
+                    order_inspections: [],
                     defects: [],
                 },
                 timestamp: 0,
@@ -364,7 +384,47 @@ describe('产品正向追溯页', () => {
 
         await renderPage(`/traceability/forward?sn=${sn}`);
 
-        expect(document.body.textContent).toContain('该 SN 暂无可追溯的生产执行记录');
+        expect(document.body.textContent).toContain(
+            '该 SN 尚无绑定 SN 的工序执行记录，以下为订单与批次信息',
+        );
         expect(document.body.textContent).toContain('暂无工序执行记录');
+    });
+
+    it('does not render a pending inspection as failed', async () => {
+        http.defaults.adapter = async (config) => ({
+            data: {
+                code: 200,
+                message: 'success',
+                data: {
+                    ...trace,
+                    inspections: [
+                        {
+                            ...trace.inspections[0],
+                            result: null,
+                            status: 'pending',
+                            result_label: '待检验',
+                            inspector: null,
+                            inspected_at: null,
+                            items: [],
+                        },
+                    ],
+                    order_inspections: [],
+                },
+                timestamp: 0,
+            },
+            status: 200,
+            statusText: '',
+            headers: {},
+            config,
+        });
+
+        await renderPage(`/traceability/forward?sn=${sn}`);
+
+        const pending = Array.from(document.querySelectorAll('.ant-tag')).find(
+            (tag) => tag.textContent?.includes('待检验'),
+        );
+
+        expect(pending).toBeDefined();
+        expect(pending?.className).not.toContain('ant-tag-red');
     });
 });

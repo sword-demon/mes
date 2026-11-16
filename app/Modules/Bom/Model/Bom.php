@@ -134,7 +134,7 @@ class Bom extends Model
      */
     public function items(): HasMany
     {
-        return $this->hasMany(BomItem::class, 'bom_id')->orderBy('id');
+        return $this->hasMany(BomItem::class, 'bom_id');
     }
 
     /**

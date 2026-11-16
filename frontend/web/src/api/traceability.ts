@@ -1,16 +1,14 @@
 import { api } from './client';
+import type { Equipment } from './equipment';
+import type { ProductSnProcessRecord, ProductionDispatch } from './production';
 import type { DefectiveProduct, InspectionTask } from './quality';
 
-export type TraceEmployee = { id: number; employee_no: string; name: string };
+export type TraceEmployee = NonNullable<ProductionDispatch['employee']>;
 
-export type TraceEquipment = {
-    id: number;
-    code: string;
-    name: string;
-    type: string;
-    status: string;
-    status_label: string;
-};
+export type TraceEquipment = Pick<
+    Equipment,
+    'id' | 'code' | 'name' | 'type' | 'status' | 'status_label'
+>;
 
 export type TraceMaterial = {
     id: number;
@@ -35,22 +33,14 @@ export type TraceRouteOperation = {
     process: TraceProcess;
 };
 
-export type TraceProcessRecord = {
-    id: number;
-    sequence: number;
+export type TraceProcessRecord = Omit<ProductSnProcessRecord, 'route_operation'> & {
     sn: string | null;
-    status: string;
-    status_label: string;
-    started_at: string | null;
-    completed_at: string | null;
     inspected_at: string | null;
     submitted_at: string | null;
-    received_at: string | null;
     exception_reason: string | null;
     exception_at: string | null;
     rework_reason: string | null;
     rework_at: string | null;
-    rework_count: number;
     route_operation: {
         id: number;
         sequence: number;
@@ -66,6 +56,7 @@ export type TraceMaterialUsage = {
     quantity: number;
     loss_rate: number;
     issued_quantity: string;
+    scope: 'order';
 };
 
 export type TraceInspection = InspectionTask & { scope: 'sn' | 'order' };
@@ -75,6 +66,12 @@ export type TraceDefect = DefectiveProduct & { scope: 'batch' };
 export type ForwardTrace = {
     has_data: boolean;
     message: string | null;
+    data_granularity: {
+        materials: 'order';
+        inspections: 'sn';
+        order_inspections: 'order';
+        defects: 'batch';
+    };
     sn: {
         id: number;
         sn: string;
@@ -130,6 +127,7 @@ export type ForwardTrace = {
     };
     process_records: TraceProcessRecord[];
     inspections: TraceInspection[];
+    order_inspections: TraceInspection[];
     defects: TraceDefect[];
 };
 

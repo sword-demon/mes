@@ -85,7 +85,7 @@ function forwardTraceCase(): array
         'production_batch_id' => $batch->id,
     ]);
     $otherTask = ProductionTask::factory()->create(['production_order_id' => $order->id]);
-    ProcessRecord::factory()->create([
+    $otherRecord = ProcessRecord::factory()->create([
         'production_task_id' => $otherTask->id,
         'route_operation_id' => $stitchingOperation->id,
         'sn' => $otherSn->sn,
@@ -109,9 +109,24 @@ function forwardTraceCase(): array
         'max_value' => 5.2,
         'passed' => true,
     ]);
-    InspectionTask::factory()->create([
+    $otherIpqc = InspectionTask::factory()->create([
+        'production_order_id' => $order->id,
+        'process_record_id' => $otherRecord->id,
+        'route_operation_id' => $stitchingOperation->id,
+        'inspection_type' => InspectionTask::IPQC,
+        'result' => InspectionTask::FAILED,
+    ]);
+    $oqc = InspectionTask::factory()->create([
         'production_order_id' => $order->id,
         'route_operation_id' => $assemblyOperation->id,
+        'inspection_type' => InspectionTask::OQC,
+    ]);
+    $otherOrder = ProductionOrder::factory()->create();
+    InspectionTask::factory()->create([
+        'production_order_id' => $otherOrder->id,
+        'route_operation_id' => RouteOperation::factory()->create([
+            'route_id' => $otherOrder->route_id,
+        ])->id,
         'inspection_type' => InspectionTask::OQC,
     ]);
 
@@ -141,6 +156,18 @@ function forwardTraceCase(): array
         'requested_quantity' => 20,
         'issued_quantity' => 18,
     ]);
+    $otherRequisition = MaterialRequisition::query()->create([
+        'code' => 'MR-TRACE-02',
+        'production_order_id' => $otherOrder->id,
+        'status' => MaterialRequisition::ISSUED,
+        'created_by_id' => $requisition->created_by_id,
+    ]);
+    MaterialRequisitionItem::query()->create([
+        'requisition_id' => $otherRequisition->id,
+        'material_id' => $material->id,
+        'requested_quantity' => 100,
+        'issued_quantity' => 99,
+    ]);
 
     return compact(
         'order',
@@ -152,6 +179,8 @@ function forwardTraceCase(): array
         'sn',
         'otherSn',
         'ipqc',
+        'oqc',
+        'otherIpqc',
         'defect',
     );
 }
@@ -196,21 +225,34 @@ it('returns 200 with the complete forward trace of a serial number', function ()
         ->assertJsonPath('data.process_records.0.employee.name', '追溯操作员')
         ->assertJsonPath('data.process_records.0.equipment.code', 'EQ-TRACE')
         ->assertJsonPath('data.process_records.0.route_operation.process.name', 'SMT 贴片')
-        ->assertJsonCount(2, 'data.inspections')
+        ->assertJsonCount(1, 'data.inspections')
+        ->assertJsonPath('data.inspections.0.id', $case['ipqc']->id)
         ->assertJsonPath('data.inspections.0.process_record.id', $case['ipqc']->process_record_id)
         ->assertJsonPath('data.inspections.0.scope', 'sn')
-        ->assertJsonPath('data.inspections.1.scope', 'order')
         ->assertJsonPath('data.inspections.0.items.0.code', 'INS-TRACE')
         ->assertJsonPath('data.inspections.0.items.0.measured_value', '5.000')
+        ->assertJsonCount(1, 'data.order_inspections')
+        ->assertJsonPath('data.order_inspections.0.id', $case['oqc']->id)
+        ->assertJsonPath('data.order_inspections.0.inspection_type', InspectionTask::OQC)
+        ->assertJsonPath('data.order_inspections.0.scope', 'order')
+        ->assertJsonPath('data.data_granularity.materials', 'order')
+        ->assertJsonPath('data.data_granularity.inspections', 'sn')
+        ->assertJsonPath('data.data_granularity.order_inspections', 'order')
+        ->assertJsonPath('data.data_granularity.defects', 'batch')
         ->assertJsonPath('data.defects.0.scope', 'batch')
         ->assertJsonPath('data.defects.0.defect_code.name', $case['defect']->defectCode->name);
 
     $processRecordIds = collect($response->json('data.process_records'))->pluck('id');
     $defectIds = collect($response->json('data.defects'))->pluck('id');
+    $inspectionIds = collect($response->json('data.inspections'))->pluck('id');
+    $orderInspectionIds = collect($response->json('data.order_inspections'))->pluck('id');
 
     expect($processRecordIds)->not->toContain(
         ProcessRecord::query()->where('sn', $case['otherSn']->sn)->value('id'),
-    )->and($defectIds)->toHaveCount(1);
+    )->and($defectIds)->toHaveCount(1)
+        ->and($inspectionIds)->not->toContain($case['otherIpqc']->id)
+        ->and($orderInspectionIds)->not->toContain($case['otherIpqc']->id)
+        ->and($response->json('data.materials.0.issued_quantity'))->toBe('18.000');
 });
 
 it('returns 404 with a clear message for an unknown serial number', function () {
@@ -232,7 +274,7 @@ it('returns 200 and reports a serial number without execution records as missing
         ->getJson("/api/v1/traceability/sn/{$sn->sn}")
         ->assertOk()
         ->assertJsonPath('data.has_data', false)
-        ->assertJsonPath('data.message', '该 SN 暂无可追溯的生产执行记录')
+        ->assertJsonPath('data.message', '该 SN 尚无绑定 SN 的工序执行记录，以下为订单与批次信息')
         ->assertJsonCount(0, 'data.process_records')
         ->assertJsonPath('data.production_order.id', $order->id);
 });

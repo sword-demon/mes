@@ -41,6 +41,18 @@ const processStatusColor: Record<string, string> = {
     reworking: 'red',
 };
 
+const inspectionTagColor = (status: string): string => {
+    if (status === 'passed') {
+        return 'green';
+    }
+
+    if (status === 'failed') {
+        return 'red';
+    }
+
+    return 'default';
+};
+
 function stepStatus(status?: string): 'wait' | 'process' | 'finish' | 'error' {
     if (!status || status === 'pending') {
         return 'wait';
@@ -150,9 +162,6 @@ function TraceResult({ data }: { data: ForwardTrace }) {
             .filter((record) => record.route_operation !== null)
             .map((record) => [record.route_operation?.id as number, record]),
     );
-    const orderInspections = data.inspections.filter(
-        (inspection) => inspection.scope === 'order',
-    );
     const timelineItems = [
         ...data.process_records.map((record) => {
             const inspections = inspectionsByRecord.get(record.id) ?? [];
@@ -202,7 +211,7 @@ function TraceResult({ data }: { data: ForwardTrace }) {
                         )}
                         {inspections.map((inspection) => (
                             <Typography.Text key={inspection.id}>
-                                <Tag color={inspection.status === 'passed' ? 'green' : 'red'}>
+                                <Tag color={inspectionTagColor(inspection.status)}>
                                     {inspection.inspection_type_label}{' '}
                                     {inspection.result_label}
                                 </Tag>
@@ -224,43 +233,16 @@ function TraceResult({ data }: { data: ForwardTrace }) {
                 ),
             };
         }),
-        ...orderInspections.map((inspection) => ({
-            color:
-                inspection.status === 'passed'
-                    ? 'green'
-                    : inspection.status === 'failed'
-                      ? 'red'
-                      : 'gray',
-            children: (
-                <Space orientation="vertical" size={4}>
-                    <Space wrap>
-                        <Typography.Text strong>
-                            订单级检验：{inspection.inspection_type_label}
-                        </Typography.Text>
-                        <Tag color={inspection.status === 'passed' ? 'green' : 'red'}>
-                            {inspection.result_label}
-                        </Tag>
-                    </Space>
-                    <Typography.Text type="secondary">
-                        {inspection.inspector
-                            ? `检验员 ${inspection.inspector.name}`
-                            : '待检验'}
-                        {inspection.inspected_at
-                            ? ` · ${formatTime(inspection.inspected_at)}`
-                            : ''}
-                    </Typography.Text>
-                    {inspection.remark && (
-                        <Typography.Text type="secondary">
-                            备注：{inspection.remark}
-                        </Typography.Text>
-                    )}
-                </Space>
-            ),
-        })),
     ];
 
     return (
         <Space orientation="vertical" className="w-full" size="large">
+            <Alert
+                type="info"
+                showIcon
+                message="工序执行与过程检验按 SN 追踪；用料、订单级检验与不良处理按订单或批次展示。"
+            />
+
             {!data.has_data && (
                 <Alert
                     type="warning"
@@ -331,7 +313,7 @@ function TraceResult({ data }: { data: ForwardTrace }) {
                     labelPlacement="vertical"
                     items={data.route.operations.map((operation) => ({
                         title: operation.process.name,
-                        description: `工序 ${operation.sequence}`,
+                        content: `工序 ${operation.sequence}`,
                         status: stepStatus(
                             recordsByOperation.get(operation.id)?.status,
                         ),
@@ -364,69 +346,20 @@ function TraceResult({ data }: { data: ForwardTrace }) {
                 />
             </Card>
 
-            <Card title="质量检验记录" size="small">
-                <Table<TraceInspection>
-                    rowKey="id"
-                    size="small"
-                    pagination={false}
-                    dataSource={data.inspections}
-                    expandable={{
-                        rowExpandable: (record) => record.items.length > 0,
-                        expandedRowRender: (record) => (
-                            <Table
-                                rowKey="inspection_item_id"
-                                size="small"
-                                pagination={false}
-                                dataSource={record.items}
-                                columns={[
-                                    { title: '检验项目', dataIndex: 'name' },
-                                    { title: '实测值', dataIndex: 'measured_value' },
-                                    { title: '标准值', dataIndex: 'standard_value' },
-                                    { title: '范围', render: (_, item) => `${item.min_value} ~ ${item.max_value}` },
-                                    {
-                                        title: '判定',
-                                        render: (_, item) => (
-                                            <Tag color={item.passed ? 'green' : 'red'}>
-                                                {item.passed ? '合格' : '不合格'}
-                                            </Tag>
-                                        ),
-                                    },
-                                ]}
-                            />
-                        ),
-                    }}
-                    columns={[
-                        { title: '检验类型', dataIndex: 'inspection_type_label' },
-                        {
-                            title: '归属',
-                            render: (_, record) => (
-                                <Tag>{record.scope === 'order' ? '订单级' : 'SN 级'}</Tag>
-                            ),
-                        },
-                        {
-                            title: '工序',
-                            render: (_, record) =>
-                                record.route_operation?.process.name ?? '-',
-                        },
-                        {
-                            title: '结果',
-                            render: (_, record) => (
-                                <Tag color={record.status === 'passed' ? 'green' : record.status === 'failed' ? 'red' : 'default'}>
-                                    {record.result_label}
-                                </Tag>
-                            ),
-                        },
-                        {
-                            title: '检验员',
-                            render: (_, record) => record.inspector?.name ?? '-',
-                        },
-                        {
-                            title: '检验时间',
-                            render: (_, record) => formatTime(record.inspected_at),
-                        },
-                        { title: '备注', dataIndex: 'remark', render: (value: string | null) => value ?? '-' },
-                    ]}
-                />
+            <Card title="质量检验记录（SN 级）" size="small">
+                {data.inspections.length === 0 ? (
+                    <Empty description="暂无 SN 级过程检验记录" />
+                ) : (
+                    <InspectionTable rows={data.inspections} />
+                )}
+            </Card>
+
+            <Card title="订单级检验（不归属单个 SN）" size="small">
+                {data.order_inspections.length === 0 ? (
+                    <Empty description="暂无订单级检验记录" />
+                ) : (
+                    <InspectionTable rows={data.order_inspections} />
+                )}
             </Card>
 
             <Card title="不良处理记录（批次级）" size="small">
@@ -474,5 +407,66 @@ function TraceResult({ data }: { data: ForwardTrace }) {
                 />
             </Card>
         </Space>
+    );
+}
+
+function InspectionTable({ rows }: { rows: TraceInspection[] }) {
+    return (
+        <Table<TraceInspection>
+            rowKey="id"
+            size="small"
+            pagination={false}
+            dataSource={rows}
+            expandable={{
+                rowExpandable: (record) => record.items.length > 0,
+                expandedRowRender: (record) => (
+                    <Table
+                        rowKey="inspection_item_id"
+                        size="small"
+                        pagination={false}
+                        dataSource={record.items}
+                        columns={[
+                            { title: '检验项目', dataIndex: 'name' },
+                            { title: '实测值', dataIndex: 'measured_value' },
+                            { title: '标准值', dataIndex: 'standard_value' },
+                            { title: '范围', render: (_, item) => `${item.min_value} ~ ${item.max_value}` },
+                            {
+                                title: '判定',
+                                render: (_, item) => (
+                                    <Tag color={item.passed ? 'green' : 'red'}>
+                                        {item.passed ? '合格' : '不合格'}
+                                    </Tag>
+                                ),
+                            },
+                        ]}
+                    />
+                ),
+            }}
+            columns={[
+                { title: '检验类型', dataIndex: 'inspection_type_label' },
+                {
+                    title: '工序',
+                    render: (_, record) =>
+                        record.route_operation?.process.name ?? '-',
+                },
+                {
+                    title: '结果',
+                    render: (_, record) => (
+                        <Tag color={inspectionTagColor(record.status)}>
+                            {record.result_label}
+                        </Tag>
+                    ),
+                },
+                {
+                    title: '检验员',
+                    render: (_, record) => record.inspector?.name ?? '-',
+                },
+                {
+                    title: '检验时间',
+                    render: (_, record) => formatTime(record.inspected_at),
+                },
+                { title: '备注', dataIndex: 'remark', render: (value: string | null) => value ?? '-' },
+            ]}
+        />
     );
 }

@@ -98,6 +98,31 @@ test('the equipment manager can monitor equipment and read its history', functio
         ->toContain('equipment.alarms.close');
 });
 
+test('forward traceability is granted only to factory-scoped roles', function () {
+    $this->seed(SystemSeeder::class);
+
+    $manager = User::query()->where('email', 'quality.manager@mes.test')->firstOrFail();
+    $managerPermissions = collect(bearer($manager)
+        ->getJson('/api/v1/me')
+        ->assertOk()
+        ->json('data.permissions'))->all();
+
+    expect($managerPermissions)->toContain('traceability.forward.show');
+
+    $inspector = User::query()->where('email', 'quality1@mes.test')->firstOrFail();
+    $inspectorPermissions = collect(bearer($inspector)
+        ->getJson('/api/v1/me')
+        ->assertOk()
+        ->json('data.permissions'))->all();
+    $inspectorMenus = collect(bearer($inspector)
+        ->getJson('/api/v1/me')
+        ->json('data.menus'))->pluck('name')->all();
+
+    expect($inspectorPermissions)
+        ->not->toContain('traceability.forward.show')
+        ->and($inspectorMenus)->not->toContain('追溯管理');
+});
+
 test('the process engineer can read and edit processes and routes', function () {
     $this->seed(SystemSeeder::class);
 
