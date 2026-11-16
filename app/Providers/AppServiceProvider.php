@@ -13,6 +13,10 @@ use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\ServiceProvider;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rules\Password;
+use PhpMqtt\Client\Contracts\MqttClient as MqttClientContract;
+use PhpMqtt\Client\Contracts\Repository as MqttRepository;
+use PhpMqtt\Client\MqttClient;
+use PhpMqtt\Client\Repositories\MemoryRepository;
 
 class AppServiceProvider extends ServiceProvider
 {
@@ -21,7 +25,14 @@ class AppServiceProvider extends ServiceProvider
      */
     public function register(): void
     {
-        //
+        $this->app->singleton(MqttRepository::class, MemoryRepository::class);
+        $this->app->bind(MqttClientContract::class, fn ($app) => new MqttClient(
+            config('mqtt.host'),
+            config('mqtt.port'),
+            config('mqtt.client_id'),
+            MqttClient::MQTT_3_1_1,
+            $app->make(MqttRepository::class),
+        ));
     }
 
     /**
