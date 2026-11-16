@@ -203,15 +203,15 @@ it('filters requisitions by order, material and date', function () {
         'code' => 'MR-200001',
         'production_order_id' => $order->id,
         'created_by_id' => $actor->id,
-        'created_at' => '2026-11-15 09:00:00',
     ]);
+    $match->forceFill(['created_at' => '2026-11-15 09:00:00'])->save();
     $match->items()->create(['material_id' => $material->id, 'requested_quantity' => 1]);
     $other = MaterialRequisition::query()->create([
         'code' => 'MR-200002',
         'production_order_id' => $otherOrder->id,
         'created_by_id' => $actor->id,
-        'created_at' => '2026-11-14 09:00:00',
     ]);
+    $other->forceFill(['created_at' => '2026-11-14 09:00:00'])->save();
     $other->items()->create(['material_id' => $otherMaterial->id, 'requested_quantity' => 1]);
 
     bearer($actor)->getJson('/api/v1/materials/requisitions?'.http_build_query([
