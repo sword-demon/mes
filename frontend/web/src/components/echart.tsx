@@ -1,11 +1,26 @@
-import { LineChart } from 'echarts/charts';
-import { DataZoomComponent, GridComponent, TooltipComponent } from 'echarts/components';
+import { BarChart, GaugeChart, LineChart, PieChart } from 'echarts/charts';
+import {
+    DataZoomComponent,
+    GridComponent,
+    LegendComponent,
+    TooltipComponent,
+} from 'echarts/components';
 import * as echarts from 'echarts/core';
 import { CanvasRenderer } from 'echarts/renderers';
 import type { EChartsOption } from 'echarts';
 import { useEffect, useRef } from 'react';
 
-echarts.use([LineChart, GridComponent, TooltipComponent, DataZoomComponent, CanvasRenderer]);
+echarts.use([
+    BarChart,
+    GaugeChart,
+    LineChart,
+    PieChart,
+    DataZoomComponent,
+    GridComponent,
+    LegendComponent,
+    TooltipComponent,
+    CanvasRenderer,
+]);
 
 export default function EChart({ option, className }: { option: EChartsOption; className?: string }) {
     const container = useRef<HTMLDivElement>(null);
