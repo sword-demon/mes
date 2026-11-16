@@ -497,3 +497,124 @@ export function listUsableRoutes(productId: number) {
         per_page: 100,
     });
 }
+
+export const PRODUCTION_EXCEPTION_TYPES = [
+    { value: 'equipment', label: '设备异常', color: 'red' },
+    { value: 'material', label: '物料异常', color: 'gold' },
+    { value: 'process', label: '工艺异常', color: 'blue' },
+    { value: 'quality', label: '质量异常', color: 'purple' },
+    { value: 'personnel', label: '人员异常', color: 'orange' },
+] as const;
+
+export type ProductionExceptionType = (typeof PRODUCTION_EXCEPTION_TYPES)[number]['value'];
+
+export const PRODUCTION_EXCEPTION_STATUSES = [
+    { value: 'reported', label: '已上报', color: 'red' },
+    { value: 'processing', label: '处理中', color: 'blue' },
+    { value: 'closed', label: '已关闭', color: 'green' },
+] as const;
+
+export type ProductionExceptionStatus = (typeof PRODUCTION_EXCEPTION_STATUSES)[number]['value'];
+
+export type ProductionExceptionOrderRef = {
+    id: number;
+    code: string;
+    product: NamedRef;
+};
+
+export type ProductionExceptionProcessRecordRef = {
+    id: number;
+    sequence: number;
+    sn: string | null;
+    production_order?: { id: number; code: string };
+    route_operation: {
+        id: number;
+        sequence: number;
+        process: NamedRef;
+    };
+};
+
+export type ProductionExceptionImage = { id: number; original_name: string | null; url: string };
+
+export type ProductionException = {
+    id: number;
+    code: string;
+    type: ProductionExceptionType;
+    type_label: string;
+    status: ProductionExceptionStatus;
+    status_label: string;
+    description: string;
+    handling_result: string | null;
+    production_order: ProductionExceptionOrderRef | null;
+    process_record: ProductionExceptionProcessRecordRef | null;
+    reporter: { id: number; name: string } | null;
+    handler: { id: number; name: string } | null;
+    images: ProductionExceptionImage[];
+    reported_at: string;
+    handled_at: string | null;
+    closed_at: string | null;
+    created_at: string;
+    updated_at: string;
+};
+
+export type ProductionExceptionParams = {
+    page?: number;
+    per_page?: number;
+    type?: ProductionExceptionType;
+    status?: ProductionExceptionStatus;
+    production_order_id?: number;
+    start_date?: string;
+    end_date?: string;
+};
+
+export type ProductionExceptionPayload = {
+    type: ProductionExceptionType;
+    production_order_id?: number | null;
+    process_record_id?: number | null;
+    description: string;
+};
+
+export type ProductionExceptionOptions = {
+    orders: ProductionExceptionOrderRef[];
+    process_records: ProductionExceptionProcessRecordRef[];
+};
+
+export function listProductionExceptions(params: ProductionExceptionParams = {}) {
+    return api.get<Paginated<ProductionException>>('/production/exceptions', params);
+}
+
+export function getProductionExceptionOptions(productionOrderId?: number) {
+    return api.get<ProductionExceptionOptions>('/production/exceptions/options', {
+        production_order_id: productionOrderId,
+    });
+}
+
+export function reportProductionException(payload: ProductionExceptionPayload, files: File[]) {
+    const form = new FormData();
+    form.append('type', payload.type);
+    form.append('description', payload.description);
+
+    if (payload.production_order_id !== undefined && payload.production_order_id !== null) {
+        form.append('production_order_id', String(payload.production_order_id));
+    }
+
+    if (payload.process_record_id !== undefined && payload.process_record_id !== null) {
+        form.append('process_record_id', String(payload.process_record_id));
+    }
+
+    files.forEach((file) => form.append('images[]', file));
+
+    return api.post<ProductionException>('/production/exceptions', form);
+}
+
+export function processProductionException(id: number, handlingResult: string) {
+    return api.post<ProductionException>(`/production/exceptions/${id}/process`, {
+        handling_result: handlingResult,
+    });
+}
+
+export function closeProductionException(id: number, handlingResult?: string) {
+    return api.post<ProductionException>(`/production/exceptions/${id}/close`, {
+        handling_result: handlingResult,
+    });
+}

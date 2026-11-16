@@ -21,6 +21,7 @@ use App\Modules\Product\Controller\ProductController;
 use App\Modules\Product\Controller\ProductVersionController;
 use App\Modules\Production\Controller\ProcessRecordController;
 use App\Modules\Production\Controller\ProductionDispatchController;
+use App\Modules\Production\Controller\ProductionExceptionController;
 use App\Modules\Production\Controller\ProductionOrderController;
 use App\Modules\Production\Controller\ProductionReportController;
 use App\Modules\Production\Controller\ProductionTaskController;
@@ -422,5 +423,17 @@ Route::middleware(['auth:sanctum', 'active'])->group(function (): void {
             ->middleware('permission:production.flows.exception')->name('process-records.exception');
         Route::post('/process-records/{record}/rework', [ProcessRecordController::class, 'rework'])
             ->middleware('permission:production.flows.rework')->name('process-records.rework');
+
+        Route::get('/exceptions/options', [ProductionExceptionController::class, 'options'])
+            ->middleware('permission:production.exceptions.index|production.exceptions.create')
+            ->name('exceptions.options');
+        Route::get('/exceptions', [ProductionExceptionController::class, 'index'])
+            ->middleware('permission:production.exceptions.index')->name('exceptions.index');
+        Route::post('/exceptions', [ProductionExceptionController::class, 'store'])
+            ->middleware('permission:production.exceptions.create')->name('exceptions.store');
+        Route::post('/exceptions/{exception}/process', [ProductionExceptionController::class, 'process'])
+            ->middleware('permission:production.exceptions.process')->name('exceptions.process');
+        Route::post('/exceptions/{exception}/close', [ProductionExceptionController::class, 'close'])
+            ->middleware('permission:production.exceptions.close')->name('exceptions.close');
     });
 });
