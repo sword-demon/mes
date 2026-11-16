@@ -17,11 +17,13 @@ use Illuminate\Support\Carbon;
  * @property string $code
  * @property int $equipment_id
  * @property int|null $equipment_data_id
- * @property string $metric
+ * @property string|null $metric
+ * @property string|null $alarm_code
+ * @property string|null $message
  * @property string $level
  * @property string $status
- * @property float $threshold
- * @property float $measured_value
+ * @property float|null $threshold
+ * @property float|null $measured_value
  * @property int|null $confirmed_by_id
  * @property Carbon|null $confirmed_at
  * @property int|null $handled_by_id
@@ -37,6 +39,8 @@ use Illuminate\Support\Carbon;
     'equipment_id',
     'equipment_data_id',
     'metric',
+    'alarm_code',
+    'message',
     'level',
     'status',
     'threshold',
@@ -113,6 +117,15 @@ class EquipmentAlarm extends Model
 
     public const array METRICS = ['temperature', 'speed', 'pressure'];
 
+    public const string ALARM_DEVICE_FAULT = 'device_fault';
+
+    /** @var array<string, string> */
+    public const array METRIC_ALARM_CODES = [
+        'temperature' => 'over_temperature',
+        'speed' => 'over_speed',
+        'pressure' => 'over_pressure',
+    ];
+
     public const array RELATIONS = ['equipment', 'confirmedBy', 'handledBy'];
 
     /** @var array<string, string> */
@@ -152,13 +165,6 @@ class EquipmentAlarm extends Model
         ],
     ];
 
-    /**
-     * @var array<string, mixed>
-     */
-    protected $attributes = [
-        'status' => self::PENDING,
-    ];
-
     public function statusLabel(): string
     {
         return self::STATUS_LABELS[$this->status] ?? $this->status;
@@ -171,12 +177,31 @@ class EquipmentAlarm extends Model
 
     public function metricLabel(): string
     {
-        return self::METRIC_LABELS[$this->metric] ?? $this->metric;
+        return $this->metric === null
+            ? '设备'
+            : (self::METRIC_LABELS[$this->metric] ?? $this->metric);
     }
 
     public function metricUnit(): string
     {
-        return self::METRIC_UNITS[$this->metric] ?? '';
+        return $this->metric === null ? '' : (self::METRIC_UNITS[$this->metric] ?? '');
+    }
+
+    public static function alarmCodeForMetric(string $metric): string
+    {
+        return self::METRIC_ALARM_CODES[$metric] ?? $metric;
+    }
+
+    public static function metricForAlarmCode(string $alarmCode): ?string
+    {
+        $metric = array_search($alarmCode, self::METRIC_ALARM_CODES, true);
+
+        return is_string($metric) ? $metric : null;
+    }
+
+    public static function messageForMetric(string $metric): string
+    {
+        return (self::METRIC_LABELS[$metric] ?? $metric).'超限';
     }
 
     /**

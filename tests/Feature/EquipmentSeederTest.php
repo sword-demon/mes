@@ -30,6 +30,8 @@ test('the equipment seeder seeds five devices and twenty alarms covering every s
         ->toBe(['closed', 'confirmed', 'pending', 'processing'])
         ->and(EquipmentAlarm::query()->whereNotNull('threshold')->count())->toBe(20)
         ->and(EquipmentAlarm::query()->whereNotNull('measured_value')->count())->toBe(20)
+        ->and(EquipmentAlarm::query()->whereNotNull('alarm_code')->count())->toBe(20)
+        ->and(EquipmentAlarm::query()->whereNotNull('message')->count())->toBe(20)
         ->and(EquipmentAlarm::query()->whereNotNull('triggered_at')->count())->toBe(20)
         ->and(EquipmentAlarm::query()->where('status', EquipmentAlarm::PROCESSING)->whereNull('handling_note')->count())->toBe(0)
         ->and(EquipmentAlarm::query()->where('status', EquipmentAlarm::CLOSED)->whereNull('handling_note')->count())->toBe(0);

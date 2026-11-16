@@ -7,6 +7,7 @@ use App\Http\Responses\ApiResponse;
 use App\Modules\Equipment\Model\Equipment;
 use App\Modules\Equipment\Model\EquipmentAlarm;
 use App\Modules\Equipment\Resource\EquipmentAlarmResource;
+use App\Modules\Equipment\Resource\EquipmentSummaryResource;
 use App\Modules\Equipment\Service\EquipmentAlarmService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -46,11 +47,11 @@ class EquipmentAlarmController extends Controller
             )
             ->when(
                 $data['start_date'] ?? null,
-                fn ($query, string $date) => $query->where('triggered_at', '>=', Carbon::parse($date)->startOfDay()),
+                fn ($query, string $date) => $query->where('triggered_at', '>=', $this->businessDayStart($date)),
             )
             ->when(
                 $data['end_date'] ?? null,
-                fn ($query, string $date) => $query->where('triggered_at', '<', Carbon::parse($date)->addDay()->startOfDay()),
+                fn ($query, string $date) => $query->where('triggered_at', '<', $this->businessDayStart($date)->addDay()),
             )
             ->orderByDesc('triggered_at')
             ->orderByDesc('id');
@@ -67,16 +68,11 @@ class EquipmentAlarmController extends Controller
         $equipments = Equipment::query()
             ->orderBy('id')
             ->limit(200)
-            ->get(['id', 'code', 'name', 'status'])
-            ->map(fn (Equipment $equipment): array => [
-                'id' => $equipment->id,
-                'code' => $equipment->code,
-                'name' => $equipment->name,
-                'status' => $equipment->status,
-                'status_label' => $equipment->statusLabel(),
-            ]);
+            ->get(['id', 'code', 'name', 'status']);
 
-        return ApiResponse::success(['equipments' => $equipments]);
+        return ApiResponse::success([
+            'equipments' => EquipmentSummaryResource::collection($equipments)->resolve(),
+        ]);
     }
 
     public function confirm(Request $request, EquipmentAlarm $alarm): JsonResponse
@@ -108,5 +104,12 @@ class EquipmentAlarmController extends Controller
         return ApiResponse::success(EquipmentAlarmResource::make(
             $this->alarms->close($alarm, $request->user(), $data['handling_note'] ?? null),
         ));
+    }
+
+    private function businessDayStart(string $date): Carbon
+    {
+        return Carbon::parse($date, (string) config('app.business_timezone', 'Asia/Shanghai'))
+            ->startOfDay()
+            ->utc();
     }
 }

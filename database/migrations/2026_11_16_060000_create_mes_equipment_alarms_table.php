@@ -16,11 +16,13 @@ return new class extends Migration
             $table->string('code', 40)->unique()->comment('告警编号');
             $table->foreignId('equipment_id')->comment('设备 ID')->constrained('mes_equipments')->restrictOnDelete();
             $table->foreignId('equipment_data_id')->nullable()->comment('触发采样 ID')->constrained('mes_equipment_data')->nullOnDelete();
-            $table->string('metric', 16)->comment('指标：temperature/speed/pressure');
+            $table->string('metric', 16)->nullable()->comment('指标：temperature/speed/pressure，设备故障为空');
+            $table->string('alarm_code', 64)->nullable()->comment('告警代码：over_temperature/over_speed/over_pressure/device_fault');
+            $table->text('message')->nullable()->comment('告警内容');
             $table->string('level', 16)->comment('等级：info/warning/critical');
             $table->string('status', 16)->default('pending')->comment('状态：pending/confirmed/processing/closed');
-            $table->decimal('threshold', 10, 3)->comment('触发阈值');
-            $table->decimal('measured_value', 12, 3)->comment('实测值');
+            $table->decimal('threshold', 10, 3)->nullable()->comment('触发阈值，非指标告警为空');
+            $table->decimal('measured_value', 12, 3)->nullable()->comment('实测值，非指标告警为空');
             $table->foreignId('confirmed_by_id')->nullable()->comment('确认人 ID')->constrained('sys_users')->nullOnDelete();
             $table->timestamp('confirmed_at')->nullable()->comment('确认时间');
             $table->foreignId('handled_by_id')->nullable()->comment('处理人 ID')->constrained('sys_users')->nullOnDelete();
@@ -32,6 +34,7 @@ return new class extends Migration
             $table->timestamp('updated_at')->nullable()->comment('更新时间');
 
             $table->index(['equipment_id', 'status', 'triggered_at'], 'mes_equipment_alarms_device_status_time_index');
+            $table->index(['equipment_id', 'alarm_code', 'status'], 'mes_equipment_alarms_device_code_status_index');
             $table->index(['level', 'status'], 'mes_equipment_alarms_level_status_index');
             $table->index(['status', 'triggered_at'], 'mes_equipment_alarms_status_time_index');
         });

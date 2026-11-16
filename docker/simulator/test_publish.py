@@ -202,6 +202,24 @@ class SimulatorTest(unittest.TestCase):
         self.assertEqual(messages[0][1]["runtime_seconds"], 0)
         self.assertTrue(all("runtime_seconds" in payload for _, payload in messages))
 
+    def test_alarm_uses_the_highest_exceeded_level_across_metrics(self):
+        self.assertEqual(
+            simulator.detect_alarm(
+                {"temperature": 61.0, "speed": 1470, "pressure": 0.4},
+                simulator.RUNNING,
+            ),
+            ("over_speed", "critical"),
+        )
+
+    def test_alarm_falls_back_to_device_fault_when_no_metric_exceeds(self):
+        self.assertEqual(
+            simulator.detect_alarm(
+                {"temperature": 30.0, "speed": 0, "pressure": 0.0},
+                simulator.FAULT,
+            ),
+            ("device_fault", "critical"),
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

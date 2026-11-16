@@ -63,7 +63,35 @@ ALARM_METRICS = {
     "over_pressure": "pressure",
 }
 
+LEVEL_RANKS = {"info": 1, "warning": 2, "critical": 3}
+
 stop = False
+
+
+def detect_alarm(payload, current):
+    best = None
+
+    for alarm_code, metric in ALARM_METRICS.items():
+        measured = payload[metric]
+        level = next(
+            (
+                candidate
+                for candidate in ("critical", "warning", "info")
+                if measured > THRESHOLDS[alarm_code][candidate]
+            ),
+            None,
+        )
+
+        if level is not None and (best is None or LEVEL_RANKS[level] > LEVEL_RANKS[best[1]]):
+            best = (alarm_code, level)
+
+    if best is not None:
+        return best
+
+    if current == FAULT:
+        return "device_fault", "critical"
+
+    return None, None
 
 
 def handle_stop(signum, frame):
@@ -215,27 +243,7 @@ def simulate(client):
                 json.dumps(payload, ensure_ascii=False),
             )
 
-            alarm = None
-            level = None
-
-            for alarm_code, metric in ALARM_METRICS.items():
-                measured = payload[metric]
-                level = next(
-                    (
-                        candidate
-                        for candidate in ("critical", "warning", "info")
-                        if measured > THRESHOLDS[alarm_code][candidate]
-                    ),
-                    None,
-                )
-
-                if level is not None:
-                    alarm = alarm_code
-                    break
-
-            if alarm is None and current == FAULT:
-                alarm = "device_fault"
-                level = "critical"
+            alarm, level = detect_alarm(payload, current)
 
             if alarm:
                 publish(

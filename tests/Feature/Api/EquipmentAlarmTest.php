@@ -80,6 +80,30 @@ it('orders alarms by trigger time descending', function () {
         ->assertJsonPath('data.items.1.code', 'ALM-OLD');
 });
 
+it('filters trigger dates by the Shanghai business day', function () {
+    $actor = userWithPermissions(['equipment.alarms.index'], 'equipment_alarm_timezone_reader');
+    $equipment = Equipment::factory()->create();
+
+    foreach ([
+        'ALM-SHANGHAI-START' => '2026-11-15 16:00:00',
+        'ALM-SHANGHAI-END' => '2026-11-16 15:59:59',
+        'ALM-UTC-PREVIOUS' => '2026-11-15 15:59:59',
+        'ALM-UTC-NEXT' => '2026-11-16 16:00:00',
+    ] as $code => $triggeredAt) {
+        EquipmentAlarm::factory()->create([
+            'equipment_id' => $equipment->id,
+            'code' => $code,
+            'triggered_at' => $triggeredAt,
+        ]);
+    }
+
+    bearer($actor)->getJson('/api/v1/equipments/alarms?start_date=2026-11-16&end_date=2026-11-16')
+        ->assertOk()
+        ->assertJsonCount(2, 'data.items')
+        ->assertJsonPath('data.items.0.code', 'ALM-SHANGHAI-END')
+        ->assertJsonPath('data.items.1.code', 'ALM-SHANGHAI-START');
+});
+
 it('returns equipment options for the alarm filter', function () {
     $actor = userWithPermissions(['equipment.alarms.index'], 'equipment_alarm_options_reader');
     $equipment = Equipment::factory()->create([
@@ -93,6 +117,26 @@ it('returns equipment options for the alarm filter', function () {
         ->assertJsonPath('data.equipments.0.id', $equipment->id)
         ->assertJsonPath('data.equipments.0.code', 'EQ-SMT-01')
         ->assertJsonPath('data.equipments.0.status_label', '运行');
+});
+
+it('returns device fault alarms with their message and null metric fields', function () {
+    $actor = userWithPermissions(['equipment.alarms.index'], 'equipment_alarm_fault_reader');
+    EquipmentAlarm::factory()->create([
+        'metric' => null,
+        'alarm_code' => EquipmentAlarm::ALARM_DEVICE_FAULT,
+        'message' => '设备故障',
+        'threshold' => null,
+        'measured_value' => null,
+    ]);
+
+    bearer($actor)->getJson('/api/v1/equipments/alarms')
+        ->assertOk()
+        ->assertJsonPath('data.items.0.alarm_code', EquipmentAlarm::ALARM_DEVICE_FAULT)
+        ->assertJsonPath('data.items.0.message', '设备故障')
+        ->assertJsonPath('data.items.0.metric', null)
+        ->assertJsonPath('data.items.0.metric_label', '设备')
+        ->assertJsonPath('data.items.0.threshold', null)
+        ->assertJsonPath('data.items.0.measured_value', null);
 });
 
 it('confirms, processes and closes an alarm while recording the handler and note', function () {

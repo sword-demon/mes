@@ -110,6 +110,8 @@ class EquipmentSeeder extends Seeder
                 [
                     'equipment_id' => $equipment->id,
                     'metric' => $definition['metric'],
+                    'alarm_code' => EquipmentAlarm::alarmCodeForMetric($definition['metric']),
+                    'message' => EquipmentAlarm::messageForMetric($definition['metric']),
                     'level' => $definition['level'],
                     'status' => $definition['status'],
                     'threshold' => EquipmentAlarm::THRESHOLDS[$definition['metric']][$definition['level']],

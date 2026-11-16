@@ -6,6 +6,7 @@ import type { Root } from 'react-dom/client';
 import { afterEach, expect, it } from 'vitest';
 import EquipmentAlarmsPage from './index';
 import { http } from '@/api/client';
+import type { EquipmentAlarm } from '@/api/equipment';
 import { useAuthStore } from '@/stores/auth';
 import { currentUserFixture } from '@/test/fixtures';
 
@@ -24,8 +25,9 @@ globalThis.ResizeObserver ??= class {
 let root: Root;
 let client: QueryClient;
 const originalAdapter = http.defaults.adapter;
-let requests: { url?: string; method?: string }[] = [];
-const alarm = {
+let requests: { url?: string; method?: string; data?: unknown }[] = [];
+let currentAlarm: EquipmentAlarm;
+const alarm: EquipmentAlarm = {
     id: 1,
     code: 'ALM-DEMO-009',
     equipment_id: 1,
@@ -33,6 +35,8 @@ const alarm = {
     metric: 'speed',
     metric_label: '转速',
     metric_unit: 'rpm',
+    alarm_code: 'over_speed',
+    message: '转速超限',
     level: 'warning',
     level_label: '警告',
     status: 'pending',
@@ -58,18 +62,43 @@ const alarm = {
     updated_at: '2026-11-16T02:00:00Z',
 };
 
-async function render(permissions: string[]) {
+async function render(permissions: string[], overrides: Partial<EquipmentAlarm> = {}) {
     useAuthStore.setState({ token: 'token', user: currentUserFixture({ permissions }) });
+    currentAlarm = { ...alarm, ...overrides };
+    requests = [];
     const container = document.createElement('div');
     document.body.append(container);
     root = createRoot(container);
     client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     http.defaults.adapter = async (config) => {
-        requests.push({ url: config.url, method: config.method });
-        const confirmed = requests.some((request) => request.url === '/equipments/alarms/1/confirm');
-        const responseAlarm = confirmed
-            ? { ...alarm, status: 'confirmed', status_label: '已确认' }
-            : alarm;
+        requests.push({ url: config.url, method: config.method, data: config.data });
+        const body = typeof config.data === 'string' ? JSON.parse(config.data) : config.data;
+
+        if (config.url === '/equipments/alarms/1/confirm') {
+            currentAlarm = { ...currentAlarm, status: 'confirmed', status_label: '已确认' };
+        } else if (config.url === '/equipments/alarms/1/process') {
+            currentAlarm = {
+                ...currentAlarm,
+                status: 'processing',
+                status_label: '处理中',
+                handling_note: body?.handling_note,
+                handled_by: { id: 1, name: '测试员' },
+                handled_at: '2026-11-16T03:00:00Z',
+            };
+        } else if (config.url === '/equipments/alarms/1/close') {
+            currentAlarm = {
+                ...currentAlarm,
+                status: 'closed',
+                status_label: '已关闭',
+                handling_note: body?.handling_note ?? currentAlarm.handling_note,
+                handled_by: { id: 1, name: '测试员' },
+                handled_at: '2026-11-16T04:00:00Z',
+                closed_at: '2026-11-16T04:00:00Z',
+            };
+        }
+
+        const isAction = ['confirm', 'process', 'close']
+            .some((action) => config.url === `/equipments/alarms/1/${action}`);
 
         return {
             config,
@@ -78,12 +107,12 @@ async function render(permissions: string[]) {
             headers: {},
             data: {
                 code: 200,
-                data: config.url === '/equipments/alarms/1/confirm'
-                    ? responseAlarm
+                data: isAction
+                    ? currentAlarm
                     : config.url === '/equipments/alarms/options'
                         ? { equipments: [alarm.equipment] }
                         : {
-                            items: [responseAlarm],
+                            items: [currentAlarm],
                             meta: { current_page: 1, per_page: 15, total: 1, last_page: 1 },
                         },
             },
@@ -127,4 +156,74 @@ it('confirms a pending alarm through the protected API action', async () => {
 
     expect(requests.some((request) => request.url === '/equipments/alarms/1/confirm' && request.method === 'post')).toBe(true);
     expect(document.body.textContent).toContain('已确认');
+});
+
+it('renders device fault alarms through their message instead of metric values', async () => {
+    await render(['equipment.alarms.index'], {
+        metric: null,
+        metric_label: '设备',
+        metric_unit: '',
+        alarm_code: 'device_fault',
+        message: '设备故障',
+        threshold: null,
+        measured_value: null,
+    });
+
+    expect(document.body.textContent).toContain('设备故障');
+    expect(document.body.textContent).not.toContain('阈值 null');
+});
+
+it('processes a confirmed alarm with a required handling note', async () => {
+    await render(
+        ['equipment.alarms.index', 'button.equipment.alarms.process'],
+        { status: 'confirmed', status_label: '已确认' },
+    );
+    const actionButton = (label: string) => [...document.querySelectorAll('button')]
+        .find((button) => button.textContent?.trim() === label) as HTMLButtonElement | undefined;
+
+    await act(async () => {
+        actionButton('处理')?.click();
+        await new Promise((resolve) => setTimeout(resolve, 50));
+    });
+
+    const textarea = document.querySelector('textarea') as HTMLTextAreaElement;
+    const setValue = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')?.set;
+
+    await act(async () => {
+        setValue?.call(textarea, '已停机检查传动机构');
+        textarea.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    await act(async () => {
+        actionButton('提交处理')?.click();
+        await new Promise((resolve) => setTimeout(resolve, 100));
+    });
+
+    expect(requests.some((request) => request.url === '/equipments/alarms/1/process'
+        && request.method === 'post'
+        && String(request.data).includes('已停机检查传动机构'))).toBe(true);
+    expect(document.body.textContent).toContain('处理中');
+    expect(document.body.textContent).toContain('已停机检查传动机构');
+});
+
+it('closes a processing alarm and keeps its handling note', async () => {
+    await render(
+        ['equipment.alarms.index', 'button.equipment.alarms.close'],
+        { status: 'processing', status_label: '处理中', handling_note: '等待备件到货' },
+    );
+    const actionButton = (label: string) => [...document.querySelectorAll('button')]
+        .find((button) => button.textContent?.trim() === label) as HTMLButtonElement | undefined;
+
+    await act(async () => {
+        actionButton('关闭')?.click();
+        await new Promise((resolve) => setTimeout(resolve, 50));
+    });
+    await act(async () => {
+        actionButton('确认关闭')?.click();
+        await new Promise((resolve) => setTimeout(resolve, 100));
+    });
+
+    expect(requests.some((request) => request.url === '/equipments/alarms/1/close'
+        && request.method === 'post')).toBe(true);
+    expect(document.body.textContent).toContain('已关闭');
+    expect(document.body.textContent).toContain('等待备件到货');
 });

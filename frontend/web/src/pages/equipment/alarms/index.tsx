@@ -227,7 +227,9 @@ export default function EquipmentAlarmsPage() {
                     {
                         title: '指标',
                         width: 170,
-                        render: (_, alarm) => `${alarm.metric_label} ${alarm.measured_value} / 阈值 ${alarm.threshold} ${alarm.metric_unit}`,
+                        render: (_, alarm) => alarm.metric === null
+                            ? (alarm.message ?? '—')
+                            : `${alarm.metric_label} ${alarm.measured_value} / 阈值 ${alarm.threshold} ${alarm.metric_unit}`,
                     },
                     {
                         title: '等级',

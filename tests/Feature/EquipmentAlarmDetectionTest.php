@@ -38,6 +38,8 @@ it('creates a graded alert with the equipment, metric, threshold and measured va
     expect($alarm->equipment_id)->toBe($equipment->id)
         ->and($alarm->equipment_data_id)->not->toBeNull()
         ->and($alarm->metric)->toBe($metric)
+        ->and($alarm->alarm_code)->toBe(EquipmentAlarm::alarmCodeForMetric($metric))
+        ->and($alarm->message)->toBe(EquipmentAlarm::messageForMetric($metric))
         ->and($alarm->level)->toBe($level)
         ->and($alarm->status)->toBe(EquipmentAlarm::PENDING)
         ->and($alarm->threshold)->toBe($threshold)
@@ -121,4 +123,31 @@ it('escalates an open alert when the same metric reaches a higher level without 
     consumeEquipmentData(['timestamp' => '2026-11-16T04:00:02Z', 'temperature' => 65]);
 
     expect(EquipmentAlarm::query()->sole()->level)->toBe(EquipmentAlarm::LEVEL_CRITICAL);
+});
+
+it('creates a device fault alert from the alarm topic', function () {
+    Equipment::factory()->create(['code' => 'EQ-CNC-01']);
+
+    app(EquipmentMessageService::class)->consume('mes/F001/EQ-CNC-01/alarm', json_encode([
+        'device_code' => 'EQ-CNC-01',
+        'timestamp' => '2026-11-16T04:00:00Z',
+        'status' => Equipment::FAULT,
+        'temperature' => 30,
+        'speed' => 0,
+        'pressure' => 0,
+        'output' => 120,
+        'alarm_code' => 'device_fault',
+        'message' => '设备故障',
+        'level' => 'critical',
+    ], JSON_THROW_ON_ERROR));
+
+    $alarm = EquipmentAlarm::query()->sole();
+
+    expect($alarm->alarm_code)->toBe('device_fault')
+        ->and($alarm->message)->toBe('设备故障')
+        ->and($alarm->level)->toBe(EquipmentAlarm::LEVEL_CRITICAL)
+        ->and($alarm->metric)->toBeNull()
+        ->and($alarm->threshold)->toBeNull()
+        ->and($alarm->measured_value)->toBeNull()
+        ->and($alarm->status)->toBe(EquipmentAlarm::PENDING);
 });

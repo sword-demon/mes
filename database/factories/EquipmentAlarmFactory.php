@@ -20,6 +20,8 @@ class EquipmentAlarmFactory extends Factory
             'code' => 'ALM'.fake()->unique()->numerify('######'),
             'equipment_id' => Equipment::factory(),
             'metric' => 'temperature',
+            'alarm_code' => 'over_temperature',
+            'message' => '温度超限',
             'level' => EquipmentAlarm::LEVEL_WARNING,
             'status' => EquipmentAlarm::PENDING,
             'threshold' => 64,

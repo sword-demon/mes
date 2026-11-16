@@ -20,6 +20,8 @@ class EquipmentAlarmResource extends JsonResource
             'metric' => $this->metric,
             'metric_label' => $this->metricLabel(),
             'metric_unit' => $this->metricUnit(),
+            'alarm_code' => $this->alarm_code,
+            'message' => $this->message,
             'level' => $this->level,
             'level_label' => $this->levelLabel(),
             'status' => $this->status,
