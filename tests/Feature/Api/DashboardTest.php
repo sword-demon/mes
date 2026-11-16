@@ -160,9 +160,16 @@ it('aggregates the last seven production days on the Shanghai business calendar'
 });
 
 it('compares valid production quantities by production line', function () {
+    $this->travelTo(Carbon::parse('2026-11-16 10:00:00', 'Asia/Shanghai'));
+
     $lineA = ProductionLine::factory()->create(['code' => 'PL-A', 'name' => 'A 线']);
     $lineB = ProductionLine::factory()->create(['code' => 'PL-B', 'name' => 'B 线']);
     ProductionLine::factory()->create(['code' => 'PL-C', 'name' => 'C 线']);
+    $disabledLine = ProductionLine::factory()->create([
+        'code' => 'PL-D',
+        'name' => 'D 线',
+        'status' => false,
+    ]);
 
     [, $taskA, $operationA] = dashboardProductionReferences(line: $lineA);
     $orderB = ProductionOrder::factory()->create([
@@ -170,12 +177,14 @@ it('compares valid production quantities by production line', function () {
         'status' => ProductionOrder::IN_PROGRESS,
     ]);
     [, $taskB, $operationB] = dashboardProductionReferences($orderB);
+    [, $taskD, $operationD] = dashboardProductionReferences(line: $disabledLine);
 
     foreach ([
         [$taskA, $operationA, 3, ProductionReport::NORMAL],
         [$taskA, $operationA, 2, ProductionReport::NORMAL],
         [$taskA, $operationA, 10, ProductionReport::REVERSED],
         [$taskB, $operationB, 4, ProductionReport::NORMAL],
+        [$taskD, $operationD, 9, ProductionReport::NORMAL],
     ] as [$task, $operation, $quantity, $type]) {
         ProductionReport::factory()->create([
             'production_task_id' => $task->id,
@@ -186,6 +195,14 @@ it('compares valid production quantities by production line', function () {
             'type' => $type,
         ]);
     }
+    ProductionReport::factory()->create([
+        'production_task_id' => $taskA->id,
+        'route_operation_id' => $operationA->id,
+        'quantity' => 100,
+        'qualified_quantity' => 100,
+        'defective_quantity' => 0,
+        'reported_at' => '2026-11-08 02:00:00',
+    ]);
 
     $actor = userWithPermissions(['dashboard.trend']);
 
@@ -201,6 +218,91 @@ it('compares valid production quantities by production line', function () {
         ->and($items[1]['quantity'])->toBe('4.000')
         ->and($items[2]['code'])->toBe('PL-C')
         ->and($items[2]['quantity'])->toBe('0.000');
+});
+
+it('excludes cancelled order reports and defects from every dashboard statistic', function () {
+    $this->travelTo(Carbon::parse('2026-11-16 10:00:00', 'Asia/Shanghai'));
+
+    $line = ProductionLine::factory()->create();
+    $validOrder = ProductionOrder::factory()->create([
+        'production_line_id' => $line->id,
+        'planned_quantity' => 10,
+        'status' => ProductionOrder::IN_PROGRESS,
+        'created_at' => '2026-11-16 01:00:00',
+    ]);
+    $cancelledOrder = ProductionOrder::factory()->create([
+        'production_line_id' => $line->id,
+        'planned_quantity' => 100,
+        'status' => ProductionOrder::CANCELLED,
+        'created_at' => '2026-11-16 02:00:00',
+    ]);
+
+    [, $validTask, $validOperation] = dashboardProductionReferences($validOrder);
+    [, $cancelledTask, $cancelledOperation] = dashboardProductionReferences($cancelledOrder);
+
+    $validReport = ProductionReport::factory()->create([
+        'production_task_id' => $validTask->id,
+        'route_operation_id' => $validOperation->id,
+        'code' => 'PR-VALID-CANCELLED-SCOPE',
+        'quantity' => 5,
+        'qualified_quantity' => 4,
+        'defective_quantity' => 1,
+        'reported_at' => '2026-11-16 01:00:00',
+    ]);
+    ProductionReport::factory()->create([
+        'production_task_id' => $cancelledTask->id,
+        'route_operation_id' => $cancelledOperation->id,
+        'code' => 'PR-CANCELLED-SCOPE',
+        'quantity' => 50,
+        'qualified_quantity' => 40,
+        'defective_quantity' => 10,
+        'reported_at' => '2026-11-16 01:00:00',
+    ]);
+
+    $defectCode = DefectCode::factory()->create(['code' => 'DEF-SCOPE', 'name' => '口径缺陷']);
+    DefectiveProduct::factory()->create([
+        'production_order_id' => $validOrder->id,
+        'route_operation_id' => $validOperation->id,
+        'defect_code_id' => $defectCode->id,
+        'quantity' => 2,
+    ]);
+    DefectiveProduct::factory()->create([
+        'production_order_id' => $cancelledOrder->id,
+        'route_operation_id' => $cancelledOperation->id,
+        'defect_code_id' => $defectCode->id,
+        'quantity' => 9,
+    ]);
+
+    $actor = userWithPermissions([
+        'dashboard.overview',
+        'dashboard.trend',
+        'dashboard.quality',
+    ]);
+
+    bearer($actor)->getJson('/api/v1/dashboard/today')
+        ->assertOk()
+        ->assertJsonPath('data.produced_quantity', '5.000')
+        ->assertJsonPath('data.qualified_quantity', '4.000')
+        ->assertJsonPath('data.defective_quantity', '1.000');
+
+    bearer($actor)->getJson('/api/v1/dashboard/production-trend')
+        ->assertOk()
+        ->assertJsonPath('data.items.6.quantity', '5.000');
+
+    bearer($actor)->getJson('/api/v1/dashboard/production-lines')
+        ->assertOk()
+        ->assertJsonPath('data.items.0.quantity', '5.000');
+
+    bearer($actor)->getJson('/api/v1/dashboard/quality')
+        ->assertOk()
+        ->assertJsonPath('data.qualified_quantity', '4.000')
+        ->assertJsonPath('data.defective_quantity', '1.000')
+        ->assertJsonPath('data.defect_reasons.0.quantity', '2.000');
+
+    bearer($actor)->getJson('/api/v1/dashboard/latest-reports')
+        ->assertOk()
+        ->assertJsonCount(1, 'data.items')
+        ->assertJsonPath('data.items.0.id', $validReport->id);
 });
 
 it('returns the qualified rate and defect reason distribution from valid reports', function () {
@@ -377,29 +479,29 @@ it('returns the latest valid orders, reports, exceptions and alarms', function (
 
     $actor = userWithPermissions(['dashboard.overview']);
 
-    bearer($actor)->getJson('/api/v1/dashboard/latest-orders?limit=1')
+    bearer($actor)->getJson('/api/v1/dashboard/latest-orders')
         ->assertOk()
-        ->assertJsonCount(1, 'data.items')
+        ->assertJsonCount(2, 'data.items')
         ->assertJsonPath('data.items.0.id', $latestOrder->id)
         ->assertJsonPath('data.items.0.code', 'PO-LATEST-NEW')
         ->assertJsonPath('data.items.0.status_label', '生产中');
 
-    bearer($actor)->getJson('/api/v1/dashboard/latest-reports?limit=1')
+    bearer($actor)->getJson('/api/v1/dashboard/latest-reports')
         ->assertOk()
         ->assertJsonCount(1, 'data.items')
         ->assertJsonPath('data.items.0.id', $latestReport->id)
         ->assertJsonPath('data.items.0.code', 'PR-LATEST-VALID')
         ->assertJsonPath('data.items.0.production_task.id', $task->id);
 
-    bearer($actor)->getJson('/api/v1/dashboard/latest-exceptions?limit=1')
+    bearer($actor)->getJson('/api/v1/dashboard/latest-exceptions')
         ->assertOk()
-        ->assertJsonCount(1, 'data.items')
+        ->assertJsonCount(2, 'data.items')
         ->assertJsonPath('data.items.0.id', $latestException->id)
         ->assertJsonPath('data.items.0.code', 'EXC-LATEST-NEW');
 
-    bearer($actor)->getJson('/api/v1/dashboard/latest-alarms?limit=1')
+    bearer($actor)->getJson('/api/v1/dashboard/latest-alarms')
         ->assertOk()
-        ->assertJsonCount(1, 'data.items')
+        ->assertJsonCount(2, 'data.items')
         ->assertJsonPath('data.items.0.id', $latestAlarm->id)
         ->assertJsonPath('data.items.0.code', 'ALM-LATEST-NEW')
         ->assertJsonPath('data.items.0.equipment.code', $equipment->code);
@@ -442,11 +544,40 @@ it('rejects actors without the matching dashboard permissions', function () {
     }
 });
 
-it('validates the trend range and latest list limit', function () {
-    $actor = userWithPermissions(['dashboard.trend', 'dashboard.overview']);
+it('enforces each dashboard permission independently', function () {
+    $endpoints = [
+        '/today',
+        '/production-trend',
+        '/production-lines',
+        '/quality',
+        '/equipment-status',
+        '/latest-orders',
+        '/latest-reports',
+        '/latest-exceptions',
+        '/latest-alarms',
+    ];
+    $cases = [
+        'dashboard.overview' => [
+            '/today',
+            '/latest-orders',
+            '/latest-reports',
+            '/latest-exceptions',
+            '/latest-alarms',
+        ],
+        'dashboard.trend' => ['/production-trend', '/production-lines'],
+        'dashboard.quality' => ['/quality'],
+        'dashboard.equipment' => ['/equipment-status'],
+    ];
 
-    bearer($actor)->getJson('/api/v1/dashboard/production-trend?days=0')->assertUnprocessable();
-    bearer($actor)->getJson('/api/v1/dashboard/production-trend?days=32')->assertUnprocessable();
-    bearer($actor)->getJson('/api/v1/dashboard/latest-orders?limit=0')->assertUnprocessable();
-    bearer($actor)->getJson('/api/v1/dashboard/latest-orders?limit=21')->assertUnprocessable();
+    foreach ($cases as $permission => $allowed) {
+        $actor = userWithPermissions([$permission], str_replace('.', '_', $permission));
+
+        foreach ($endpoints as $endpoint) {
+            $response = bearer($actor)->getJson("/api/v1/dashboard{$endpoint}");
+
+            in_array($endpoint, $allowed, true)
+                ? $response->assertOk()
+                : $response->assertForbidden();
+        }
+    }
 });

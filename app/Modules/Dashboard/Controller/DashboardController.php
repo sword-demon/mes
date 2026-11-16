@@ -10,7 +10,6 @@ use App\Modules\Production\Resource\ProductionExceptionResource;
 use App\Modules\Production\Resource\ProductionOrderResource;
 use App\Modules\Production\Resource\ProductionReportResource;
 use Illuminate\Http\JsonResponse;
-use Illuminate\Http\Request;
 
 class DashboardController extends Controller
 {
@@ -21,15 +20,9 @@ class DashboardController extends Controller
         return ApiResponse::success($this->dashboard->today());
     }
 
-    public function productionTrend(Request $request): JsonResponse
+    public function productionTrend(): JsonResponse
     {
-        $data = $request->validate([
-            'days' => ['sometimes', 'integer', 'min:1', 'max:31'],
-        ]);
-
-        return ApiResponse::success(
-            $this->dashboard->productionTrend((int) ($data['days'] ?? 7)),
-        );
+        return ApiResponse::success($this->dashboard->productionTrend());
     }
 
     public function productionLines(): JsonResponse
@@ -47,48 +40,39 @@ class DashboardController extends Controller
         return ApiResponse::success($this->dashboard->equipmentStatus());
     }
 
-    public function latestOrders(Request $request): JsonResponse
+    public function latestOrders(): JsonResponse
     {
         return ApiResponse::success([
             'items' => ProductionOrderResource::collection(
-                $this->dashboard->latestOrders($this->latestLimit($request)),
+                $this->dashboard->latestOrders(),
             )->resolve(),
         ]);
     }
 
-    public function latestReports(Request $request): JsonResponse
+    public function latestReports(): JsonResponse
     {
         return ApiResponse::success([
             'items' => ProductionReportResource::collection(
-                $this->dashboard->latestReports($this->latestLimit($request)),
+                $this->dashboard->latestReports(),
             )->resolve(),
         ]);
     }
 
-    public function latestExceptions(Request $request): JsonResponse
+    public function latestExceptions(): JsonResponse
     {
         return ApiResponse::success([
             'items' => ProductionExceptionResource::collection(
-                $this->dashboard->latestExceptions($this->latestLimit($request)),
+                $this->dashboard->latestExceptions(),
             )->resolve(),
         ]);
     }
 
-    public function latestAlarms(Request $request): JsonResponse
+    public function latestAlarms(): JsonResponse
     {
         return ApiResponse::success([
             'items' => EquipmentAlarmResource::collection(
-                $this->dashboard->latestAlarms($this->latestLimit($request)),
+                $this->dashboard->latestAlarms(),
             )->resolve(),
         ]);
-    }
-
-    private function latestLimit(Request $request): int
-    {
-        $data = $request->validate([
-            'limit' => ['sometimes', 'integer', 'min:1', 'max:20'],
-        ]);
-
-        return (int) ($data['limit'] ?? 5);
     }
 }

@@ -85,7 +85,11 @@ class ProductionReport extends Model
      */
     public function scopeEffective(Builder $query): void
     {
-        $query->where($query->qualifyColumn('type'), '!=', self::REVERSED);
+        $query->where($query->qualifyColumn('type'), '!=', self::REVERSED)
+            ->whereHas(
+                'productionTask.productionOrder',
+                fn (Builder $order) => $order->where('status', '!=', ProductionOrder::CANCELLED),
+            );
     }
 
     public function typeLabel(): string

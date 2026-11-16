@@ -10,11 +10,16 @@ use App\Modules\Production\Model\ProductionException;
 use App\Modules\Production\Model\ProductionOrder;
 use App\Modules\Production\Model\ProductionReport;
 use App\Modules\Quality\Model\DefectiveProduct;
+use Carbon\CarbonImmutable;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection as EloquentCollection;
-use Illuminate\Support\Carbon;
 
 class DashboardService
 {
+    private const int TREND_DAYS = 7;
+
+    private const int LATEST_LIMIT = 5;
+
     public function __construct(private readonly EquipmentService $equipments) {}
 
     /**
@@ -22,8 +27,8 @@ class DashboardService
      */
     public function today(): array
     {
-        $start = Carbon::now($this->businessTimezone())->startOfDay()->utc();
-        $end = $start->copy()->addDay();
+        $start = now($this->businessTimezone())->startOfDay()->utc();
+        $end = $start->addDay();
 
         $orders = ProductionOrder::query()
             ->where('created_at', '>=', $start)
@@ -44,7 +49,7 @@ class DashboardService
             ->first();
 
         return [
-            'date' => $start->copy()->setTimezone($this->businessTimezone())->toDateString(),
+            'date' => $start->setTimezone($this->businessTimezone())->toDateString(),
             'order_count' => (int) $orders->getAttribute('order_count'),
             'planned_quantity' => $this->decimal($orders->getAttribute('planned_quantity')),
             'produced_quantity' => $this->decimal($reports->getAttribute('produced_quantity')),
@@ -60,18 +65,17 @@ class DashboardService
     /**
      * @return array<string, mixed>
      */
-    public function productionTrend(int $days): array
+    public function productionTrend(): array
     {
-        $end = Carbon::now($this->businessTimezone())->startOfDay();
-        $start = $end->copy()->subDays($days - 1);
+        [$start, $end] = $this->recentDaysRange();
 
         $totals = [];
 
-        // shortcut: a bounded 31-day range is aggregated in PHP; move to a SQL rollup if daily volume grows.
+        // shortcut: a bounded 7-day range is aggregated in PHP; move to a SQL rollup if daily volume grows.
         ProductionReport::query()
             ->effective()
-            ->where('reported_at', '>=', $start->copy()->utc())
-            ->where('reported_at', '<', $end->copy()->addDay()->utc())
+            ->where('reported_at', '>=', $start->utc())
+            ->where('reported_at', '<', $end->addDay()->utc())
             ->get(['reported_at', 'quantity'])
             ->each(function (ProductionReport $report) use (&$totals): void {
                 $date = $report->reported_at->copy()->setTimezone($this->businessTimezone())->toDateString();
@@ -80,12 +84,12 @@ class DashboardService
 
         $items = [];
 
-        for ($date = $start->copy(); $date->lte($end); $date->addDay()) {
+        for ($date = $start; $date->lte($end); $date = $date->addDay()) {
             $key = $date->toDateString();
             $items[] = ['date' => $key, 'quantity' => $this->decimal($totals[$key] ?? 0)];
         }
 
-        return ['days' => $days, 'items' => $items];
+        return ['days' => self::TREND_DAYS, 'items' => $items];
     }
 
     /**
@@ -93,10 +97,14 @@ class DashboardService
      */
     public function productionLines(): array
     {
+        [$start, $end] = $this->recentDaysRange();
+
         $totals = ProductionReport::query()
             ->join('mes_production_tasks as tasks', 'tasks.id', '=', 'mes_production_reports.production_task_id')
             ->join('mes_production_orders as orders', 'orders.id', '=', 'tasks.production_order_id')
             ->effective()
+            ->where('mes_production_reports.reported_at', '>=', $start->utc())
+            ->where('mes_production_reports.reported_at', '<', $end->addDay()->utc())
             ->selectRaw(
                 'COALESCE(tasks.production_line_id, orders.production_line_id) as production_line_id, '
                 .'COALESCE(SUM(mes_production_reports.quantity), 0) as quantity',
@@ -106,6 +114,7 @@ class DashboardService
 
         return [
             'items' => ProductionLine::query()
+                ->where('status', true)
                 ->orderBy('code')
                 ->get(['id', 'code', 'name'])
                 ->map(fn (ProductionLine $line): array => [
@@ -136,7 +145,12 @@ class DashboardService
         $defective = (float) $reports->getAttribute('defective_quantity');
         $total = $qualified + $defective;
 
+        // Quality registrations are a distribution on their own; they do not reconcile report quantities.
         $defectReasons = DefectiveProduct::query()
+            ->whereHas(
+                'productionOrder',
+                fn (Builder $order) => $order->where('status', '!=', ProductionOrder::CANCELLED),
+            )
             ->join('mes_defect_codes', 'mes_defect_codes.id', '=', 'mes_defective_products.defect_code_id')
             ->selectRaw(
                 'mes_defect_codes.id as defect_code_id, '
@@ -189,21 +203,21 @@ class DashboardService
     /**
      * @return EloquentCollection<int, ProductionOrder>
      */
-    public function latestOrders(int $limit): EloquentCollection
+    public function latestOrders(): EloquentCollection
     {
         return ProductionOrder::query()
             ->with(['product:id,code,name', 'productionLine:id,code,name'])
             ->where('status', '!=', ProductionOrder::CANCELLED)
             ->orderByDesc('created_at')
             ->orderByDesc('id')
-            ->limit($limit)
+            ->limit(self::LATEST_LIMIT)
             ->get();
     }
 
     /**
      * @return EloquentCollection<int, ProductionReport>
      */
-    public function latestReports(int $limit): EloquentCollection
+    public function latestReports(): EloquentCollection
     {
         return ProductionReport::query()
             ->effective()
@@ -215,34 +229,44 @@ class DashboardService
             ])
             ->orderByDesc('reported_at')
             ->orderByDesc('id')
-            ->limit($limit)
+            ->limit(self::LATEST_LIMIT)
             ->get();
     }
 
     /**
      * @return EloquentCollection<int, ProductionException>
      */
-    public function latestExceptions(int $limit): EloquentCollection
+    public function latestExceptions(): EloquentCollection
     {
         return ProductionException::query()
             ->with(['productionOrder:id,code,product_id', 'productionOrder.product:id,code,name'])
             ->orderByDesc('reported_at')
             ->orderByDesc('id')
-            ->limit($limit)
+            ->limit(self::LATEST_LIMIT)
             ->get();
     }
 
     /**
      * @return EloquentCollection<int, EquipmentAlarm>
      */
-    public function latestAlarms(int $limit): EloquentCollection
+    public function latestAlarms(): EloquentCollection
     {
         return EquipmentAlarm::query()
             ->with('equipment:id,code,name,type,status')
             ->orderByDesc('triggered_at')
             ->orderByDesc('id')
-            ->limit($limit)
+            ->limit(self::LATEST_LIMIT)
             ->get();
+    }
+
+    /**
+     * @return array{0: CarbonImmutable, 1: CarbonImmutable}
+     */
+    private function recentDaysRange(): array
+    {
+        $end = now($this->businessTimezone())->startOfDay();
+
+        return [$end->subDays(self::TREND_DAYS - 1), $end];
     }
 
     private function businessTimezone(): string
