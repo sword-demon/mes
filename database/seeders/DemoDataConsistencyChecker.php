@@ -37,15 +37,16 @@ class DemoDataConsistencyChecker
 
     private function assertOrderProducedQuantities(): void
     {
-        ProductionOrder::query()->each(function (ProductionOrder $order): void {
-            $reported = (int) ProductionReport::query()
-                ->whereHas('productionTask', fn ($query) => $query->where('production_order_id', $order->id))
-                ->where('type', '<>', ProductionReport::REVERSED)
-                ->get()
-                ->sum(fn (ProductionReport $report): int => Quantity::toMilli($report->quantity));
+        $reportedByOrder = ProductionReport::query()
+            ->join('mes_production_tasks as tasks', 'tasks.id', '=', 'mes_production_reports.production_task_id')
+            ->where('mes_production_reports.type', '<>', ProductionReport::REVERSED)
+            ->selectRaw('tasks.production_order_id, SUM(mes_production_reports.quantity) as reported_quantity')
+            ->groupBy('tasks.production_order_id')
+            ->pluck('reported_quantity', 'production_order_id');
 
+        ProductionOrder::query()->each(function (ProductionOrder $order) use ($reportedByOrder): void {
             $this->ensure(
-                $reported === Quantity::toMilli($order->produced_quantity),
+                Quantity::toMilli($reportedByOrder[$order->id] ?? 0) === Quantity::toMilli($order->produced_quantity),
                 "订单 {$order->code} 的已生产数不等于其下有效报工之和",
             );
         });
@@ -105,26 +106,27 @@ class DemoDataConsistencyChecker
 
     private function assertEquipmentOutput(): void
     {
-        $restricted = Equipment::query()
-            ->whereIn('status', [Equipment::REPAIR, Equipment::OFFLINE])
-            ->get();
+        $samples = EquipmentData::query()
+            ->with('equipment:id,code')
+            ->where('message_type', EquipmentData::TYPE_DATA)
+            ->orderBy('equipment_id')
+            ->orderBy('recorded_at')
+            ->get(['equipment_id', 'recorded_at', 'status', 'output']);
+        $previousOutput = [];
 
-        foreach ($restricted as $equipment) {
-            $samples = EquipmentData::query()
-                ->where('equipment_id', $equipment->id)
-                ->where('message_type', EquipmentData::TYPE_DATA)
-                ->orderBy('recorded_at')
-                ->get(['recorded_at', 'output']);
+        foreach ($samples as $sample) {
+            $previous = $previousOutput[$sample->equipment_id] ?? null;
 
-            $previous = null;
+            if ($previous !== null && in_array($sample->status, [Equipment::REPAIR, Equipment::OFFLINE], true)) {
+                $equipmentCode = $sample->equipment->code;
 
-            foreach ($samples as $sample) {
                 $this->ensure(
-                    $previous === null || (int) $sample->output <= $previous,
-                    "维修/离线设备 {$equipment->code} 存在产量增长数据",
+                    (int) $sample->output <= $previous,
+                    "设备 {$equipmentCode} 在维修/离线状态下存在产量增长数据",
                 );
-                $previous = (int) $sample->output;
             }
+
+            $previousOutput[$sample->equipment_id] = (int) $sample->output;
         }
     }
 

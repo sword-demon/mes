@@ -17,12 +17,14 @@ class DatabaseSeeder extends Seeder
         $this->call([
             SystemSeeder::class,
             OrganizationSeeder::class,
-            EquipmentSeeder::class,
+            // Product and production depend on materials, so material data runs first.
             MaterialSeeder::class,
             ProductSeeder::class,
             ProcessSeeder::class,
             ProductionSeeder::class,
             QualitySeeder::class,
+            EquipmentSeeder::class,
+            TraceabilitySeeder::class,
         ]);
 
         (new DemoDataConsistencyChecker)->assertConsistent();

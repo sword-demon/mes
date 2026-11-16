@@ -142,6 +142,7 @@ class QualitySeeder extends Seeder
      */
     private function seedInspections(): void
     {
+        // OQC records exist once an order has been released, unlike reports.
         $orders = ProductionOrder::query()
             ->whereNotIn('status', [
                 ProductionOrder::DRAFT,

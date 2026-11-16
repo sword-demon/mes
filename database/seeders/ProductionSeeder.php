@@ -18,6 +18,7 @@ use App\Modules\Production\Model\ProductionReport;
 use App\Modules\Production\Model\ProductionTask;
 use App\Modules\Production\Model\ProductSn;
 use App\Modules\Production\Service\ProcessRecordService;
+use Carbon\CarbonImmutable;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
@@ -25,6 +26,8 @@ use RuntimeException;
 
 class ProductionSeeder extends Seeder
 {
+    public function __construct(private readonly ProcessRecordService $processRecords) {}
+
     /**
      * Twenty orders cover all nine statuses; the repeated statuses give the
      * dashboard enough live work to show.
@@ -52,7 +55,7 @@ class ProductionSeeder extends Seeder
         ProductionOrder::RELEASED,
     ];
 
-    private const REPORTABLE_STATUSES = [
+    private const ORDERS_WITH_REPORTS = [
         ProductionOrder::IN_PROGRESS,
         ProductionOrder::PAUSED,
         ProductionOrder::COMPLETED,
@@ -95,7 +98,7 @@ class ProductionSeeder extends Seeder
                 for ($taskNumber = 1; $taskNumber <= $taskCount; $taskNumber++) {
                     $task = $this->seedTask($order, $status, $taskNumber, $route, $line, $team, $workers);
                     $this->seedDispatches($task, $operations, $team, $workers);
-                    app(ProcessRecordService::class)->createForTask($task);
+                    $this->processRecords->createForTask($task);
                 }
             }
 
@@ -138,7 +141,7 @@ class ProductionSeeder extends Seeder
         );
 
         $createdAt = $index >= 16
-            ? now()->subMinutes(($index - 16 + 1) * 10)
+            ? $this->earlierToday(($index - 16 + 1) * 10)
             : now()->subDays($index + 1)->subHours($index % 8);
 
         $order->forceFill(['created_at' => $createdAt, 'updated_at' => $createdAt])->save();
@@ -238,7 +241,7 @@ class ProductionSeeder extends Seeder
         $tasks = ProductionTask::query()
             ->whereHas(
                 'productionOrder',
-                fn ($query) => $query->whereIn('status', self::REPORTABLE_STATUSES),
+                fn ($query) => $query->whereIn('status', self::ORDERS_WITH_REPORTS),
             )
             ->orderBy('id')
             ->limit(count($statuses))
@@ -304,7 +307,7 @@ class ProductionSeeder extends Seeder
         $tasks = ProductionTask::query()
             ->whereHas(
                 'productionOrder',
-                fn ($query) => $query->whereIn('status', self::REPORTABLE_STATUSES),
+                fn ($query) => $query->whereIn('status', self::ORDERS_WITH_REPORTS),
             )
             ->orderBy('id')
             ->get();
@@ -322,7 +325,7 @@ class ProductionSeeder extends Seeder
                     default => ProductionReport::NORMAL,
                 };
                 $reportedAt = $taskIndex < 5
-                    ? now()->subMinutes(($taskIndex * 5 + $reportIndex) * 3)
+                    ? $this->earlierToday(($taskIndex * 5 + $reportIndex) * 3)
                     : now()->subDays($taskIndex % 6 + 1)->subHours($reportIndex * 2)->subMinutes($taskIndex);
                 $employee = $workers->get($employeeKeys[$taskIndex % count($employeeKeys)]);
 
@@ -432,5 +435,18 @@ class ProductionSeeder extends Seeder
                 );
             }
         }
+    }
+
+    /**
+     * Keeps "today" demo rows on today's date even when seeding just after
+     * midnight, without ever placing them in the future.
+     */
+    private function earlierToday(int $minutesAgo): CarbonImmutable
+    {
+        $now = now((string) config('app.business_timezone', 'Asia/Shanghai'));
+        $startOfDay = $now->startOfDay();
+        $elapsedMinutes = (int) $startOfDay->diffInMinutes($now);
+
+        return $startOfDay->addMinutes(max(0, $elapsedMinutes - $minutesAgo))->utc();
     }
 }
