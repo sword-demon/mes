@@ -4,6 +4,7 @@
 /frontend/*/node_modules
 /frontend/*/dist
 /frontend/*/.vitest
+/frontend/*/coverage
 /storage/*.key
 /storage/pail
 /vendor
@@ -20,6 +21,8 @@ Homestead.yaml
 npm-debug.log
 pnpm-debug.log*
 yarn-error.log
+__pycache__/
+*.py[cod]
 /auth.json
 *.tsbuildinfo
 .DS_Store
