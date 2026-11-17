@@ -96,7 +96,8 @@ test('production compose refuses to start without required secrets', function ()
     $process->run();
 
     expect($process->isSuccessful())->toBeFalse()
-        ->and($process->getErrorOutput().$process->getOutput())->toContain('DB_PASSWORD');
+        ->and($process->getErrorOutput().$process->getOutput())
+        ->toMatch('/DB_PASSWORD|MYSQL_ROOT_PASSWORD|EMQX_DASHBOARD_PASSWORD/');
 });
 
 test('the production nginx template serves the SPA and forwards the API to php-fpm', function () {
