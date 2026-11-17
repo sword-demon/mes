@@ -46,10 +46,10 @@ use App\Modules\Traceability\Controller\ForwardTraceController;
 use Illuminate\Support\Facades\Route;
 
 Route::post('/auth/tokens', [AccessTokenController::class, 'store'])
-    ->middleware('throttle:login')
+    ->middleware(['throttle:login', 'throttle:login-ip'])
     ->name('api.auth.tokens.store');
 
-Route::middleware(['auth:sanctum', 'active'])->group(function (): void {
+Route::middleware(['auth:sanctum', 'active', 'throttle:api'])->group(function (): void {
     Route::prefix('dashboard')->name('api.dashboard.')->group(function (): void {
         Route::get('/today', [DashboardController::class, 'today'])
             ->middleware('permission:dashboard.overview')->name('today');

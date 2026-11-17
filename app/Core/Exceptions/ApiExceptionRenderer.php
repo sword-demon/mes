@@ -5,6 +5,7 @@ namespace App\Core\Exceptions;
 use App\Http\Responses\ApiResponse;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Auth\AuthenticationException;
+use Illuminate\Http\Exceptions\ThrottleRequestsException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Validation\ValidationException;
 use Symfony\Component\HttpFoundation\Response;
@@ -34,6 +35,7 @@ final class ApiExceptionRenderer
         $status = $e instanceof HttpExceptionInterface ? $e->getStatusCode() : 500;
 
         $message = match (true) {
+            $e instanceof ThrottleRequestsException => '请求过于频繁，请稍后再试',
             $e instanceof HttpExceptionInterface => $e->getMessage() ?: (Response::$statusTexts[$status] ?? 'Error'),
             config('app.debug') => $e->getMessage(),
             default => Response::$statusTexts[500],

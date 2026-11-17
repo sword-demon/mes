@@ -44,7 +44,57 @@ test('throttled api requests keep the envelope', function () {
         ->assertHeader('X-RateLimit-Limit', '5')
         ->assertHeader('X-RateLimit-Remaining', '0')
         ->assertJsonPath('code', 429)
+        ->assertJsonPath('message', '请求过于频繁，请稍后再试')
         ->assertJsonStructure(['code', 'message', 'data', 'timestamp']);
+});
+
+test('returns 429 when an authenticated user exceeds the api rate limit', function () {
+    config(['app.api_rate_limit' => 2]);
+
+    $first = User::factory()->create();
+    $second = User::factory()->create();
+
+    bearer($first)->getJson('/api/v1/me')->assertOk();
+    bearer($first)->getJson('/api/v1/me')->assertOk();
+    bearer($first)->getJson('/api/v1/me')->assertTooManyRequests();
+
+    bearer($second)->getJson('/api/v1/me')->assertOk();
+});
+
+test('returns 429 when one ip exceeds the login attempt limit', function () {
+    config(['app.login_ip_rate_limit' => 2]);
+
+    foreach (['first@mes.test', 'second@mes.test'] as $email) {
+        $this->postJson('/api/v1/auth/tokens', ['email' => $email, 'password' => 'wrong'])->assertUnprocessable();
+    }
+
+    $this->postJson('/api/v1/auth/tokens', ['email' => 'third@mes.test', 'password' => 'wrong'])
+        ->assertTooManyRequests();
+});
+
+test('the api rate limit ignores unusable environment values', function (string $value) {
+    // The clamp lives in the config file, so it only runs when the file is loaded.
+    putenv("API_RATE_LIMIT={$value}");
+
+    try {
+        $config = require base_path('config/app.php');
+
+        expect($config['api_rate_limit'])->toBe(120);
+    } finally {
+        putenv('API_RATE_LIMIT');
+    }
+})->with(['empty' => '', 'zero' => '0', 'not a number' => 'abc', 'negative' => '-1']);
+
+test('the api rate limit follows the environment', function () {
+    putenv('API_RATE_LIMIT=300');
+
+    try {
+        $config = require base_path('config/app.php');
+
+        expect($config['api_rate_limit'])->toBe(300);
+    } finally {
+        putenv('API_RATE_LIMIT');
+    }
 });
 
 test('method not allowed responses preserve allowed methods', function () {
