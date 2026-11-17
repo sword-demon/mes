@@ -14,6 +14,7 @@ import MaterialRequisitions from '@/pages/material/requisitions';
 import MaterialReturns from '@/pages/material/returns';
 import EquipmentLedger from '@/pages/equipment/ledger';
 import EquipmentMonitor from '@/pages/equipment/monitor';
+import EquipmentHistory from '@/pages/equipment/history';
 import EquipmentAlarms from '@/pages/equipment/alarms';
 import ProductionLines from '@/pages/basic-data/production-lines';
 import Products from '@/pages/basic-data/products';
@@ -29,6 +30,9 @@ import ProductionReports from '@/pages/production/reports';
 import ProductionTasks from '@/pages/production/tasks';
 import Users from '@/pages/system/users';
 import OperationLogs from '@/pages/system/logs';
+import Roles from '@/pages/system/roles';
+import Menus from '@/pages/system/menus';
+import Departments from '@/pages/system/departments';
 import QualityStandards from '@/pages/quality/standards';
 import QualityRecords from '@/pages/quality/records';
 import QualityTasks from '@/pages/quality/tasks';
@@ -77,6 +81,9 @@ const pages: Record<string, () => ReactNode> = {
     '/execution/sn': ProductSns,
     '/system/users': Users,
     '/system/logs': OperationLogs,
+    '/system/roles': Roles,
+    '/system/menus': Menus,
+    '/system/departments': Departments,
     '/quality/standards': QualityStandards,
     '/quality/tasks': QualityTasks,
     '/quality/records': QualityRecords,

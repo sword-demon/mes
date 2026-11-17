@@ -28,6 +28,14 @@ export type Role = {
     name: string;
     description: string | null;
     status: boolean;
+    permissions?: Permission[];
+};
+
+export type Permission = {
+    id: number;
+    code: string;
+    name: string;
+    type: 'menu' | 'page' | 'button' | 'api' | 'data';
 };
 
 export type Paginated<T> = {

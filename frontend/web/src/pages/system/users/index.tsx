@@ -49,7 +49,7 @@ export default function Users() {
 
     const roles = useQuery({
         queryKey: ['system', 'roles'],
-        queryFn: listRoles,
+        queryFn: () => listRoles(),
         // Only the role field consumes this list, so skip the request when the
         // field is hidden rather than firing one the API rejects with 403.
         enabled: editing !== null && can(currentUser, 'button.system.users.assign-roles'),
