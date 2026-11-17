@@ -2,6 +2,7 @@
 
 namespace App\Modules\Material\Controller;
 
+use App\Core\Services\BusinessDay;
 use App\Core\Services\EntityService;
 use App\Http\Controllers\Controller;
 use App\Http\Responses\ApiResponse;
@@ -35,8 +36,8 @@ class MaterialReturnController extends Controller
                 'items.requisitionItem',
                 fn (Builder $items) => $items->where('material_id', $materialId),
             ))
-            ->when(is_string($dateFrom) && $dateFrom !== '', fn (Builder $query) => $query->whereDate('created_at', '>=', $dateFrom))
-            ->when(is_string($dateTo) && $dateTo !== '', fn (Builder $query) => $query->whereDate('created_at', '<=', $dateTo));
+            ->when(is_string($dateFrom) && $dateFrom !== '', fn (Builder $query) => $query->where('created_at', '>=', BusinessDay::startUtc($dateFrom)))
+            ->when(is_string($dateTo) && $dateTo !== '', fn (Builder $query) => $query->where('created_at', '<', BusinessDay::endUtc($dateTo)));
 
         return ApiResponse::paginated(
             $this->entities->paginateQuery(

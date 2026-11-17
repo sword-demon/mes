@@ -2,6 +2,7 @@
 
 namespace App\Modules\Production\Controller;
 
+use App\Core\Services\BusinessDay;
 use App\Http\Controllers\Controller;
 use App\Http\Responses\ApiResponse;
 use App\Modules\Production\FormRequest\ProcessProductionExceptionRequest;
@@ -14,7 +15,6 @@ use App\Modules\Production\Service\ProductionExceptionService;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Carbon;
 use Illuminate\Validation\Rule;
 
 class ProductionExceptionController extends Controller
@@ -48,11 +48,11 @@ class ProductionExceptionController extends Controller
             )
             ->when(
                 $data['start_date'] ?? null,
-                fn (Builder $query, string $date) => $query->where('reported_at', '>=', $this->businessDayStart($date)),
+                fn (Builder $query, string $date) => $query->where('reported_at', '>=', BusinessDay::startUtc($date)),
             )
             ->when(
                 $data['end_date'] ?? null,
-                fn (Builder $query, string $date) => $query->where('reported_at', '<', $this->businessDayStart($date)->addDay()),
+                fn (Builder $query, string $date) => $query->where('reported_at', '<', BusinessDay::endUtc($date)),
             )
             ->orderByDesc('reported_at')
             ->orderByDesc('id');
@@ -183,12 +183,5 @@ class ProductionExceptionController extends Controller
         return ApiResponse::success(ProductionExceptionResource::make(
             $this->exceptions->close($exception),
         ));
-    }
-
-    private function businessDayStart(string $date): Carbon
-    {
-        return Carbon::parse($date, (string) config('app.business_timezone', 'Asia/Shanghai'))
-            ->startOfDay()
-            ->utc();
     }
 }

@@ -2,6 +2,7 @@
 
 namespace App\Modules\System\Controller;
 
+use App\Core\Services\BusinessDay;
 use App\Http\Controllers\Controller;
 use App\Http\Responses\ApiResponse;
 use App\Modules\System\Model\OperationLog;
@@ -9,7 +10,6 @@ use App\Modules\System\Resource\OperationLogResource;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Carbon;
 
 class OperationLogController extends Controller
 {
@@ -27,11 +27,11 @@ class OperationLogController extends Controller
             ->when($filters['action'] ?? null, fn (Builder $query, string $action) => $query->where('action', $action))
             ->when(
                 $filters['start_date'] ?? null,
-                fn (Builder $query, string $date) => $query->where('created_at', '>=', $this->businessDayStart($date)),
+                fn (Builder $query, string $date) => $query->where('created_at', '>=', BusinessDay::startUtc($date)),
             )
             ->when(
                 $filters['end_date'] ?? null,
-                fn (Builder $query, string $date) => $query->where('created_at', '<', $this->businessDayStart($date)->addDay()),
+                fn (Builder $query, string $date) => $query->where('created_at', '<', BusinessDay::endUtc($date)),
             )
             ->orderByDesc('id');
 
@@ -65,12 +65,5 @@ class OperationLogController extends Controller
             'users' => $users,
             'actions' => $actions,
         ]);
-    }
-
-    private function businessDayStart(string $date): Carbon
-    {
-        return Carbon::parse($date, (string) config('app.business_timezone', 'Asia/Shanghai'))
-            ->startOfDay()
-            ->utc();
     }
 }

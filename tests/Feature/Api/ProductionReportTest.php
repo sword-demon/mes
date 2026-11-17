@@ -283,13 +283,14 @@ it('lists reports filtered by task, order and type', function () {
         ->assertJsonPath('data.items.0.id', $other->id);
 });
 
-it('filters reports by an inclusive reported date range', function () {
+it('filters reports by the shanghai business day', function () {
     $actor = userWithPermissions(['production.reports.index']);
-    $inside = ProductionReport::factory()->create(['reported_at' => '2026-11-15 23:30:00']);
-    ProductionReport::factory()->create(['reported_at' => '2026-11-14 23:59:59']);
-    ProductionReport::factory()->create(['reported_at' => '2026-11-16 00:00:00']);
+    // 2026-11-16 00:00 in Shanghai is 2026-11-15 16:00 in UTC.
+    $inside = ProductionReport::factory()->create(['reported_at' => '2026-11-15 16:00:00']);
+    ProductionReport::factory()->create(['reported_at' => '2026-11-15 15:59:59']);
+    ProductionReport::factory()->create(['reported_at' => '2026-11-16 16:00:00']);
 
-    bearer($actor)->getJson('/api/v1/production/reports?start_date=2026-11-15&end_date=2026-11-15')
+    bearer($actor)->getJson('/api/v1/production/reports?start_date=2026-11-16&end_date=2026-11-16')
         ->assertOk()
         ->assertJsonPath('data.meta.total', 1)
         ->assertJsonPath('data.items.0.id', $inside->id);

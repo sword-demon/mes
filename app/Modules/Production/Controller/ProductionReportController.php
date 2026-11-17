@@ -2,6 +2,7 @@
 
 namespace App\Modules\Production\Controller;
 
+use App\Core\Services\BusinessDay;
 use App\Core\Services\EntityService;
 use App\Http\Controllers\Controller;
 use App\Http\Responses\ApiResponse;
@@ -16,7 +17,6 @@ use App\Modules\Production\Service\ProductionReportService;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Carbon;
 
 class ProductionReportController extends Controller
 {
@@ -52,11 +52,11 @@ class ProductionReportController extends Controller
             )
             ->when(
                 is_string($startDate) && $startDate !== '',
-                fn (Builder $query) => $query->where('reported_at', '>=', Carbon::parse($startDate)->startOfDay()),
+                fn (Builder $query) => $query->where('reported_at', '>=', BusinessDay::startUtc($startDate)),
             )
             ->when(
                 is_string($endDate) && $endDate !== '',
-                fn (Builder $query) => $query->where('reported_at', '<', Carbon::parse($endDate)->addDay()->startOfDay()),
+                fn (Builder $query) => $query->where('reported_at', '<', BusinessDay::endUtc($endDate)),
             )
             ->when(is_string($keyword) && $keyword !== '', function (Builder $query) use ($keyword): void {
                 $query->where(fn (Builder $inner) => $inner

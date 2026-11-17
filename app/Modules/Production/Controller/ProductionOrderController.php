@@ -2,6 +2,7 @@
 
 namespace App\Modules\Production\Controller;
 
+use App\Core\Services\BusinessDay;
 use App\Core\Services\EntityService;
 use App\Http\Controllers\Controller;
 use App\Http\Responses\ApiResponse;
@@ -34,8 +35,8 @@ class ProductionOrderController extends Controller
         $query = ProductionOrder::query()
             ->with(self::RELATIONS)
             ->when($request->query('status'), fn (Builder $query, string $status) => $query->where('status', $status))
-            ->when($request->query('start_date'), fn (Builder $query, string $date) => $query->whereDate('planned_start_at', '>=', $date))
-            ->when($request->query('end_date'), fn (Builder $query, string $date) => $query->whereDate('planned_start_at', '<=', $date));
+            ->when($request->query('start_date'), fn (Builder $query, string $date) => $query->where('planned_start_at', '>=', BusinessDay::startUtc($date)))
+            ->when($request->query('end_date'), fn (Builder $query, string $date) => $query->where('planned_start_at', '<', BusinessDay::endUtc($date)));
 
         return ApiResponse::paginated(
             $this->entities->paginateQuery(

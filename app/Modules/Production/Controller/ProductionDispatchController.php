@@ -2,6 +2,7 @@
 
 namespace App\Modules\Production\Controller;
 
+use App\Core\Services\BusinessDay;
 use App\Core\Services\EntityService;
 use App\Http\Controllers\Controller;
 use App\Http\Responses\ApiResponse;
@@ -49,11 +50,11 @@ class ProductionDispatchController extends Controller
             )
             ->when(
                 is_string($startDate) && $startDate !== '',
-                fn (Builder $query) => $query->whereDate('dispatched_at', '>=', $startDate),
+                fn (Builder $query) => $query->where('dispatched_at', '>=', BusinessDay::startUtc($startDate)),
             )
             ->when(
                 is_string($endDate) && $endDate !== '',
-                fn (Builder $query) => $query->whereDate('dispatched_at', '<=', $endDate),
+                fn (Builder $query) => $query->where('dispatched_at', '<', BusinessDay::endUtc($endDate)),
             )
             ->when(is_string($keyword) && $keyword !== '', function (Builder $query) use ($keyword): void {
                 $query->where(fn (Builder $inner) => $inner

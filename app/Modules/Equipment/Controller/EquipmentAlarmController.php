@@ -2,6 +2,7 @@
 
 namespace App\Modules\Equipment\Controller;
 
+use App\Core\Services\BusinessDay;
 use App\Http\Controllers\Controller;
 use App\Http\Responses\ApiResponse;
 use App\Modules\Equipment\Model\Equipment;
@@ -11,7 +12,6 @@ use App\Modules\Equipment\Resource\EquipmentSummaryResource;
 use App\Modules\Equipment\Service\EquipmentAlarmService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Carbon;
 use Illuminate\Validation\Rule;
 
 class EquipmentAlarmController extends Controller
@@ -47,11 +47,11 @@ class EquipmentAlarmController extends Controller
             )
             ->when(
                 $data['start_date'] ?? null,
-                fn ($query, string $date) => $query->where('triggered_at', '>=', $this->businessDayStart($date)),
+                fn ($query, string $date) => $query->where('triggered_at', '>=', BusinessDay::startUtc($date)),
             )
             ->when(
                 $data['end_date'] ?? null,
-                fn ($query, string $date) => $query->where('triggered_at', '<', $this->businessDayStart($date)->addDay()),
+                fn ($query, string $date) => $query->where('triggered_at', '<', BusinessDay::endUtc($date)),
             )
             ->orderByDesc('triggered_at')
             ->orderByDesc('id');
@@ -104,12 +104,5 @@ class EquipmentAlarmController extends Controller
         return ApiResponse::success(EquipmentAlarmResource::make(
             $this->alarms->close($alarm, $request->user(), $data['handling_note'] ?? null),
         ));
-    }
-
-    private function businessDayStart(string $date): Carbon
-    {
-        return Carbon::parse($date, (string) config('app.business_timezone', 'Asia/Shanghai'))
-            ->startOfDay()
-            ->utc();
     }
 }

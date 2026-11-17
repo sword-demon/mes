@@ -2,6 +2,7 @@
 
 namespace App\Modules\Production\Controller;
 
+use App\Core\Services\BusinessDay;
 use App\Core\Services\EntityService;
 use App\Http\Controllers\Controller;
 use App\Http\Responses\ApiResponse;
@@ -42,11 +43,11 @@ class ProductionTaskController extends Controller
         }
 
         if (is_string($startDate) && $startDate !== '') {
-            $query->whereDate('planned_start_at', '>=', $startDate);
+            $query->where('planned_start_at', '>=', BusinessDay::startUtc($startDate));
         }
 
         if (is_string($endDate) && $endDate !== '') {
-            $query->whereDate('planned_start_at', '<=', $endDate);
+            $query->where('planned_start_at', '<', BusinessDay::endUtc($endDate));
         }
 
         return ApiResponse::paginated(

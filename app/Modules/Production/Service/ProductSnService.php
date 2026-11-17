@@ -3,6 +3,7 @@
 namespace App\Modules\Production\Service;
 
 use App\Core\Exceptions\ApiException;
+use App\Core\Services\BusinessDay;
 use App\Modules\Equipment\Service\EquipmentService;
 use App\Modules\Organization\Model\Employee;
 use App\Modules\Production\Model\ProductionBatch;
@@ -189,7 +190,7 @@ class ProductSnService
         ]);
 
         $sns = new Collection;
-        $day = now();
+        $day = now(BusinessDay::timezone());
         $sequence = $this->nextSequence($day);
 
         for ($index = 0; $index < $quantity; $index++) {

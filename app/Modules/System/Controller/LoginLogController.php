@@ -2,6 +2,7 @@
 
 namespace App\Modules\System\Controller;
 
+use App\Core\Services\BusinessDay;
 use App\Http\Controllers\Controller;
 use App\Http\Responses\ApiResponse;
 use App\Modules\System\Model\LoginLog;
@@ -9,7 +10,6 @@ use App\Modules\System\Resource\LoginLogResource;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Carbon;
 
 class LoginLogController extends Controller
 {
@@ -34,21 +34,14 @@ class LoginLogController extends Controller
             ->when($success !== null, fn (Builder $query) => $query->where('success', $success))
             ->when(
                 $filters['start_date'] ?? null,
-                fn (Builder $query, string $date) => $query->where('created_at', '>=', $this->businessDayStart($date)),
+                fn (Builder $query, string $date) => $query->where('created_at', '>=', BusinessDay::startUtc($date)),
             )
             ->when(
                 $filters['end_date'] ?? null,
-                fn (Builder $query, string $date) => $query->where('created_at', '<', $this->businessDayStart($date)->addDay()),
+                fn (Builder $query, string $date) => $query->where('created_at', '<', BusinessDay::endUtc($date)),
             )
             ->orderByDesc('id');
 
         return ApiResponse::paginated($query->paginate(15), LoginLogResource::class);
-    }
-
-    private function businessDayStart(string $date): Carbon
-    {
-        return Carbon::parse($date, (string) config('app.business_timezone', 'Asia/Shanghai'))
-            ->startOfDay()
-            ->utc();
     }
 }

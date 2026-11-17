@@ -2,6 +2,7 @@
 
 namespace App\Modules\Quality\Controller;
 
+use App\Core\Services\BusinessDay;
 use App\Core\Services\EntityService;
 use App\Http\Controllers\Controller;
 use App\Http\Responses\ApiResponse;
@@ -46,16 +47,16 @@ class InspectionTaskController extends Controller
             ->when($judged === true, fn (Builder $query) => $query->whereNotNull('result'))
             ->when(is_string($operationId) && $operationId !== '', fn (Builder $query) => $query->where('route_operation_id', $operationId))
             ->when($isDate($startDate), fn (Builder $query) => $query->where(function (Builder $inner) use ($startDate): void {
-                $inner->where('inspected_at', '>=', "{$startDate} 00:00:00")
+                $inner->where('inspected_at', '>=', BusinessDay::startUtc($startDate))
                     ->orWhere(fn (Builder $pending) => $pending
                         ->whereNull('inspected_at')
-                        ->where('created_at', '>=', "{$startDate} 00:00:00"));
+                        ->where('created_at', '>=', BusinessDay::startUtc($startDate)));
             }))
             ->when($isDate($endDate), fn (Builder $query) => $query->where(function (Builder $inner) use ($endDate): void {
-                $inner->where('inspected_at', '<=', "{$endDate} 23:59:59")
+                $inner->where('inspected_at', '<', BusinessDay::endUtc($endDate))
                     ->orWhere(fn (Builder $pending) => $pending
                         ->whereNull('inspected_at')
-                        ->where('created_at', '<=', "{$endDate} 23:59:59"));
+                        ->where('created_at', '<', BusinessDay::endUtc($endDate)));
             }))
             ->when(is_string($keyword) && $keyword !== '', fn (Builder $query) => $query->whereHas(
                 'productionOrder',

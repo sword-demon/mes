@@ -226,6 +226,40 @@ it('filters requisitions by order, material and date', function () {
         ->assertJsonPath('data.items.0.items.0.material.code', $material->code);
 });
 
+it('filters requisitions by the shanghai business day', function () {
+    $actor = userWithPermissions(['material.requisitions.index']);
+    $order = ProductionOrder::factory()->create();
+
+    // 2026-11-15 00:00 in Shanghai is 2026-11-14 16:00 in UTC.
+    $inside = MaterialRequisition::query()->create([
+        'code' => 'MR-900001',
+        'production_order_id' => $order->id,
+        'created_by_id' => $actor->id,
+    ]);
+    $inside->forceFill(['created_at' => '2026-11-14 16:00:00'])->save();
+
+    $before = MaterialRequisition::query()->create([
+        'code' => 'MR-900002',
+        'production_order_id' => $order->id,
+        'created_by_id' => $actor->id,
+    ]);
+    $before->forceFill(['created_at' => '2026-11-14 15:59:59'])->save();
+
+    $after = MaterialRequisition::query()->create([
+        'code' => 'MR-900003',
+        'production_order_id' => $order->id,
+        'created_by_id' => $actor->id,
+    ]);
+    $after->forceFill(['created_at' => '2026-11-15 16:00:00'])->save();
+
+    bearer($actor)->getJson('/api/v1/materials/requisitions?'.http_build_query([
+        'date_from' => '2026-11-15',
+        'date_to' => '2026-11-15',
+    ]))->assertOk()
+        ->assertJsonCount(1, 'data.items')
+        ->assertJsonPath('data.items.0.id', $inside->id);
+});
+
 it('rejects a requisition for an order that is not ready to consume material', function () {
     $actor = userWithPermissions(['material.requisitions.create']);
     $order = ProductionOrder::factory()->create(['status' => ProductionOrder::DRAFT]);

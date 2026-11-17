@@ -74,6 +74,7 @@ EMQX_DASHBOARD_HOST_PORT=18083
 关键约束：
 
 - `APP_ENV=production` 与 `APP_DEBUG=false` 必须同时成立；生产环境禁止开启调试。
+- `APP_BUSINESS_TIMEZONE=Asia/Shanghai` 决定业务自然日与接口日期筛选口径；数据库时间与应用运行时保持 UTC，不要修改 `config/app.php` 的 `timezone`。
 - `APP_KEY` 用 `php artisan key:generate --force` 生成，之后不要更换，否则已加密数据与登录态失效。
 - `DB_PASSWORD`、`MYSQL_ROOT_PASSWORD`、`EMQX_DASHBOARD_PASSWORD` 缺失时，生产 Compose 会直接报错拒绝启动。
 - 生产启动流程不执行全量 `DatabaseSeeder`；RBAC 元数据与首个管理员由 `php artisan mes:create-admin` 显式初始化，不填充演示业务数据。

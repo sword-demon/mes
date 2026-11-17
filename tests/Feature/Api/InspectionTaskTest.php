@@ -413,6 +413,9 @@ it('rejects an OQC task tied to a process execution', function () {
 });
 
 it('filters tasks and records by order, operation, result and time', function () {
+    // Pin the clock so the UTC date and the Shanghai business day stay aligned.
+    $this->travelTo('2026-11-16 04:00:00');
+
     [$order, $record] = inspectionCase();
     $secondOperation = RouteOperation::factory()->create([
         'route_id' => $order->route_id,

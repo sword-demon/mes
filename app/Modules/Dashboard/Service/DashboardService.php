@@ -2,6 +2,7 @@
 
 namespace App\Modules\Dashboard\Service;
 
+use App\Core\Services\BusinessDay;
 use App\Modules\Equipment\Model\Equipment;
 use App\Modules\Equipment\Model\EquipmentAlarm;
 use App\Modules\Equipment\Service\EquipmentService;
@@ -27,7 +28,7 @@ class DashboardService
      */
     public function today(): array
     {
-        $start = now($this->businessTimezone())->startOfDay()->utc();
+        $start = now(BusinessDay::timezone())->startOfDay()->utc();
         $end = $start->addDay();
 
         $orders = ProductionOrder::query()
@@ -49,7 +50,7 @@ class DashboardService
             ->first();
 
         return [
-            'date' => $start->setTimezone($this->businessTimezone())->toDateString(),
+            'date' => $start->setTimezone(BusinessDay::timezone())->toDateString(),
             'order_count' => (int) $orders->getAttribute('order_count'),
             'planned_quantity' => $this->decimal($orders->getAttribute('planned_quantity')),
             'produced_quantity' => $this->decimal($reports->getAttribute('produced_quantity')),
@@ -78,7 +79,7 @@ class DashboardService
             ->where('reported_at', '<', $end->addDay()->utc())
             ->get(['reported_at', 'quantity'])
             ->each(function (ProductionReport $report) use (&$totals): void {
-                $date = $report->reported_at->copy()->setTimezone($this->businessTimezone())->toDateString();
+                $date = $report->reported_at->copy()->setTimezone(BusinessDay::timezone())->toDateString();
                 $totals[$date] = ($totals[$date] ?? 0) + (float) $report->quantity;
             });
 
@@ -264,14 +265,9 @@ class DashboardService
      */
     private function recentDaysRange(): array
     {
-        $end = now($this->businessTimezone())->startOfDay();
+        $end = now(BusinessDay::timezone())->startOfDay();
 
         return [$end->subDays(self::TREND_DAYS - 1), $end];
-    }
-
-    private function businessTimezone(): string
-    {
-        return (string) config('app.business_timezone', 'Asia/Shanghai');
     }
 
     private function decimal(mixed $value): string
