@@ -23,6 +23,7 @@ import Workshops from '@/pages/basic-data/workshops';
 import Login from '@/pages/login';
 import Placeholder from '@/pages/placeholder';
 import ProductionExceptions from '@/pages/execution/exceptions';
+import ProcessFlows from '@/pages/execution/flows';
 import ProductSns from '@/pages/execution/sn';
 import ProductionOrders from '@/pages/production/orders';
 import ProductionDispatches from '@/pages/production/dispatch';
@@ -78,6 +79,7 @@ const pages: Record<string, () => ReactNode> = {
     '/production/dispatch': ProductionDispatches,
     '/production/reports': ProductionReports,
     '/execution/exceptions': ProductionExceptions,
+    '/execution/flows': ProcessFlows,
     '/execution/sn': ProductSns,
     '/system/users': Users,
     '/system/logs': OperationLogs,

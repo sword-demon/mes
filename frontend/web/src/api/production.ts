@@ -36,6 +36,66 @@ export type ProductionOrderAction =
     | 'close'
     | 'cancel';
 
+export const PROCESS_RECORD_STATUSES = [
+    { value: 'pending', label: '待加工', color: 'default' },
+    { value: 'processing', label: '加工中', color: 'processing' },
+    { value: 'inspecting', label: '待检验', color: 'gold' },
+    { value: 'inspected', label: '检验通过', color: 'cyan' },
+    { value: 'pending_transfer', label: '待流转', color: 'orange' },
+    { value: 'transferred', label: '已流转', color: 'green' },
+    { value: 'reworking', label: '返工中', color: 'red' },
+] as const;
+
+export type ProcessRecordStatus = (typeof PROCESS_RECORD_STATUSES)[number]['value'];
+
+export type ProcessRecord = {
+    id: number;
+    production_task_id: number;
+    route_operation_id: number;
+    sequence: number;
+    sn: string | null;
+    employee_id: number | null;
+    team_id: number | null;
+    equipment_id: number | null;
+    status: ProcessRecordStatus;
+    status_label: string;
+    started_at: string | null;
+    completed_at: string | null;
+    inspected_at: string | null;
+    submitted_at: string | null;
+    received_at: string | null;
+    exception_reason: string | null;
+    exception_at: string | null;
+    rework_reason: string | null;
+    rework_at: string | null;
+    rework_count: number;
+    production_task?: { id: number; code: string; status: string; status_label: string };
+    production_order?: { id: number; code: string };
+    route_operation?: {
+        id: number;
+        sequence: number;
+        process: { id: number; code: string; name: string; requires_inspection: boolean };
+    };
+    employee?: { id: number; employee_no: string; name: string } | null;
+    team?: { id: number; code: string; name: string } | null;
+    equipment?: Equipment | null;
+};
+
+export type ProcessRecordParams = {
+    page?: number;
+    per_page?: number;
+    production_order_id?: number;
+    production_task_id?: number;
+    status?: ProcessRecordStatus;
+    sn?: string;
+};
+
+export type ProcessRecordStartPayload = {
+    employee_id?: number | null;
+    equipment_id?: number | null;
+    sn?: string | null;
+};
+
 export type NamedRef = { id: number; code: string; name: string };
 export type RouteOperationRef = { id: number; sequence: number; process: NamedRef };
 
@@ -580,8 +640,9 @@ export function getProductionExceptionOptions(
     include: ProductionExceptionOptionInclude = 'all',
 ) {
     return api.get<ProductionExceptionOptions>('/production/exceptions/options', {
-        production_order_id: productionOrderId,
-        keyword,
+        ...(productionOrderId === undefined ? {} : { production_order_id: productionOrderId }),
+        // An empty keyword is no filter, so it is left out of the request.
+        ...(keyword ? { keyword } : {}),
         include,
     });
 }
@@ -612,4 +673,32 @@ export function processProductionException(id: number, handlingResult: string) {
 
 export function closeProductionException(id: number) {
     return api.post<ProductionException>(`/production/exceptions/${id}/close`);
+}
+
+export function listProcessRecords(params: ProcessRecordParams = {}) {
+    return api.get<Paginated<ProcessRecord>>('/production/process-records', params);
+}
+
+export function startProcessRecord(id: number, payload: ProcessRecordStartPayload) {
+    return api.post<ProcessRecord>(`/production/process-records/${id}/start`, payload);
+}
+
+export function completeProcessRecord(id: number) {
+    return api.post<ProcessRecord>(`/production/process-records/${id}/complete`);
+}
+
+export function submitProcessRecord(id: number) {
+    return api.post<ProcessRecord>(`/production/process-records/${id}/submit`);
+}
+
+export function receiveProcessRecord(id: number) {
+    return api.post<ProcessRecord>(`/production/process-records/${id}/receive`);
+}
+
+export function reportProcessRecordException(id: number, reason: string) {
+    return api.post<ProcessRecord>(`/production/process-records/${id}/exception`, { reason });
+}
+
+export function reworkProcessRecord(id: number, reason: string) {
+    return api.post<ProcessRecord>(`/production/process-records/${id}/rework`, { reason });
 }
