@@ -25,7 +25,7 @@ globalThis.ResizeObserver ??= class {
 let root: Root;
 let client: QueryClient;
 const originalAdapter = http.defaults.adapter;
-let requests: { url?: string; method?: string; data?: unknown }[] = [];
+let requests: { url?: string; method?: string; data?: unknown; params?: unknown }[] = [];
 let currentException: ProductionException;
 const exception: ProductionException = {
     id: 1,
@@ -70,7 +70,7 @@ async function render(permissions: string[], overrides: Partial<ProductionExcept
     root = createRoot(container);
     client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     http.defaults.adapter = async (config) => {
-        requests.push({ url: config.url, method: config.method, data: config.data });
+        requests.push({ url: config.url, method: config.method, data: config.data, params: config.params });
         const body = typeof config.data === 'string' ? JSON.parse(config.data) : config.data;
 
         if (config.url === '/production/exceptions/1/close') {
@@ -249,4 +249,32 @@ it('lets a create-only user open the report form', async () => {
     });
 
     expect(document.body.textContent).toContain('上报生产异常');
+});
+
+it('offers the production orders inside the report form', async () => {
+    await render(['production.exceptions.index', 'button.production.exceptions.create']);
+    const report = [...document.querySelectorAll('button')]
+        .find((button) => button.textContent?.trim() === '上报异常');
+
+    await act(async () => {
+        (report as HTMLButtonElement).click();
+    });
+    await act(async () => { await new Promise((resolve) => setTimeout(resolve, 50)); });
+
+    const options = requests.find((request) => request.url === '/production/exceptions/options');
+    const params = options?.params as { keyword?: string; include?: string } | undefined;
+
+    // An empty search box must not travel as a keyword.
+    expect(params?.keyword).toBeUndefined();
+    expect(params?.include).toBe('orders');
+
+    await act(async () => {
+        // AntD opens the dropdown on mousedown, not on click.
+        document.body.querySelector<HTMLElement>('#production_order_id')?.dispatchEvent(
+            new MouseEvent('mousedown', { bubbles: true }),
+        );
+        await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+
+    expect(document.body.textContent).toContain('PO-DEMO-001 控制板');
 });

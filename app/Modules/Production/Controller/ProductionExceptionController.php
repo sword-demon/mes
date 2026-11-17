@@ -67,7 +67,7 @@ class ProductionExceptionController extends Controller
     {
         $data = $request->validate([
             'production_order_id' => ['sometimes', 'integer', 'min:1', 'exists:mes_production_orders,id'],
-            'keyword' => ['sometimes', 'string', 'max:100'],
+            'keyword' => ['sometimes', 'nullable', 'string', 'max:100'],
             'include' => ['sometimes', Rule::in(['all', 'orders', 'process_records'])],
         ]);
         $orderId = $data['production_order_id'] ?? null;

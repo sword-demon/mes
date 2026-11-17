@@ -324,6 +324,16 @@ it('treats zero as a meaningful order search keyword', function () {
         ->assertJsonPath('data.orders.0.id', $zero->id);
 });
 
+it('treats an empty order search keyword as no filter', function () {
+    $actor = userWithPermissions(['production.exceptions.create'], 'production_exception_empty_search');
+    $order = ProductionOrder::factory()->create();
+
+    bearer($actor)->getJson('/api/v1/production/exceptions/options?keyword=&include=orders')
+        ->assertOk()
+        ->assertJsonPath('data.orders.0.id', $order->id)
+        ->assertJsonPath('data.orders.0.code', $order->code);
+});
+
 it('validates exception list filters', function (string $query, string $field) {
     bearer(userWithPermissions(['production.exceptions.index'], 'production_exception_invalid_'.md5($query)))
         ->getJson('/api/v1/production/exceptions?'.$query)
