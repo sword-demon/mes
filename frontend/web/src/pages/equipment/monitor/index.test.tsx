@@ -3,15 +3,11 @@ import { App as AntdApp } from 'antd';
 import { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import type { Root } from 'react-dom/client';
-import { afterEach, expect, it, vi } from 'vitest';
+import { afterEach, expect, it } from 'vitest';
 import EquipmentMonitor from './index';
 import { http } from '@/api/client';
 import { useAuthStore } from '@/stores/auth';
 import { currentUserFixture } from '@/test/fixtures';
-
-vi.mock('@/components/echart', () => ({
-    default: () => <div data-testid="chart" />,
-}));
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 window.matchMedia ??= ((query: string) => ({
@@ -28,7 +24,7 @@ globalThis.ResizeObserver ??= class {
 let root: Root;
 let client: QueryClient;
 const originalAdapter = http.defaults.adapter;
-const requests: { url?: string; params?: Record<string, unknown> }[] = [];
+const requests: string[] = [];
 
 const equipment = {
     id: 1,
@@ -59,41 +55,20 @@ const equipment = {
 
 async function render(permissions: string[]) {
     requests.length = 0;
-    const canMonitor = permissions.includes('equipment.monitor.index');
     useAuthStore.setState({ token: 'token', user: currentUserFixture({ permissions }) });
     const container = document.createElement('div');
     document.body.append(container);
     root = createRoot(container);
     client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     http.defaults.adapter = async (config) => {
-        requests.push({ url: config.url, params: config.params as Record<string, unknown> });
-        let data: unknown = { items: [], status_counts: {} };
-
-        if (config.url === '/equipments/monitor') {
-            const { latest_data, ...summary } = equipment;
-            data = {
-                items: canMonitor ? [equipment] : [summary],
-                ...(canMonitor
-                    ? { status_counts: { running: 1, idle: 0, fault: 0, repair: 0, offline: 0 } }
-                    : {}),
-                max_history_seconds: 31 * 24 * 60 * 60,
-            };
-        }
-
-        if (config.url === '/equipments/1/history') {
-            data = {
-                equipment,
-                start_at: '2026-11-16T00:00:00Z',
-                end_at: '2026-11-16T06:00:00Z',
-                items: [{
-                    recorded_at: '2026-11-16T05:00:00Z',
-                    temperature: 66.5,
-                    speed: 1320,
-                    pressure: 0.82,
-                    output: 912,
-                }],
-            };
-        }
+        requests.push(config.url ?? '');
+        const data = config.url === '/equipments/monitor'
+            ? {
+                  items: [equipment],
+                  status_counts: { running: 1, idle: 0, fault: 0, repair: 0, offline: 0 },
+                  max_history_seconds: 31 * 24 * 60 * 60,
+              }
+            : { items: [] };
 
         return { config, status: 200, statusText: 'OK', headers: {}, data: { code: 200, data } };
     };
@@ -114,48 +89,26 @@ afterEach(() => {
     document.body.innerHTML = '';
 });
 
-it('shows equipment status, latest metrics and four history curves', async () => {
-    await render(['equipment.monitor.index', 'equipment.history.index']);
+it('shows the equipment status and its latest metrics', async () => {
+    await render(['equipment.monitor.index']);
 
     expect(document.body.textContent).toContain('EQ-SMT-01');
     expect(document.body.textContent).toContain('SMT 贴片机一号');
     expect(document.body.textContent).toContain('66.5');
     expect(document.body.textContent).toContain('1320');
-    expect(document.body.textContent).toContain('累计产量');
     expect(document.querySelector('[data-testid="status-count-running"]')?.textContent).toContain('1');
-    expect(document.querySelectorAll('[data-testid="chart"]')).toHaveLength(4);
-
-    const history = requests.find((request) => request.url === '/equipments/1/history');
-
-    expect(history?.params).toMatchObject({
-        start_at: expect.any(String),
-        end_at: expect.any(String),
-    });
 });
 
-it('hides history curves without the history permission', async () => {
+it('keeps history data out of the monitoring page', async () => {
     await render(['equipment.monitor.index']);
 
-    expect(document.body.textContent).toContain('没有设备历史数据权限');
-    expect(document.querySelector('[data-testid="status-count-running"]')?.textContent).toContain('1');
-    expect(document.querySelectorAll('[data-testid="chart"]')).toHaveLength(0);
-    expect(requests.some((request) => request.url === '/equipments/1/history')).toBe(false);
+    expect(requests).not.toContain('/equipments/1/history');
+    expect(document.body.textContent).not.toContain('历史曲线');
 });
 
-it('loads the equipment list for history-only users without live metrics', async () => {
-    await render(['equipment.history.index']);
-
-    expect(document.body.textContent).toContain('EQ-SMT-01');
-    expect(document.body.textContent).not.toContain('66.5');
-    expect(document.querySelector('[data-testid="status-count-running"]')).toBeNull();
-    expect(document.querySelectorAll('[data-testid="chart"]')).toHaveLength(4);
-    expect(requests.some((request) => request.url === '/equipments/monitor')).toBe(true);
-    expect(requests.some((request) => request.url === '/equipments/1/history')).toBe(true);
-});
-
-it('warns and loads nothing without monitoring or history permission', async () => {
+it('warns and loads nothing without the monitoring permission', async () => {
     await render([]);
 
-    expect(document.body.textContent).toContain('没有设备监控或历史数据权限');
+    expect(document.body.textContent).toContain('没有设备监控权限');
     expect(requests).toHaveLength(0);
 });

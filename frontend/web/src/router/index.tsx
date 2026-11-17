@@ -70,7 +70,7 @@ const pages: Record<string, () => ReactNode> = {
     '/material/returns': MaterialReturns,
     '/equipment/ledger': EquipmentLedger,
     '/equipment/monitor': EquipmentMonitor,
-    '/equipment/history': EquipmentMonitor,
+    '/equipment/history': EquipmentHistory,
     '/equipment/alarms': EquipmentAlarms,
     '/basic-data/products': Products,
     '/production/orders': ProductionOrders,
