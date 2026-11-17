@@ -25,6 +25,9 @@ import Placeholder from '@/pages/placeholder';
 import ProductionExceptions from '@/pages/execution/exceptions';
 import ProcessFlows from '@/pages/execution/flows';
 import ProductSns from '@/pages/execution/sn';
+import ProcessRoutes from '@/pages/process/routes';
+import Boms from '@/pages/basic-data/boms';
+import Processes from '@/pages/basic-data/processes';
 import ProductionOrders from '@/pages/production/orders';
 import ProductionDispatches from '@/pages/production/dispatch';
 import ProductionReports from '@/pages/production/reports';
@@ -53,16 +56,18 @@ function RequireAuth({ children }: { children: ReactNode }) {
  * Pages already implemented; every other menu path renders a placeholder.
  */
 const pages: Record<string, () => ReactNode> = {
-    '/dashboard/overview': Dashboard,
-    '/dashboard/trend': () => <Navigate to="/dashboard/overview" replace />,
-    '/dashboard/quality': () => <Navigate to="/dashboard/overview" replace />,
-    '/dashboard/equipment': () => <Navigate to="/dashboard/overview" replace />,
+    '/dashboard/overview': () => <Dashboard />,
+    '/dashboard/trend': () => <Dashboard view="trend" />,
+    '/dashboard/quality': () => <Dashboard view="quality" />,
+    '/dashboard/equipment': () => <Dashboard view="equipment" />,
     '/basic-data/factories': Factories,
     '/basic-data/workshops': Workshops,
     '/basic-data/lines': ProductionLines,
     '/basic-data/teams': Teams,
     '/basic-data/employees': Employees,
     '/basic-data/materials': Materials,
+    '/basic-data/boms': Boms,
+    '/basic-data/processes': Processes,
     '/material/inventory': MaterialInventory,
     '/material/inventory/alerts': MaterialInventoryAlerts,
     '/material/inbound': MaterialInbound,
@@ -78,6 +83,7 @@ const pages: Record<string, () => ReactNode> = {
     '/production/tasks': ProductionTasks,
     '/production/dispatch': ProductionDispatches,
     '/production/reports': ProductionReports,
+    '/process/routes': ProcessRoutes,
     '/execution/exceptions': ProductionExceptions,
     '/execution/flows': ProcessFlows,
     '/execution/sn': ProductSns,

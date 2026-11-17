@@ -1,5 +1,5 @@
 import { api } from './client';
-import type { Paginated } from '@/types/api';
+import type { Paginated, ProcessRoute, RouteOperation } from '@/types/api';
 import type { Equipment, EquipmentOption } from './equipment';
 
 export const PRODUCTION_ORDER_STATUSES = [
@@ -94,6 +94,30 @@ export type ProcessRecordStartPayload = {
     employee_id?: number | null;
     equipment_id?: number | null;
     sn?: string | null;
+};
+
+export type ProcessRouteParams = {
+    page?: number;
+    per_page?: number;
+    keyword?: string;
+    product_id?: number;
+    audit_status?: ProcessRoute['audit_status'];
+    status?: boolean;
+};
+
+export type ProcessRoutePayload = {
+    code: string;
+    product_id: number;
+    version: string;
+    remark?: string | null;
+    status?: boolean;
+};
+
+export type RouteOperationPayload = {
+    process_id: number;
+    sequence: number;
+    standard_hours?: number;
+    parameters?: string | null;
 };
 
 export type NamedRef = { id: number; code: string; name: string };
@@ -701,4 +725,40 @@ export function reportProcessRecordException(id: number, reason: string) {
 
 export function reworkProcessRecord(id: number, reason: string) {
     return api.post<ProcessRecord>(`/production/process-records/${id}/rework`, { reason });
+}
+
+export function listProcessRoutes(params: ProcessRouteParams = {}) {
+    return api.get<Paginated<ProcessRoute>>('/process/routes', params);
+}
+
+export function createProcessRoute(payload: ProcessRoutePayload) {
+    return api.post<ProcessRoute>('/process/routes', payload);
+}
+
+export function updateProcessRoute(id: number, payload: Partial<ProcessRoutePayload>) {
+    return api.put<ProcessRoute>(`/process/routes/${id}`, payload);
+}
+
+export function submitProcessRoute(id: number) {
+    return api.post<ProcessRoute>(`/process/routes/${id}/submit`);
+}
+
+export function approveProcessRoute(id: number) {
+    return api.post<ProcessRoute>(`/process/routes/${id}/approve`);
+}
+
+export function listRouteOperations(routeId: number) {
+    return api.get<RouteOperation[]>(`/process/routes/${routeId}/operations`);
+}
+
+export function createRouteOperation(routeId: number, payload: RouteOperationPayload) {
+    return api.post<RouteOperation>(`/process/routes/${routeId}/operations`, payload);
+}
+
+export function updateRouteOperation(routeId: number, id: number, payload: Partial<RouteOperationPayload>) {
+    return api.put<RouteOperation>(`/process/routes/${routeId}/operations/${id}`, payload);
+}
+
+export function deleteRouteOperation(routeId: number, id: number) {
+    return api.delete<void>(`/process/routes/${routeId}/operations/${id}`);
 }

@@ -184,6 +184,7 @@ async function render(
     menus: MenuNode[] = defaultMenus,
     failures: string[] = [],
     permissions: string[] = defaultPermissions,
+    initialPath = '/dashboard/overview',
 ) {
     const responses = { ...payloads, ...overrides };
     requests = [];
@@ -234,10 +235,13 @@ async function render(
         root.render(
             <QueryClientProvider client={client}>
                 <AntdApp>
-                    <MemoryRouter initialEntries={['/dashboard/overview']}>
+                    <MemoryRouter initialEntries={[initialPath]}>
                         <LocationProbe />
                         <Routes>
                             <Route path="/dashboard/overview" element={<Dashboard />} />
+                            <Route path="/dashboard/trend" element={<Dashboard view="trend" />} />
+                            <Route path="/dashboard/quality" element={<Dashboard view="quality" />} />
+                            <Route path="/dashboard/equipment" element={<Dashboard view="equipment" />} />
                             <Route path="/production/orders" element={<div>订单列表页</div>} />
                             <Route path="/production/reports" element={<div>报工记录页</div>} />
                             <Route path="/execution/exceptions" element={<div>生产异常页</div>} />
@@ -292,6 +296,46 @@ it('renders the six statistics, five charts and four latest lists', async () => 
     expect(document.body.textContent).toContain('PR-DEMO-001');
     expect(document.body.textContent).toContain('EXC-DEMO-001');
     expect(document.body.textContent).toContain('ALM-DEMO-001');
+});
+
+it('renders production trend at its own path and only requests trend data', async () => {
+    await render({}, [...defaultMenus, menu(6, '/dashboard/trend', '生产趋势')], [], defaultPermissions, '/dashboard/trend');
+
+    expect(document.querySelector('[data-testid="location"]')?.textContent).toBe('/dashboard/trend');
+    expect(document.body.textContent).toContain('生产趋势');
+    expect(card('近七天生产趋势')).not.toBeUndefined();
+    expect(card('生产数据总览')).toBeUndefined();
+    expect(requests).toContain('/dashboard/production-trend');
+    expect(requests).toContain('/dashboard/production-lines');
+    expect(requests).not.toContain('/dashboard/today');
+    expect(requests).not.toContain('/dashboard/quality');
+    expect(requests).not.toContain('/dashboard/equipment-status');
+});
+
+it('renders quality statistics at its own path and only requests quality data', async () => {
+    await render({}, [...defaultMenus, menu(6, '/dashboard/quality', '质量统计')], [], defaultPermissions, '/dashboard/quality');
+
+    expect(document.querySelector('[data-testid="location"]')?.textContent).toBe('/dashboard/quality');
+    expect(document.body.textContent).toContain('质量统计');
+    expect(card('产品合格率')).not.toBeUndefined();
+    expect(card('生产数据总览')).toBeUndefined();
+    expect(requests).toContain('/dashboard/quality');
+    expect(requests).not.toContain('/dashboard/today');
+    expect(requests).not.toContain('/dashboard/production-trend');
+    expect(requests).not.toContain('/dashboard/equipment-status');
+});
+
+it('renders equipment status at its own path and only requests equipment data', async () => {
+    await render({}, [...defaultMenus, menu(6, '/dashboard/equipment', '设备状态')], [], defaultPermissions, '/dashboard/equipment');
+
+    expect(document.querySelector('[data-testid="location"]')?.textContent).toBe('/dashboard/equipment');
+    expect(document.body.textContent).toContain('设备状态');
+    expect(card('设备状态分布')).not.toBeUndefined();
+    expect(card('生产数据总览')).toBeUndefined();
+    expect(requests).toContain('/dashboard/equipment-status');
+    expect(requests).not.toContain('/dashboard/today');
+    expect(requests).not.toContain('/dashboard/production-trend');
+    expect(requests).not.toContain('/dashboard/quality');
 });
 
 it('maps the API payloads into the five chart options', async () => {

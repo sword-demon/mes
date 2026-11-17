@@ -42,12 +42,25 @@ import {
     reportColumns,
 } from './table-columns';
 
-export default function Dashboard() {
+export type DashboardView = 'overview' | 'trend' | 'quality' | 'equipment';
+
+const titles: Record<DashboardView, string> = {
+    overview: '生产数据总览',
+    trend: '生产趋势',
+    quality: '质量统计',
+    equipment: '设备状态',
+};
+
+export default function Dashboard({ view = 'overview' }: { view?: DashboardView }) {
     const user = useAuthStore((state) => state.user);
-    const canOverview = can(user, 'dashboard.overview');
-    const canTrend = can(user, 'dashboard.trend');
-    const canQuality = can(user, 'dashboard.quality');
-    const canEquipment = can(user, 'dashboard.equipment');
+    const overview = view === 'overview';
+    const showTrend = overview || view === 'trend';
+    const showQuality = overview || view === 'quality';
+    const showEquipment = overview || view === 'equipment';
+    const canOverview = overview && can(user, 'dashboard.overview');
+    const canTrend = showTrend && can(user, 'dashboard.trend');
+    const canQuality = showQuality && can(user, 'dashboard.quality');
+    const canEquipment = showEquipment && can(user, 'dashboard.equipment');
     const today = useQuery({
         queryKey: ['dashboard', 'today'],
         queryFn: getDashboardToday,
@@ -125,12 +138,14 @@ export default function Dashboard() {
         <>
             <Space className="mb-4 w-full justify-between" wrap>
                 <div>
-                    <Typography.Title level={4} className="mb-0!">生产数据总览</Typography.Title>
+                    <Typography.Title level={4} className="mb-0!">{titles[view]}</Typography.Title>
+                    {overview && (
                     <Typography.Text type="secondary">
                         {statistics.date
                             ? `${businessTime(statistics.date).format('YYYY年MM月DD日')} 生产概况与最新动态`
                             : '今日生产概况与最新动态'}
                     </Typography.Text>
+                    )}
                 </div>
             </Space>
 
@@ -143,7 +158,7 @@ export default function Dashboard() {
                 />
             ) : null}
 
-            <Row gutter={[16, 16]} className="mb-4">
+            {overview && <Row gutter={[16, 16]} className="mb-4">
                 <Col xs={12} sm={8} xl={4}>
                     <StatisticsCard
                         title="今日订单"
@@ -192,10 +207,10 @@ export default function Dashboard() {
                         color="#13c2c2"
                     />
                 </Col>
-            </Row>
+            </Row>}
 
             <Row gutter={[16, 16]} className="mb-4">
-                <Col xs={24} xl={12}>
+                {showTrend && <Col xs={24} xl={12}>
                     <ChartCard
                         title="近七天生产趋势"
                         loading={trend.isLoading}
@@ -204,8 +219,8 @@ export default function Dashboard() {
                         emptyText={canTrend ? '暂无生产趋势数据' : '无生产趋势查看权限'}
                         option={trendOption(trend.data ?? { days: 7, items: [] })}
                     />
-                </Col>
-                <Col xs={24} xl={12}>
+                </Col>}
+                {showTrend && <Col xs={24} xl={12}>
                     <ChartCard
                         title="各产线产量对比"
                         loading={lines.isLoading}
@@ -214,8 +229,8 @@ export default function Dashboard() {
                         emptyText={canTrend ? '暂无产线对比数据' : '无生产趋势查看权限'}
                         option={lineComparisonOption(lines.data ?? { items: [] })}
                     />
-                </Col>
-                <Col xs={24} xl={8}>
+                </Col>}
+                {showQuality && <Col xs={24} xl={overview ? 8 : 12}>
                     <ChartCard
                         title="产品合格率"
                         loading={quality.isLoading}
@@ -224,8 +239,8 @@ export default function Dashboard() {
                         emptyText={canQuality ? '暂无合格率数据' : '无质量统计查看权限'}
                         option={qualifiedRateOption(qualityData)}
                     />
-                </Col>
-                <Col xs={24} xl={8}>
+                </Col>}
+                {showEquipment && <Col xs={24} xl={overview ? 8 : 24}>
                     <ChartCard
                         title="设备状态分布"
                         loading={equipmentStatus.isLoading}
@@ -234,8 +249,8 @@ export default function Dashboard() {
                         emptyText={canEquipment ? '暂无设备状态数据' : '无设备状态查看权限'}
                         option={equipmentStatusOption(equipmentStatusData)}
                     />
-                </Col>
-                <Col xs={24} xl={8}>
+                </Col>}
+                {showQuality && <Col xs={24} xl={overview ? 8 : 12}>
                     <ChartCard
                         title="不良原因分布"
                         loading={quality.isLoading}
@@ -244,10 +259,10 @@ export default function Dashboard() {
                         emptyText={canQuality ? '暂无不良原因数据' : '无质量统计查看权限'}
                         option={defectReasonOption(qualityData)}
                     />
-                </Col>
+                </Col>}
             </Row>
 
-            <Row gutter={[16, 16]}>
+            {overview && <Row gutter={[16, 16]}>
                 <Col xs={24} xl={12}>
                     <LatestList
                         title="最新订单"
@@ -284,7 +299,7 @@ export default function Dashboard() {
                         emptyText="暂无最新告警"
                     />
                 </Col>
-            </Row>
+            </Row>}
         </>
     );
 }

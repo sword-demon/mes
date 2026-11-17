@@ -1,5 +1,5 @@
 import { api } from './client';
-import type { Paginated } from '@/types/api';
+import type { Bom, BomItem, Paginated, Process } from '@/types/api';
 
 export type BasicDataParams = {
     page?: number;
@@ -181,6 +181,41 @@ export function deleteTeam(id: number) {
 export function listEmployees(params: BasicDataParams = {}) {
     return api.get<Paginated<Employee>>('/basic-data/employees', params);
 }
+
+export function listProcesses(params: BasicDataParams = {}) {
+    return api.get<Paginated<Process>>('/basic-data/processes', params);
+}
+
+export type ProcessPayload = {
+    code: string;
+    name: string;
+    type: string;
+    standard_hours?: number;
+    requires_inspection?: boolean;
+    description?: string | null;
+    status?: boolean;
+};
+
+export function createProcess(payload: ProcessPayload) {
+    return api.post<Process>('/basic-data/processes', payload);
+}
+
+export function updateProcess(id: number, payload: Partial<ProcessPayload>) {
+    return api.put<Process>(`/basic-data/processes/${id}`, payload);
+}
+
+export type BomPayload = { code: string; product_version_id: number; version: string; remark?: string | null; status?: boolean };
+export type BomItemPayload = { material_id: number; quantity: number; loss_rate?: number };
+
+export function listBoms(params: BasicDataParams & { product_version_id?: number; audit_status?: string } = {}) { return api.get<Paginated<Bom>>('/basic-data/boms', params); }
+export function createBom(payload: BomPayload) { return api.post<Bom>('/basic-data/boms', payload); }
+export function updateBom(id: number, payload: Partial<BomPayload>) { return api.put<Bom>(`/basic-data/boms/${id}`, payload); }
+export function submitBom(id: number) { return api.post<Bom>(`/basic-data/boms/${id}/submit`); }
+export function approveBom(id: number) { return api.post<Bom>(`/basic-data/boms/${id}/approve`); }
+export function listBomItems(id: number, page = 1) { return api.get<Paginated<BomItem>>(`/basic-data/boms/${id}/items`, { page, per_page: 20 }); }
+export function createBomItem(id: number, payload: BomItemPayload) { return api.post<BomItem>(`/basic-data/boms/${id}/items`, payload); }
+export function updateBomItem(bomId: number, id: number, payload: Partial<BomItemPayload>) { return api.put<BomItem>(`/basic-data/boms/${bomId}/items/${id}`, payload); }
+export function deleteBomItem(bomId: number, id: number) { return api.delete<void>(`/basic-data/boms/${bomId}/items/${id}`); }
 
 export function createEmployee(payload: EmployeePayload) {
     return api.post<Employee>('/basic-data/employees', payload);

@@ -68,6 +68,57 @@ export type DepartmentNode = {
     children: DepartmentNode[];
 };
 
+export type ProcessRoute = {
+    id: number;
+    code: string;
+    product_id: number;
+    version: string;
+    audit_status: 'draft' | 'pending' | 'approved';
+    audited_at: string | null;
+    remark: string | null;
+    status: boolean;
+    product?: { id: number; code: string; name: string };
+};
+
+export type RouteOperation = {
+    id: number;
+    route_id: number;
+    process_id: number;
+    sequence: number;
+    standard_hours: number;
+    parameters: string | null;
+    process?: {
+        id: number;
+        code: string;
+        name: string;
+        type: string;
+        requires_inspection: boolean;
+    };
+};
+
+export type Process = {
+    id: number;
+    code: string;
+    name: string;
+    type: string;
+    standard_hours: number;
+    requires_inspection: boolean;
+    description: string | null;
+    status: boolean;
+};
+
+export type Bom = {
+    id: number; code: string; product_version_id: number; version: string;
+    audit_status: 'draft' | 'pending' | 'approved'; audited_at: string | null;
+    remark: string | null; status: boolean;
+    product_version?: { id: number; version: string; product: { id: number; code: string; name: string } };
+};
+
+export type BomItem = {
+    id: number; bom_id: number; material_id: number; quantity: string; loss_rate: string;
+    material?: { id: number; code: string; name: string; unit: string };
+};
+
 export type CurrentUser = User & {
     permissions: string[];
     data_scope: 'all' | 'factory' | 'line' | 'none';
