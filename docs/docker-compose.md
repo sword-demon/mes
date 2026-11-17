@@ -2,6 +2,8 @@
 
 PHP 后端不进容器，由宿主机 Herd 运行；compose 只负责 MySQL、Redis、EMQX 与设备模拟发布器。
 
+生产服务器的编排、Nginx 与部署步骤见 [production-deployment.md](production-deployment.md)。
+
 ## 端口
 
 | 服务 | 容器内 | 宿主机 |

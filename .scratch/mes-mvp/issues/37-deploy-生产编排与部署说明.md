@@ -4,10 +4,10 @@
 
 **Blocked by:** 01, 34, 36
 
-**Status:** ready-for-agent
+**Status:** done
 
-- [ ] docker/docker-compose.prod.yml 部署中间件，PHP 应用由服务器 PHP-FPM 运行
-- [ ] 生产环境关闭 APP_DEBUG、不自动执行 Seeder、不挂载源码目录
-- [ ] 数据库数据卷与上传目录持久化
-- [ ] 服务器 Nginx 将 / 指向 React 静态资源、/api 指向 Laravel 应用，单域名部署
-- [ ] 部署文档包含环境变量清单、启动顺序、常见问题与端口开放建议
+- [x] docker/docker-compose.prod.yml 部署中间件，PHP 应用由服务器 PHP-FPM 运行
+- [x] 生产环境关闭 APP_DEBUG、不自动执行 Seeder、不挂载源码目录
+- [x] 数据库数据卷与上传目录持久化
+- [x] 服务器 Nginx 将 / 指向 React 静态资源、/api 指向 Laravel 应用，单域名部署
+- [x] 部署文档包含环境变量清单、启动顺序、常见问题与端口开放建议

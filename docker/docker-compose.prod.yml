@@ -1,0 +1,62 @@
+name: mes-prod
+
+# 生产环境只编排中间件；Laravel 由服务器 PHP-FPM 运行，Nginx 回源到本机应用。
+services:
+  mysql:
+    image: mysql:8.4
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:${DB_PORT:-13307}:3306"
+    environment:
+      MYSQL_DATABASE: "${DB_DATABASE:-mes}"
+      MYSQL_USER: "${DB_USERNAME:-mes}"
+      MYSQL_PASSWORD: "${DB_PASSWORD:?请在 .env 中设置 DB_PASSWORD}"
+      MYSQL_ROOT_PASSWORD: "${MYSQL_ROOT_PASSWORD:?请在 .env 中设置 MYSQL_ROOT_PASSWORD}"
+    volumes:
+      - mysql-data:/var/lib/mysql
+      - ./mysql/my.cnf:/etc/mysql/conf.d/my.cnf:ro
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -uroot -p\"$$MYSQL_ROOT_PASSWORD\" --silent"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 20s
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    ports:
+      - "127.0.0.1:${REDIS_PORT:-16379}:6379"
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  emqx:
+    image: emqx/emqx:5.8
+    restart: unless-stopped
+    ports:
+      - "${MQTT_BIND:-127.0.0.1}:${MQTT_PORT:-11883}:1883"
+      - "127.0.0.1:${EMQX_DASHBOARD_HOST_PORT:-18083}:18083"
+    environment:
+      EMQX_DASHBOARD__DEFAULT_PASSWORD: "${EMQX_DASHBOARD_PASSWORD:?请在 .env 中设置 EMQX_DASHBOARD_PASSWORD}"
+      EMQX_LOG__CONSOLE__LEVEL: warning
+    volumes:
+      - emqx-data:/opt/emqx/data
+      - emqx-log:/opt/emqx/log
+    healthcheck:
+      test: ["CMD-SHELL", "emqx ctl status >/dev/null 2>&1"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 20s
+
+volumes:
+  mysql-data:
+  redis-data:
+  emqx-data:
+  emqx-log:

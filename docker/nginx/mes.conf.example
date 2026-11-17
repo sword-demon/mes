@@ -1,0 +1,46 @@
+server {
+    listen 80;
+    server_name mes.example.com;
+
+    root /var/www/mes/frontend/web/dist;
+    index index.html;
+    client_max_body_size 20m;
+
+    location / {
+        try_files $uri $uri/ /index.html;
+    }
+
+    location /api/ {
+        root /var/www/mes/public;
+        try_files $uri $uri/ /index.php?$query_string;
+    }
+
+    location ^~ /api-docs {
+        root /var/www/mes/public;
+        try_files $uri /index.php?$query_string;
+    }
+
+    location = /index.php {
+        include fastcgi_params;
+        fastcgi_param SCRIPT_FILENAME /var/www/mes/public/index.php;
+        fastcgi_param DOCUMENT_ROOT /var/www/mes/public;
+        fastcgi_pass unix:/run/php/php8.4-fpm.sock;
+        fastcgi_read_timeout 60s;
+    }
+
+    location = /up {
+        include fastcgi_params;
+        fastcgi_param SCRIPT_FILENAME /var/www/mes/public/index.php;
+        fastcgi_param DOCUMENT_ROOT /var/www/mes/public;
+        fastcgi_pass unix:/run/php/php8.4-fpm.sock;
+    }
+
+    location ^~ /storage/ {
+        alias /var/www/mes/storage/app/public/;
+        expires 7d;
+    }
+
+    location ~ /\.(?!well-known).* {
+        deny all;
+    }
+}
