@@ -9,6 +9,13 @@ test('business day boundaries are the shanghai day expressed in utc', function (
 
 test('the application stores timestamps in utc while business dates use shanghai time', function () {
     expect(config('app.timezone'))->toBe('UTC')
-        ->and(config('app.business_timezone'))->toBe('Asia/Shanghai')
-        ->and(BusinessDay::timezone())->toBe('Asia/Shanghai');
+        ->and(BusinessDay::timezone())->toBe(config('app.business_timezone'));
+});
+
+test('a malformed date filter is rejected instead of failing the query', function () {
+    $actor = userWithPermissions(['material.requisitions.index']);
+
+    bearer($actor)->getJson('/api/v1/materials/requisitions?date_from=not-a-date')
+        ->assertUnprocessable()
+        ->assertJsonPath('code', 422);
 });

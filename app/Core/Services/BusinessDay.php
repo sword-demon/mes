@@ -2,7 +2,8 @@
 
 namespace App\Core\Services;
 
-use Illuminate\Support\Carbon;
+use Carbon\CarbonImmutable;
+use Illuminate\Validation\ValidationException;
 
 /**
  * Calendar-day boundaries for timestamps that are stored in UTC.
@@ -15,17 +16,17 @@ final class BusinessDay
     /**
      * Inclusive start of a business day, expressed in UTC.
      */
-    public static function startUtc(string $date): Carbon
+    public static function startUtc(string $date): CarbonImmutable
     {
-        return Carbon::parse($date, self::timezone())->startOfDay()->utc();
+        return CarbonImmutable::parse($date, self::timezone())->startOfDay()->utc();
     }
 
     /**
      * Exclusive end of a business day, expressed in UTC.
      */
-    public static function endUtc(string $date): Carbon
+    public static function endUtc(string $date): CarbonImmutable
     {
-        return Carbon::parse($date, self::timezone())->addDay()->startOfDay()->utc();
+        return CarbonImmutable::parse($date, self::timezone())->addDay()->startOfDay()->utc();
     }
 
     /**
@@ -33,6 +34,35 @@ final class BusinessDay
      */
     public static function timezone(): string
     {
-        return (string) config('app.business_timezone', 'Asia/Shanghai');
+        return (string) config('app.business_timezone');
+    }
+
+    /**
+     * Whether the value is a real calendar date.
+     */
+    public static function isDate(mixed $value): bool
+    {
+        return is_string($value) && CarbonImmutable::hasFormat($value, 'Y-m-d');
+    }
+
+    /**
+     * Read a date filter from the request.
+     *
+     * Non-string values are ignored so array-shaped filters stay tolerated,
+     * while malformed dates are rejected instead of failing mid-query.
+     *
+     * @throws ValidationException
+     */
+    public static function resolveDate(mixed $value, string $attribute): ?string
+    {
+        if (! is_string($value) || $value === '') {
+            return null;
+        }
+
+        if (! self::isDate($value)) {
+            throw ValidationException::withMessages([$attribute => '日期格式应为 Y-m-d']);
+        }
+
+        return $value;
     }
 }

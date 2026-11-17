@@ -1,7 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { DatePicker, Input, Select, Space, Table, Tag } from 'antd';
-import dayjs from 'dayjs';
 import type { Dayjs } from 'dayjs';
+import { businessTime } from '@/utils/datetime';
 import { useState } from 'react';
 import { listLoginLogs } from '@/api/system';
 import type { LoginLog } from '@/types/api';
@@ -80,7 +80,7 @@ export function LoginLogsPanel() {
                         title: '时间',
                         dataIndex: 'created_at',
                         width: 170,
-                        render: (value: string) => dayjs(value).format('YYYY-MM-DD HH:mm:ss'),
+                        render: (value: string) => businessTime(value).format('YYYY-MM-DD HH:mm:ss'),
                     },
                     { title: '账号', dataIndex: 'account' },
                     {

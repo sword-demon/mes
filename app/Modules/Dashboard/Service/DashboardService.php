@@ -28,8 +28,9 @@ class DashboardService
      */
     public function today(): array
     {
-        $start = now(BusinessDay::timezone())->startOfDay()->utc();
-        $end = $start->addDay();
+        $today = now(BusinessDay::timezone())->toDateString();
+        $start = BusinessDay::startUtc($today);
+        $end = BusinessDay::endUtc($today);
 
         $orders = ProductionOrder::query()
             ->where('created_at', '>=', $start)
@@ -50,7 +51,7 @@ class DashboardService
             ->first();
 
         return [
-            'date' => $start->setTimezone(BusinessDay::timezone())->toDateString(),
+            'date' => $today,
             'order_count' => (int) $orders->getAttribute('order_count'),
             'planned_quantity' => $this->decimal($orders->getAttribute('planned_quantity')),
             'produced_quantity' => $this->decimal($reports->getAttribute('produced_quantity')),
@@ -69,6 +70,7 @@ class DashboardService
     public function productionTrend(): array
     {
         [$start, $end] = $this->recentDaysRange();
+        $timezone = BusinessDay::timezone();
 
         $totals = [];
 
@@ -78,8 +80,8 @@ class DashboardService
             ->where('reported_at', '>=', $start->utc())
             ->where('reported_at', '<', $end->addDay()->utc())
             ->get(['reported_at', 'quantity'])
-            ->each(function (ProductionReport $report) use (&$totals): void {
-                $date = $report->reported_at->copy()->setTimezone(BusinessDay::timezone())->toDateString();
+            ->each(function (ProductionReport $report) use (&$totals, $timezone): void {
+                $date = $report->reported_at->copy()->setTimezone($timezone)->toDateString();
                 $totals[$date] = ($totals[$date] ?? 0) + (float) $report->quantity;
             });
 

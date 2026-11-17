@@ -14,8 +14,8 @@ import {
     Tag,
     Typography,
 } from 'antd';
-import dayjs from 'dayjs';
 import type { Dayjs } from 'dayjs';
+import { businessTime } from '@/utils/datetime';
 import { useState } from 'react';
 import Can from '@/components/can';
 import {
@@ -410,7 +410,7 @@ export default function ProductionReports() {
                         title: '报工时间',
                         width: 170,
                         render: (_, record) =>
-                            dayjs(record.reported_at).format('YYYY-MM-DD HH:mm'),
+                            businessTime(record.reported_at).format('YYYY-MM-DD HH:mm'),
                     },
                     {
                         title: '操作',

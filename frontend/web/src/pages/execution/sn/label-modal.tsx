@@ -1,5 +1,5 @@
 import { Button, Descriptions, Modal, Space, Typography } from 'antd';
-import dayjs from 'dayjs';
+import { businessTime } from '@/utils/datetime';
 import type { ProductSnLabel } from '@/api/production';
 
 export default function LabelModal({
@@ -41,7 +41,7 @@ export default function LabelModal({
                     <Descriptions.Item label="生产订单">{label.production_order}</Descriptions.Item>
                     <Descriptions.Item label="生产批次">{label.production_batch}</Descriptions.Item>
                     <Descriptions.Item label="生成时间">
-                        {dayjs(label.generated_at).format('YYYY-MM-DD HH:mm')}
+                        {businessTime(label.generated_at).format('YYYY-MM-DD HH:mm')}
                     </Descriptions.Item>
                 </Descriptions>
             </div>

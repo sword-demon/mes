@@ -35,18 +35,18 @@ class ProductionTaskController extends Controller
     {
         $query = ProductionTask::query()->with(self::RELATIONS);
         $status = $request->query('status');
-        $startDate = $request->query('start_date');
-        $endDate = $request->query('end_date');
+        $startDate = BusinessDay::resolveDate($request->query('start_date'), 'start_date');
+        $endDate = BusinessDay::resolveDate($request->query('end_date'), 'end_date');
 
         if ($status !== null && $status !== '') {
             $query->where('status', $status);
         }
 
-        if (is_string($startDate) && $startDate !== '') {
+        if ($startDate !== null) {
             $query->where('planned_start_at', '>=', BusinessDay::startUtc($startDate));
         }
 
-        if (is_string($endDate) && $endDate !== '') {
+        if ($endDate !== null) {
             $query->where('planned_start_at', '<', BusinessDay::endUtc($endDate));
         }
 

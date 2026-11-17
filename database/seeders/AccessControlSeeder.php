@@ -7,8 +7,5 @@ namespace Database\Seeders;
  */
 class AccessControlSeeder extends SystemSeeder
 {
-    protected function seedsDemoData(): bool
-    {
-        return false;
-    }
+    protected bool $seedsDemoData = false;
 }

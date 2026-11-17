@@ -33,10 +33,16 @@ function productionComposeProcess(array $env = []): Process
  */
 function productionComposeConfig(array $env = []): array
 {
-    $process = productionComposeProcess($env);
-    $process->mustRun();
+    static $cache = [];
+    $key = json_encode($env);
 
-    return json_decode($process->getOutput(), true, flags: JSON_THROW_ON_ERROR);
+    if (! isset($cache[$key])) {
+        $process = productionComposeProcess($env);
+        $process->mustRun();
+        $cache[$key] = json_decode($process->getOutput(), true, flags: JSON_THROW_ON_ERROR);
+    }
+
+    return $cache[$key];
 }
 
 test('production compose orchestrates only middleware', function () {

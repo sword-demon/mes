@@ -15,8 +15,8 @@ import {
     Tag,
     Typography,
 } from 'antd';
-import dayjs from 'dayjs';
 import type { Dayjs } from 'dayjs';
+import { businessTime } from '@/utils/datetime';
 import { useState } from 'react';
 import Can from '@/components/can';
 import { listEmployees, listProductionLines, listTeams } from '@/api/basic-data';
@@ -83,8 +83,8 @@ function SplitTaskModal({
 
                     if (order) {
                         form.setFieldsValue({
-                            planned_start_at: dayjs(order.planned_start_at),
-                            planned_end_at: order.planned_end_at ? dayjs(order.planned_end_at) : null,
+                            planned_start_at: businessTime(order.planned_start_at),
+                            planned_end_at: order.planned_end_at ? businessTime(order.planned_end_at) : null,
                         });
                     }
                 }}
@@ -431,9 +431,9 @@ export default function ProductionTasks() {
                         title: '计划时间',
                         width: 190,
                         render: (_, record) =>
-                            `${dayjs(record.planned_start_at).format('YYYY-MM-DD HH:mm')}${
+                            `${businessTime(record.planned_start_at).format('YYYY-MM-DD HH:mm')}${
                                 record.planned_end_at
-                                    ? ` ~ ${dayjs(record.planned_end_at).format('MM-DD HH:mm')}`
+                                    ? ` ~ ${businessTime(record.planned_end_at).format('MM-DD HH:mm')}`
                                     : ''
                             }`,
                     },

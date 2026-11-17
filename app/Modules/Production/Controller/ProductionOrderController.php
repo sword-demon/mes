@@ -32,11 +32,14 @@ class ProductionOrderController extends Controller
 
     public function index(Request $request): JsonResponse
     {
+        $startDate = BusinessDay::resolveDate($request->query('start_date'), 'start_date');
+        $endDate = BusinessDay::resolveDate($request->query('end_date'), 'end_date');
+
         $query = ProductionOrder::query()
             ->with(self::RELATIONS)
             ->when($request->query('status'), fn (Builder $query, string $status) => $query->where('status', $status))
-            ->when($request->query('start_date'), fn (Builder $query, string $date) => $query->where('planned_start_at', '>=', BusinessDay::startUtc($date)))
-            ->when($request->query('end_date'), fn (Builder $query, string $date) => $query->where('planned_start_at', '<', BusinessDay::endUtc($date)));
+            ->when($startDate !== null, fn (Builder $query) => $query->where('planned_start_at', '>=', BusinessDay::startUtc($startDate)))
+            ->when($endDate !== null, fn (Builder $query) => $query->where('planned_start_at', '<', BusinessDay::endUtc($endDate)));
 
         return ApiResponse::paginated(
             $this->entities->paginateQuery(

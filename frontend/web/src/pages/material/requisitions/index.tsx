@@ -14,8 +14,8 @@ import {
     Tag,
     Typography,
 } from 'antd';
-import dayjs from 'dayjs';
 import type { Dayjs } from 'dayjs';
+import { businessTime } from '@/utils/datetime';
 import { useState } from 'react';
 import Can from '@/components/can';
 import { getInventoryOptions, listInventory } from '@/api/inventory';
@@ -232,7 +232,7 @@ export default function MaterialRequisitions() {
                     { title: '生产订单', render: (_, record) => record.production_order?.code },
                     { title: '物料', render: (_, record) => record.items.map((item) => `${item.material?.code} ${item.requested_quantity}`).join('、') },
                     { title: '状态', dataIndex: 'status', render: (status) => <Tag color={status === 'issued' ? 'green' : 'gold'}>{status === 'issued' ? '已发料' : '待发料'}</Tag> },
-                    { title: '创建时间', dataIndex: 'created_at', render: (value) => dayjs(value).format('YYYY-MM-DD HH:mm') },
+                    { title: '创建时间', dataIndex: 'created_at', render: (value) => businessTime(value).format('YYYY-MM-DD HH:mm') },
                     {
                         title: '操作',
                         render: (_, record) => record.status === 'pending' && can(user, 'button.material.requisitions.issue') && (

@@ -16,8 +16,8 @@ import {
     Typography,
 } from 'antd';
 import type { FormInstance } from 'antd';
-import dayjs from 'dayjs';
 import type { Dayjs } from 'dayjs';
+import { businessTime } from '@/utils/datetime';
 import { useState } from 'react';
 import Can from '@/components/can';
 import { getInventoryOptions } from '@/api/inventory';
@@ -270,7 +270,7 @@ export default function MaterialReturns() {
                     { title: '原领料单', render: (_, record) => record.requisition?.code },
                     { title: '物料', render: (_, record) => record.items.map((item) => `${item.material?.code} ${item.quantity}`).join('、') },
                     { title: '状态', dataIndex: 'status', render: (_, record) => <Tag color={record.status === 'approved' ? 'green' : record.status === 'cancelled' ? 'default' : 'gold'}>{record.status_label}</Tag> },
-                    { title: '创建时间', dataIndex: 'created_at', render: (value) => dayjs(value).format('YYYY-MM-DD HH:mm') },
+                    { title: '创建时间', dataIndex: 'created_at', render: (value) => businessTime(value).format('YYYY-MM-DD HH:mm') },
                     {
                         title: '操作',
                         render: (_, record) => (

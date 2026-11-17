@@ -37,7 +37,7 @@ class InspectionTaskController extends Controller
         $startDate = $request->query('start_date');
         $endDate = $request->query('end_date');
         $keyword = $request->query('keyword');
-        $isDate = static fn (mixed $value): bool => is_string($value) && preg_match('/^\d{4}-\d{2}-\d{2}$/', $value) === 1;
+        $isDate = static fn (mixed $value): bool => BusinessDay::isDate($value);
 
         $query
             ->when(is_string($orderId) && $orderId !== '', fn (Builder $query) => $query->where('production_order_id', $orderId))
@@ -47,16 +47,18 @@ class InspectionTaskController extends Controller
             ->when($judged === true, fn (Builder $query) => $query->whereNotNull('result'))
             ->when(is_string($operationId) && $operationId !== '', fn (Builder $query) => $query->where('route_operation_id', $operationId))
             ->when($isDate($startDate), fn (Builder $query) => $query->where(function (Builder $inner) use ($startDate): void {
-                $inner->where('inspected_at', '>=', BusinessDay::startUtc($startDate))
+                $start = BusinessDay::startUtc($startDate);
+                $inner->where('inspected_at', '>=', $start)
                     ->orWhere(fn (Builder $pending) => $pending
                         ->whereNull('inspected_at')
-                        ->where('created_at', '>=', BusinessDay::startUtc($startDate)));
+                        ->where('created_at', '>=', $start));
             }))
             ->when($isDate($endDate), fn (Builder $query) => $query->where(function (Builder $inner) use ($endDate): void {
-                $inner->where('inspected_at', '<', BusinessDay::endUtc($endDate))
+                $end = BusinessDay::endUtc($endDate);
+                $inner->where('inspected_at', '<', $end)
                     ->orWhere(fn (Builder $pending) => $pending
                         ->whereNull('inspected_at')
-                        ->where('created_at', '<', BusinessDay::endUtc($endDate)));
+                        ->where('created_at', '<', $end));
             }))
             ->when(is_string($keyword) && $keyword !== '', fn (Builder $query) => $query->whereHas(
                 'productionOrder',

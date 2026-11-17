@@ -1,6 +1,6 @@
 import { Tag } from 'antd';
 import type { TableProps } from 'antd';
-import dayjs from 'dayjs';
+import { businessTime } from '@/utils/datetime';
 import {
     EQUIPMENT_ALARM_LEVELS,
     EQUIPMENT_ALARM_STATUSES,
@@ -29,7 +29,7 @@ const formatQuantity = (value: string | number): string =>
     Number(value).toLocaleString('zh-CN', { maximumFractionDigits: 3 });
 
 const formatTime = (value: string | null | undefined): string =>
-    value ? dayjs(value).format('MM-DD HH:mm') : '-';
+    value ? businessTime(value).format('MM-DD HH:mm') : '-';
 
 export const orderColumns: TableProps<ProductionOrder>['columns'] = [
     { title: '订单编号', dataIndex: 'code', width: 160 },

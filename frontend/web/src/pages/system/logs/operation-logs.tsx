@@ -1,7 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { DatePicker, Select, Space, Table, Tag, Typography } from 'antd';
-import dayjs from 'dayjs';
 import type { Dayjs } from 'dayjs';
+import { businessTime } from '@/utils/datetime';
 import { useState } from 'react';
 import { getOperationLogOptions, listOperationLogs } from '@/api/system';
 import type { OperationLog } from '@/types/api';
@@ -113,7 +113,7 @@ export function OperationLogsPanel() {
                         title: '时间',
                         dataIndex: 'created_at',
                         width: 170,
-                        render: (value: string) => dayjs(value).format('YYYY-MM-DD HH:mm:ss'),
+                        render: (value: string) => businessTime(value).format('YYYY-MM-DD HH:mm:ss'),
                     },
                     { title: '操作人', dataIndex: 'user_name', width: 110 },
                     {

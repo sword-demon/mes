@@ -14,8 +14,8 @@ import {
     Tag,
     Typography,
 } from 'antd';
-import dayjs from 'dayjs';
 import type { Dayjs } from 'dayjs';
+import { businessTime } from '@/utils/datetime';
 import { useState } from 'react';
 import Can from '@/components/can';
 import { listProductionLines } from '@/api/basic-data';
@@ -88,8 +88,8 @@ function OrderFormModal({
             ? {
                   ...editing.record,
                   planned_quantity: Number(editing.record.planned_quantity),
-                  planned_start_at: dayjs(editing.record.planned_start_at),
-                  planned_end_at: editing.record.planned_end_at ? dayjs(editing.record.planned_end_at) : null,
+                  planned_start_at: businessTime(editing.record.planned_start_at),
+                  planned_end_at: editing.record.planned_end_at ? businessTime(editing.record.planned_end_at) : null,
               }
             : { planned_quantity: 1 };
 
@@ -424,7 +424,7 @@ export default function ProductionOrders() {
                     {
                         title: '计划时间',
                         width: 150,
-                        render: (_, record) => dayjs(record.planned_start_at).format('YYYY-MM-DD HH:mm'),
+                        render: (_, record) => businessTime(record.planned_start_at).format('YYYY-MM-DD HH:mm'),
                     },
                     {
                         title: '操作',

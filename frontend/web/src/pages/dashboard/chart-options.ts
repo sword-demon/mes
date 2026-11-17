@@ -1,4 +1,4 @@
-import dayjs from 'dayjs';
+import { businessTime } from '@/utils/datetime';
 import type { EChartsOption } from 'echarts';
 import type {
     DashboardEquipmentStatus,
@@ -24,7 +24,7 @@ export function trendOption(data: DashboardTrend): EChartsOption {
         xAxis: {
             type: 'category',
             boundaryGap: false,
-            data: data.items.map((item) => dayjs(item.date).format('MM-DD')),
+            data: data.items.map((item) => businessTime(item.date).format('MM-DD')),
         },
         yAxis: { type: 'value', name: '数量' },
         series: [{

@@ -13,7 +13,7 @@ import {
     Tag,
     Typography,
 } from 'antd';
-import dayjs from 'dayjs';
+import { businessTime } from '@/utils/datetime';
 import { useState } from 'react';
 import Can from '@/components/can';
 import {
@@ -166,7 +166,7 @@ export default function ProductVersionsDrawer({
                                 </Descriptions.Item>
                                 <Descriptions.Item label="备注">{active.remark ?? '-'}</Descriptions.Item>
                                 <Descriptions.Item label="创建时间">
-                                    {dayjs(active.created_at).format('YYYY-MM-DD HH:mm')}
+                                    {businessTime(active.created_at).format('YYYY-MM-DD HH:mm')}
                                 </Descriptions.Item>
                             </Descriptions>
                             <Can code="button.basic.products.update">

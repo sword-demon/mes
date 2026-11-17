@@ -1,6 +1,6 @@
 import { App, Button, Descriptions, Drawer, Image, Space, Table, Tag, Typography, Upload } from 'antd';
 import type { RcFile } from 'antd/es/upload/interface';
-import dayjs from 'dayjs';
+import { businessTime } from '@/utils/datetime';
 import Can from '@/components/can';
 import type { InspectionTask } from '@/api/quality';
 import { operationLabel } from './label';
@@ -47,7 +47,7 @@ export default function InspectionDetailDrawer({
                         </Descriptions.Item>
                         <Descriptions.Item label="检验员">{task.inspector?.name ?? '—'}</Descriptions.Item>
                         <Descriptions.Item label="检验时间">
-                            {task.inspected_at ? dayjs(task.inspected_at).format('YYYY-MM-DD HH:mm') : '—'}
+                            {task.inspected_at ? businessTime(task.inspected_at).format('YYYY-MM-DD HH:mm') : '—'}
                         </Descriptions.Item>
                         <Descriptions.Item label="备注" span={2}>{task.remark ?? '—'}</Descriptions.Item>
                     </Descriptions>

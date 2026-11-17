@@ -14,8 +14,8 @@ import {
     Tag,
     Typography,
 } from 'antd';
-import dayjs from 'dayjs';
 import type { Dayjs } from 'dayjs';
+import { businessTime } from '@/utils/datetime';
 import type { EChartsOption } from 'echarts';
 import { useEffect, useState } from 'react';
 import {
@@ -43,7 +43,7 @@ const statusColor = Object.fromEntries(
 );
 
 function defaultRange(): [Dayjs, Dayjs] {
-    return [dayjs().subtract(6, 'hour'), dayjs()];
+    return [businessTime().subtract(6, 'hour'), businessTime()];
 }
 
 function formatMetric(value: number | null | undefined, unit: string): string {
@@ -95,7 +95,7 @@ function MetricDescriptions({ latest }: { latest: EquipmentMetric | null }) {
             <Descriptions.Item label="累计产量">{formatMetric(latest.output, '件')}</Descriptions.Item>
             <Descriptions.Item label="运行时间">{formatRuntime(latest.runtime_seconds)}</Descriptions.Item>
             <Descriptions.Item label="采样时间">
-                {dayjs(latest.recorded_at).format('MM-DD HH:mm:ss')}
+                {businessTime(latest.recorded_at).format('MM-DD HH:mm:ss')}
             </Descriptions.Item>
         </Descriptions>
     );
@@ -187,7 +187,7 @@ export default function EquipmentMonitor() {
     }
 
     const samples = history.data?.items ?? [];
-    const now = dayjs();
+    const now = businessTime();
 
     return (
         <Space orientation="vertical" size="middle" className="w-full">

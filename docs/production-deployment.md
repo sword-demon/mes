@@ -122,7 +122,7 @@ npm run build
 cd ../..
 ```
 
-构建产物位于 `frontend/web/dist`，Nginx 的 `/` 直接指向该目录。
+构建产物位于 `frontend/web/dist`，Nginx 的 `/` 直接指向该目录。前端日期按业务时区（默认 `Asia/Shanghai`）渲染，如需覆盖，在构建前提供 `VITE_BUSINESS_TIMEZONE` 环境变量，它应与后端的 `APP_BUSINESS_TIMEZONE` 保持一致。
 
 ### 4.5 目录权限与配置缓存
 

@@ -13,8 +13,8 @@ import {
     Tag,
     Typography,
 } from 'antd';
-import dayjs from 'dayjs';
 import type { Dayjs } from 'dayjs';
+import { businessTime } from '@/utils/datetime';
 import { useState } from 'react';
 import Can from '@/components/can';
 import {
@@ -250,7 +250,7 @@ export default function EquipmentAlarmsPage() {
                     {
                         title: '触发时间',
                         width: 170,
-                        render: (_, alarm) => dayjs(alarm.triggered_at).format('YYYY-MM-DD HH:mm'),
+                        render: (_, alarm) => businessTime(alarm.triggered_at).format('YYYY-MM-DD HH:mm'),
                     },
                     {
                         title: '处理人 / 说明',
@@ -258,7 +258,7 @@ export default function EquipmentAlarmsPage() {
                         render: (_, alarm) => alarm.handled_by ? (
                             <Space orientation="vertical" size={0}>
                                 <Typography.Text>
-                                    {alarm.handled_by.name} / {dayjs(alarm.handled_at).format('YYYY-MM-DD HH:mm')}
+                                    {alarm.handled_by.name} / {businessTime(alarm.handled_at).format('YYYY-MM-DD HH:mm')}
                                 </Typography.Text>
                                 <Typography.Text type="secondary">{alarm.handling_note ?? '—'}</Typography.Text>
                             </Space>

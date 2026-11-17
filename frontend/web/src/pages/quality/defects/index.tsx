@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { App, Button, Empty, Select, Space, Table, Tag, Typography } from 'antd';
-import dayjs from 'dayjs';
+import { businessTime } from '@/utils/datetime';
 import { useState } from 'react';
 import Can from '@/components/can';
 import {
@@ -152,7 +152,7 @@ export default function DefectsPage() {
                             {defect.scrap_reason && (
                                 <Typography.Text>
                                     报废：{defect.scrap_reason}，数量 {defect.scrap_quantity}
-                                    {defect.scrapped_at && `（${dayjs(defect.scrapped_at).format('YYYY-MM-DD HH:mm')}）`}
+                                    {defect.scrapped_at && `（${businessTime(defect.scrapped_at).format('YYYY-MM-DD HH:mm')}）`}
                                 </Typography.Text>
                             )}
                             <Table
@@ -211,7 +211,7 @@ export default function DefectsPage() {
                     { title: '处理人', render: (_, defect) => defect.handled_by?.name ?? '—' },
                     {
                         title: '登记时间',
-                        render: (_, defect) => dayjs(defect.created_at).format('YYYY-MM-DD HH:mm'),
+                        render: (_, defect) => businessTime(defect.created_at).format('YYYY-MM-DD HH:mm'),
                     },
                     {
                         title: '操作',

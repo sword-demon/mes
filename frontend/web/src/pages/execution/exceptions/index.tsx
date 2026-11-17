@@ -14,8 +14,8 @@ import {
     Tag,
     Typography,
 } from 'antd';
-import dayjs from 'dayjs';
 import type { Dayjs } from 'dayjs';
+import { businessTime } from '@/utils/datetime';
 import { useState } from 'react';
 import Can from '@/components/can';
 import { useDebouncedValue } from '@/hooks/use-debounced-value';
@@ -308,7 +308,7 @@ export default function ProductionExceptionsPage() {
                             <Space orientation="vertical" size={0}>
                                 <Typography.Text>{exception.reporter?.name ?? '—'}</Typography.Text>
                                 <Typography.Text type="secondary">
-                                    {dayjs(exception.reported_at).format('YYYY-MM-DD HH:mm')}
+                                    {businessTime(exception.reported_at).format('YYYY-MM-DD HH:mm')}
                                 </Typography.Text>
                             </Space>
                         ),
@@ -319,7 +319,7 @@ export default function ProductionExceptionsPage() {
                         render: (_, exception) => exception.handler ? (
                             <Space orientation="vertical" size={0}>
                                 <Typography.Text>
-                                    {exception.handler.name} / {dayjs(exception.handled_at).format('YYYY-MM-DD HH:mm')}
+                                    {exception.handler.name} / {businessTime(exception.handled_at).format('YYYY-MM-DD HH:mm')}
                                 </Typography.Text>
                                 <Typography.Text
                                     type="secondary"

@@ -8,6 +8,7 @@ use Database\Seeders\AccessControlSeeder;
 use Illuminate\Console\Attributes\Description;
 use Illuminate\Console\Attributes\Signature;
 use Illuminate\Console\Command;
+use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Str;
@@ -44,13 +45,11 @@ class CreateAdmin extends Command
             return self::INVALID;
         }
 
-        $this->call('db:seed', [
+        if ($this->call('db:seed', [
             '--class' => AccessControlSeeder::class,
             '--force' => true,
-        ]);
-
-        if (User::query()->where('email', $email)->exists()) {
-            $this->error("用户 {$email} 已存在");
+        ]) !== self::SUCCESS) {
+            $this->error('RBAC 元数据初始化失败');
 
             return self::FAILURE;
         }
@@ -60,18 +59,24 @@ class CreateAdmin extends Command
 
         $role = Role::query()->where('code', Role::SUPER_ADMIN)->firstOrFail();
 
-        DB::transaction(function () use ($email, $name, $password, $role): void {
-            $user = User::query()->create([
-                'username' => Str::before($email, '@'),
-                'name' => $name,
-                'email' => $email,
-                'position' => '系统管理员',
-                'password' => $password,
-                'status' => true,
-            ]);
+        try {
+            DB::transaction(function () use ($email, $name, $password, $role): void {
+                $user = User::query()->create([
+                    'username' => Str::before($email, '@'),
+                    'name' => $name,
+                    'email' => $email,
+                    'position' => '系统管理员',
+                    'password' => $password,
+                    'status' => true,
+                ]);
 
-            $user->roles()->attach($role);
-        });
+                $user->roles()->attach($role);
+            });
+        } catch (UniqueConstraintViolationException) {
+            $this->error("用户 {$email} 已存在");
+
+            return self::FAILURE;
+        }
 
         $this->info("超级管理员已创建：{$email}");
 

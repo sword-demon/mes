@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { App, Button, Empty, Select, Space, Table, Tag, Typography } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
-import dayjs from 'dayjs';
+import { businessTime } from '@/utils/datetime';
 import { useState } from 'react';
 import { useDebouncedValue } from '@/hooks/use-debounced-value';
 import {
@@ -82,13 +82,13 @@ export default function InventoryAlertsPage() {
             title: '处理人 / 时间',
             width: 190,
             render: (_, alert) => alert.handled_by
-                ? `${alert.handled_by.name} / ${dayjs(alert.handled_at).format('YYYY-MM-DD HH:mm')}`
+                ? `${alert.handled_by.name} / ${businessTime(alert.handled_at).format('YYYY-MM-DD HH:mm')}`
                 : '—',
         },
         {
             title: '预警时间',
             width: 170,
-            render: (_, alert) => dayjs(alert.created_at).format('YYYY-MM-DD HH:mm'),
+            render: (_, alert) => businessTime(alert.created_at).format('YYYY-MM-DD HH:mm'),
         },
         {
             title: '操作',

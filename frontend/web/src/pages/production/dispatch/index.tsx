@@ -13,8 +13,8 @@ import {
     Tag,
     Typography,
 } from 'antd';
-import dayjs from 'dayjs';
 import type { Dayjs } from 'dayjs';
+import { businessTime } from '@/utils/datetime';
 import { useState } from 'react';
 import Can from '@/components/can';
 import { listEmployees, listTeams } from '@/api/basic-data';
@@ -100,7 +100,7 @@ function DispatchTable({
                     title: '派工时间',
                     width: 170,
                     render: (_, record) =>
-                        dayjs(record.dispatched_at).format('YYYY-MM-DD HH:mm'),
+                        businessTime(record.dispatched_at).format('YYYY-MM-DD HH:mm'),
                 },
                 {
                     title: '任务状态',
@@ -167,7 +167,7 @@ function CreateDispatchModal({
             <Form
                 form={form}
                 layout="vertical"
-                initialValues={{ dispatched_at: dayjs() }}
+                initialValues={{ dispatched_at: businessTime() }}
                 onValuesChange={(changed) => {
                     if ('production_task_id' in changed) {
                         form.setFieldValue('route_operation_id', undefined);

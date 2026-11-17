@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { App, Button, Empty, Input, Select, Space, Table, Tabs, Tag, Typography } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
-import dayjs from 'dayjs';
+import { businessTime } from '@/utils/datetime';
 import { useState } from 'react';
 import Can from '@/components/can';
 import {
@@ -153,7 +153,7 @@ export default function InventoryPage({ mode = 'stock' }: { mode?: InventoryPage
         {
             title: '更新时间',
             width: 170,
-            render: (_, record) => dayjs(record.updated_at).format('YYYY-MM-DD HH:mm'),
+            render: (_, record) => businessTime(record.updated_at).format('YYYY-MM-DD HH:mm'),
         },
         {
             title: '操作',
@@ -184,7 +184,7 @@ export default function InventoryPage({ mode = 'stock' }: { mode?: InventoryPage
         {
             title: '时间',
             width: 170,
-            render: (_, record) => dayjs(record.created_at).format('YYYY-MM-DD HH:mm'),
+            render: (_, record) => businessTime(record.created_at).format('YYYY-MM-DD HH:mm'),
         },
         {
             title: '物料',

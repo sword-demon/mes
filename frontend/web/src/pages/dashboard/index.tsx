@@ -8,7 +8,7 @@ import {
     ThunderboltOutlined,
 } from '@ant-design/icons';
 import { Alert, Col, Row, Space, Typography } from 'antd';
-import dayjs from 'dayjs';
+import { businessTime } from '@/utils/datetime';
 import {
     getDashboardEquipmentStatus,
     getDashboardLineComparison,
@@ -128,7 +128,7 @@ export default function Dashboard() {
                     <Typography.Title level={4} className="mb-0!">生产数据总览</Typography.Title>
                     <Typography.Text type="secondary">
                         {statistics.date
-                            ? `${dayjs(statistics.date).format('YYYY年MM月DD日')} 生产概况与最新动态`
+                            ? `${businessTime(statistics.date).format('YYYY年MM月DD日')} 生产概况与最新动态`
                             : '今日生产概况与最新动态'}
                     </Typography.Text>
                 </div>

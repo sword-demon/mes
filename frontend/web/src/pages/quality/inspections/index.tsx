@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { App, Button, DatePicker, Empty, Select, Space, Table, Tag, Typography } from 'antd';
-import dayjs from 'dayjs';
 import type { Dayjs } from 'dayjs';
+import { businessTime } from '@/utils/datetime';
 import { useState } from 'react';
 import Can from '@/components/can';
 import { useDebouncedValue } from '@/hooks/use-debounced-value';
@@ -240,7 +240,7 @@ export default function InspectionsPage({ recordsOnly = false }: { recordsOnly?:
                     {
                         title: '检验时间',
                         render: (_, task) => task.inspected_at
-                            ? dayjs(task.inspected_at).format('YYYY-MM-DD HH:mm')
+                            ? businessTime(task.inspected_at).format('YYYY-MM-DD HH:mm')
                             : '—',
                     },
                     {

@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { App, Button, Input, Select, Space, Table, Tag, Typography } from 'antd';
-import dayjs from 'dayjs';
+import { businessTime } from '@/utils/datetime';
 import { useState } from 'react';
 import Can from '@/components/can';
 import {
@@ -205,7 +205,7 @@ export default function ProductSnPage() {
                         width: 160,
                         render: (_, record) =>
                             record.printed_at
-                                ? dayjs(record.printed_at).format('YYYY-MM-DD HH:mm')
+                                ? businessTime(record.printed_at).format('YYYY-MM-DD HH:mm')
                                 : '未打印',
                     },
                     {

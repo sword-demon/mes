@@ -26,8 +26,8 @@ class MaterialReturnController extends Controller
     public function index(Request $request): JsonResponse
     {
         $materialId = $request->query('material_id');
-        $dateFrom = $request->query('date_from');
-        $dateTo = $request->query('date_to');
+        $dateFrom = BusinessDay::resolveDate($request->query('date_from'), 'date_from');
+        $dateTo = BusinessDay::resolveDate($request->query('date_to'), 'date_to');
 
         $query = MaterialReturn::query()
             ->with(['productionOrder', 'requisition', 'items.requisitionItem.material', 'approvedBy'])
@@ -36,8 +36,8 @@ class MaterialReturnController extends Controller
                 'items.requisitionItem',
                 fn (Builder $items) => $items->where('material_id', $materialId),
             ))
-            ->when(is_string($dateFrom) && $dateFrom !== '', fn (Builder $query) => $query->where('created_at', '>=', BusinessDay::startUtc($dateFrom)))
-            ->when(is_string($dateTo) && $dateTo !== '', fn (Builder $query) => $query->where('created_at', '<', BusinessDay::endUtc($dateTo)));
+            ->when($dateFrom !== null, fn (Builder $query) => $query->where('created_at', '>=', BusinessDay::startUtc($dateFrom)))
+            ->when($dateTo !== null, fn (Builder $query) => $query->where('created_at', '<', BusinessDay::endUtc($dateTo)));
 
         return ApiResponse::paginated(
             $this->entities->paginateQuery(

@@ -35,8 +35,8 @@ class ProductionDispatchController extends Controller
     public function index(Request $request): JsonResponse
     {
         $orderId = $request->query('production_order_id');
-        $startDate = $request->query('start_date');
-        $endDate = $request->query('end_date');
+        $startDate = BusinessDay::resolveDate($request->query('start_date'), 'start_date');
+        $endDate = BusinessDay::resolveDate($request->query('end_date'), 'end_date');
         $keyword = $request->query('keyword');
 
         $query = ProductionDispatch::query()
@@ -49,11 +49,11 @@ class ProductionDispatchController extends Controller
                 ),
             )
             ->when(
-                is_string($startDate) && $startDate !== '',
+                $startDate !== null,
                 fn (Builder $query) => $query->where('dispatched_at', '>=', BusinessDay::startUtc($startDate)),
             )
             ->when(
-                is_string($endDate) && $endDate !== '',
+                $endDate !== null,
                 fn (Builder $query) => $query->where('dispatched_at', '<', BusinessDay::endUtc($endDate)),
             )
             ->when(is_string($keyword) && $keyword !== '', function (Builder $query) use ($keyword): void {

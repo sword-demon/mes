@@ -12,7 +12,7 @@ import {
     Tag,
     Typography,
 } from 'antd';
-import dayjs from 'dayjs';
+import { businessTime } from '@/utils/datetime';
 import { useState } from 'react';
 import { useSearchParams } from 'react-router';
 import { getBackwardTrace } from '@/api/traceability';
@@ -26,7 +26,7 @@ import { ApiRequestError } from '@/utils/api-error';
 import { can } from '@/utils/permission';
 
 const formatTime = (value: string | null | undefined): string =>
-    value ? dayjs(value).format('YYYY-MM-DD HH:mm:ss') : '-';
+    value ? businessTime(value).format('YYYY-MM-DD HH:mm:ss') : '-';
 
 export default function BackwardTracePage() {
     const [searchParams, setSearchParams] = useSearchParams();

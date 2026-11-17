@@ -14,7 +14,7 @@ import {
     Timeline,
     Typography,
 } from 'antd';
-import dayjs from 'dayjs';
+import { businessTime } from '@/utils/datetime';
 import { useState } from 'react';
 import { useSearchParams } from 'react-router';
 import { getForwardTrace } from '@/api/traceability';
@@ -29,7 +29,7 @@ import type { DefectiveProduct, InspectionTask } from '@/api/quality';
 import { ApiRequestError } from '@/utils/api-error';
 
 const formatTime = (value: string | null | undefined): string =>
-    value ? dayjs(value).format('YYYY-MM-DD HH:mm:ss') : '-';
+    value ? businessTime(value).format('YYYY-MM-DD HH:mm:ss') : '-';
 
 const processStatusColor: Record<string, string> = {
     pending: 'default',

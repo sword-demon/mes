@@ -1,5 +1,5 @@
 import { Descriptions, Drawer, Space, Table, Tag, Typography } from 'antd';
-import dayjs from 'dayjs';
+import { businessTime } from '@/utils/datetime';
 import type { ProductSn } from '@/api/production';
 import { snStatusColor } from './status-color';
 
@@ -77,7 +77,7 @@ export default function DetailDrawer({
                                     width: 150,
                                     render: (_, record) =>
                                         record.started_at
-                                            ? dayjs(record.started_at).format('MM-DD HH:mm')
+                                            ? businessTime(record.started_at).format('MM-DD HH:mm')
                                             : '-',
                                 },
                             ]}
