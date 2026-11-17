@@ -3,6 +3,7 @@
 namespace App\Modules\Production\Model;
 
 use App\Core\Exceptions\ApiException;
+use App\Core\Models\Concerns\HasStatusLabels;
 use App\Modules\Organization\Model\Employee;
 use App\Modules\Organization\Model\ProductionLine;
 use App\Modules\Organization\Model\Team;
@@ -54,7 +55,7 @@ use Illuminate\Support\Carbon;
 class ProductionTask extends Model
 {
     /** @use HasFactory<ProductionTaskFactory> */
-    use HasFactory;
+    use HasFactory, HasStatusLabels;
 
     public const string PENDING = 'pending';
 
@@ -95,11 +96,6 @@ class ProductionTask extends Model
         'qualified_quantity' => 0,
         'defective_quantity' => 0,
     ];
-
-    public function statusLabel(): string
-    {
-        return self::STATUS_LABELS[$this->status] ?? $this->status;
-    }
 
     /**
      * Derived from reported quantities so every report automatically moves the

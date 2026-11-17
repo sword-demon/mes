@@ -2,8 +2,8 @@
 
 namespace App\Modules\Organization\Resource;
 
+use App\Core\Resources\Concerns\ProjectsNamedRef;
 use App\Modules\Organization\Model\Employee;
-use App\Modules\Organization\Resource\Concerns\ProjectsNamedRef;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 

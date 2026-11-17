@@ -2,7 +2,7 @@
 
 namespace App\Modules\Production\Resource;
 
-use App\Modules\Organization\Resource\Concerns\ProjectsNamedRef;
+use App\Core\Resources\Concerns\ProjectsNamedRef;
 use App\Modules\Production\Model\ProductionException;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;

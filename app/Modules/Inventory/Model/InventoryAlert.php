@@ -2,6 +2,7 @@
 
 namespace App\Modules\Inventory\Model;
 
+use App\Core\Models\Concerns\HasStatusLabels;
 use App\Modules\Material\Model\Material;
 use App\Modules\System\Model\User;
 use Database\Factories\InventoryAlertFactory;
@@ -32,7 +33,7 @@ use Illuminate\Support\Carbon;
 class InventoryAlert extends Model
 {
     /** @use HasFactory<InventoryAlertFactory> */
-    use HasFactory;
+    use HasFactory, HasStatusLabels;
 
     public const string PENDING = 'pending';
 
@@ -57,11 +58,6 @@ class InventoryAlert extends Model
     public function handledBy(): BelongsTo
     {
         return $this->belongsTo(User::class, 'handled_by_id');
-    }
-
-    public function statusLabel(): string
-    {
-        return self::STATUS_LABELS[$this->status] ?? $this->status;
     }
 
     protected static function booted(): void

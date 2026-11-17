@@ -2,6 +2,7 @@
 
 namespace App\Modules\Production\Model;
 
+use App\Core\Models\Concerns\HasStatusLabels;
 use App\Modules\Equipment\Model\Equipment;
 use App\Modules\Organization\Model\Employee;
 use Database\Factories\ProductSnFactory;
@@ -46,7 +47,7 @@ use Illuminate\Support\Carbon;
 class ProductSn extends Model
 {
     /** @use HasFactory<ProductSnFactory> */
-    use HasFactory;
+    use HasFactory, HasStatusLabels;
 
     public const string ACTIVE = 'active';
 
@@ -72,11 +73,6 @@ class ProductSn extends Model
     public function getRouteKeyName(): string
     {
         return 'sn';
-    }
-
-    public function statusLabel(): string
-    {
-        return self::STATUS_LABELS[$this->status] ?? $this->status;
     }
 
     public function isVoided(): bool

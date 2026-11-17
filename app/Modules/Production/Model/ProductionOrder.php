@@ -3,6 +3,7 @@
 namespace App\Modules\Production\Model;
 
 use App\Core\Exceptions\ApiException;
+use App\Core\Models\Concerns\HasStatusLabels;
 use App\Modules\Bom\Model\Bom;
 use App\Modules\Organization\Model\ProductionLine;
 use App\Modules\Process\Model\ProcessRoute;
@@ -58,7 +59,7 @@ use Illuminate\Support\Carbon;
 class ProductionOrder extends Model
 {
     /** @use HasFactory<ProductionOrderFactory> */
-    use HasFactory;
+    use HasFactory, HasStatusLabels;
 
     public const string DRAFT = 'draft';
 
@@ -118,11 +119,6 @@ class ProductionOrder extends Model
         'qualified_quantity' => 0,
         'defective_quantity' => 0,
     ];
-
-    public function statusLabel(): string
-    {
-        return self::STATUS_LABELS[$this->status] ?? $this->status;
-    }
 
     /**
      * Only a draft may still change; submitting locks the order.

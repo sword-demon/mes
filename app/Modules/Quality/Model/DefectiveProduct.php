@@ -2,6 +2,7 @@
 
 namespace App\Modules\Quality\Model;
 
+use App\Core\Models\Concerns\HasStatusLabels;
 use App\Modules\Process\Model\RouteOperation;
 use App\Modules\Production\Model\ProductionBatch;
 use App\Modules\Production\Model\ProductionOrder;
@@ -50,7 +51,7 @@ use Illuminate\Support\Carbon;
 class DefectiveProduct extends Model
 {
     /** @use HasFactory<DefectiveProductFactory> */
-    use HasFactory;
+    use HasFactory, HasStatusLabels;
 
     public const string PENDING = 'pending';
 
@@ -66,11 +67,6 @@ class DefectiveProduct extends Model
         self::PENDING_RECHECK => '待复检',
         self::CLOSED => '已关闭',
     ];
-
-    public function statusLabel(): string
-    {
-        return self::STATUS_LABELS[$this->status] ?? $this->status;
-    }
 
     /** @return BelongsTo<ProductionOrder, $this> */
     public function productionOrder(): BelongsTo

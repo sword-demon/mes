@@ -2,6 +2,7 @@
 
 namespace App\Modules\Production\Model;
 
+use App\Core\Models\Concerns\HasStatusLabels;
 use App\Modules\Equipment\Model\Equipment;
 use App\Modules\Organization\Model\Employee;
 use App\Modules\Organization\Model\Team;
@@ -67,7 +68,7 @@ use Illuminate\Support\Carbon;
 class ProcessRecord extends Model
 {
     /** @use HasFactory<ProcessRecordFactory> */
-    use HasFactory;
+    use HasFactory, HasStatusLabels;
 
     public const string PENDING = 'pending';
 
@@ -103,11 +104,6 @@ class ProcessRecord extends Model
         'rework_count' => 0,
         'inspection_cycle' => 0,
     ];
-
-    public function statusLabel(): string
-    {
-        return self::STATUS_LABELS[$this->status] ?? $this->status;
-    }
 
     /** @return HasMany<InspectionTask, $this> */
     public function inspectionTasks(): HasMany

@@ -2,6 +2,7 @@
 
 namespace App\Modules\Equipment\Model;
 
+use App\Core\Models\Concerns\HasStatusLabels;
 use App\Modules\System\Model\User;
 use Database\Factories\EquipmentAlarmFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
@@ -58,7 +59,7 @@ use Illuminate\Support\Carbon;
 class EquipmentAlarm extends Model
 {
     /** @use HasFactory<EquipmentAlarmFactory> */
-    use HasFactory;
+    use HasFactory, HasStatusLabels;
 
     public const string PENDING = 'pending';
 
@@ -164,11 +165,6 @@ class EquipmentAlarm extends Model
             self::LEVEL_CRITICAL => 0.85,
         ],
     ];
-
-    public function statusLabel(): string
-    {
-        return self::STATUS_LABELS[$this->status] ?? $this->status;
-    }
 
     public function levelLabel(): string
     {

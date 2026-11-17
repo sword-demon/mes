@@ -2,6 +2,7 @@
 
 namespace App\Modules\Production\Model;
 
+use App\Core\Models\Concerns\HasStatusLabels;
 use App\Modules\System\Model\User;
 use Database\Factories\ProductionExceptionFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
@@ -49,7 +50,7 @@ use Illuminate\Support\Carbon;
 class ProductionException extends Model
 {
     /** @use HasFactory<ProductionExceptionFactory> */
-    use HasFactory;
+    use HasFactory, HasStatusLabels;
 
     public const string TYPE_EQUIPMENT = 'equipment';
 
@@ -108,11 +109,6 @@ class ProductionException extends Model
     public function typeLabel(): string
     {
         return self::TYPE_LABELS[$this->type] ?? $this->type;
-    }
-
-    public function statusLabel(): string
-    {
-        return self::STATUS_LABELS[$this->status] ?? $this->status;
     }
 
     /**

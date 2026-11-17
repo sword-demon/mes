@@ -1,6 +1,6 @@
 <?php
 
-namespace App\Modules\Organization\Resource\Concerns;
+namespace App\Core\Resources\Concerns;
 
 trait ProjectsNamedRef
 {

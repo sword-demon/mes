@@ -2,6 +2,7 @@
 
 namespace App\Modules\Equipment\Model;
 
+use App\Core\Models\Concerns\HasStatusLabels;
 use App\Modules\Organization\Model\Employee;
 use App\Modules\Organization\Model\ProductionLine;
 use App\Modules\Organization\Model\Workshop;
@@ -36,7 +37,7 @@ use Illuminate\Support\Carbon;
 class Equipment extends Model
 {
     /** @use HasFactory<EquipmentFactory> */
-    use HasFactory;
+    use HasFactory, HasStatusLabels;
 
     public const string RUNNING = 'running';
 
@@ -81,11 +82,6 @@ class Equipment extends Model
         'status' => self::IDLE,
         'enabled' => true,
     ];
-
-    public function statusLabel(): string
-    {
-        return self::STATUS_LABELS[$this->status] ?? $this->status;
-    }
 
     /**
      * @param  Builder<Equipment>  $query
