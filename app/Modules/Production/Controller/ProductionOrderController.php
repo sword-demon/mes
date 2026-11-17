@@ -34,10 +34,14 @@ class ProductionOrderController extends Controller
     {
         $startDate = BusinessDay::resolveDate($request->query('start_date'), 'start_date');
         $endDate = BusinessDay::resolveDate($request->query('end_date'), 'end_date');
+        $status = $request->query('status');
 
         $query = ProductionOrder::query()
             ->with(self::RELATIONS)
-            ->when($request->query('status'), fn (Builder $query, string $status) => $query->where('status', $status))
+            ->when(
+                is_string($status) && $status !== '',
+                fn (Builder $query) => $query->where('status', $status),
+            )
             ->when($startDate !== null, fn (Builder $query) => $query->where('planned_start_at', '>=', BusinessDay::startUtc($startDate)))
             ->when($endDate !== null, fn (Builder $query) => $query->where('planned_start_at', '<', BusinessDay::endUtc($endDate)));
 

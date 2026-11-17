@@ -19,7 +19,7 @@ class EquipmentFactory extends EloquentFactory
     {
         return [
             'code' => 'EQ'.fake()->unique()->numerify('####'),
-            'name' => fake()->words(2, true).'设备',
+            'name' => fake()->word().' '.fake()->word().'设备',
             'type' => fake()->randomElement(Equipment::TYPES),
             'production_line_id' => ProductionLine::factory(),
             'workshop_id' => fn (array $attributes) => ProductionLine::query()

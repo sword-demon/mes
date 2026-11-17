@@ -37,11 +37,19 @@ class ProductionReportService
     public function create(array $data): ProductionReport
     {
         return DB::transaction(function () use ($data): ProductionReport {
-            $task = ProductionTask::query()->lockForUpdate()->findOrFail($data['production_task_id']);
-            $order = ProductionOrder::query()->lockForUpdate()->findOrFail($task->production_order_id);
+            $task = ProductionTask::query()
+                ->lockForUpdate()
+                ->whereKey($data['production_task_id'])
+                ->firstOrFail();
+            $order = ProductionOrder::query()
+                ->lockForUpdate()
+                ->whereKey($task->production_order_id)
+                ->firstOrFail();
             $this->ensureReportable($task, $order);
 
-            $operation = RouteOperation::query()->findOrFail($data['route_operation_id']);
+            $operation = RouteOperation::query()
+                ->whereKey($data['route_operation_id'])
+                ->firstOrFail();
 
             if ($operation->route_id !== $task->route_id) {
                 throw new ApiException('工序不属于该生产任务的工艺路线', 422);
@@ -121,14 +129,23 @@ class ProductionReportService
     public function reverse(ProductionReport $report): ProductionReport
     {
         return DB::transaction(function () use ($report): ProductionReport {
-            $locked = ProductionReport::query()->lockForUpdate()->findOrFail($report->getKey());
+            $locked = ProductionReport::query()
+                ->lockForUpdate()
+                ->whereKey($report->getKey())
+                ->firstOrFail();
 
             if ($locked->type === ProductionReport::REVERSED) {
                 throw new ApiException('报工已冲销，不能重复冲销', 422);
             }
 
-            $task = ProductionTask::query()->lockForUpdate()->findOrFail($locked->production_task_id);
-            $order = ProductionOrder::query()->lockForUpdate()->findOrFail($task->production_order_id);
+            $task = ProductionTask::query()
+                ->lockForUpdate()
+                ->whereKey($locked->production_task_id)
+                ->firstOrFail();
+            $order = ProductionOrder::query()
+                ->lockForUpdate()
+                ->whereKey($task->production_order_id)
+                ->firstOrFail();
             $typeBefore = $locked->typeLabel();
             $producedBefore = $task->produced_quantity;
 

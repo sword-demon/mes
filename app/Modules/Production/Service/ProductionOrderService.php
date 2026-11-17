@@ -52,7 +52,10 @@ class ProductionOrderService
         return DB::transaction(function () use ($order, $data): ProductionOrder {
             // The route-bound model may be stale: a concurrent submit can land
             // between binding and this call, so re-read under a row lock.
-            $order = ProductionOrder::query()->lockForUpdate()->findOrFail($order->getKey());
+            $order = ProductionOrder::query()
+                ->lockForUpdate()
+                ->whereKey($order->getKey())
+                ->firstOrFail();
             $order->ensureEditable();
 
             $effective = [
@@ -109,7 +112,10 @@ class ProductionOrderService
     public function transition(ProductionOrder $order, string $target): ProductionOrder
     {
         return DB::transaction(function () use ($order, $target): ProductionOrder {
-            $locked = ProductionOrder::query()->lockForUpdate()->findOrFail($order->getKey());
+            $locked = ProductionOrder::query()
+                ->lockForUpdate()
+                ->whereKey($order->getKey())
+                ->firstOrFail();
             $before = $locked->statusLabel();
             $locked->transitionTo($target);
 

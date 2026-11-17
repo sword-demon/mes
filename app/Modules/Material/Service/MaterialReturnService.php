@@ -54,7 +54,10 @@ class MaterialReturnService
     public function create(array $data, int $userId): MaterialReturn
     {
         return DB::transaction(function () use ($data, $userId): MaterialReturn {
-            $requisition = MaterialRequisition::query()->lockForUpdate()->findOrFail($data['requisition_id']);
+            $requisition = MaterialRequisition::query()
+                ->lockForUpdate()
+                ->whereKey($data['requisition_id'])
+                ->firstOrFail();
             $items = $requisition->items()->lockForUpdate()->get()->keyBy('id');
             $returned = $this->returnedByItem($items->keys()->all());
 

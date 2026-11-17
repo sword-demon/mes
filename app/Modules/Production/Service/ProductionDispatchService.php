@@ -25,13 +25,16 @@ class ProductionDispatchService
         return DB::transaction(function () use ($data): ProductionDispatch {
             $task = ProductionTask::query()
                 ->lockForUpdate()
-                ->findOrFail($data['production_task_id']);
+                ->whereKey($data['production_task_id'])
+                ->firstOrFail();
 
             if ($task->status === ProductionTask::COMPLETED) {
                 throw new ApiException('生产任务已完成，不能派工', 422);
             }
 
-            $operation = RouteOperation::query()->findOrFail($data['route_operation_id']);
+            $operation = RouteOperation::query()
+                ->whereKey($data['route_operation_id'])
+                ->firstOrFail();
 
             if ($operation->route_id !== $task->route_id) {
                 throw new ApiException('工序不属于该生产任务的工艺路线', 422);
