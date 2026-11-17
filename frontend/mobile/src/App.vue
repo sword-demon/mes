@@ -3,7 +3,7 @@ import { onLaunch } from '@dcloudio/uni-app';
 import { restoreSession } from '@/stores/auth';
 
 onLaunch(() => {
-    restoreSession();
+    void restoreSession();
 });
 </script>
 
@@ -14,6 +14,15 @@ page {
     background-color: #f5f6f8;
     color: #1f2937;
     font-family: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', Arial, sans-serif;
+}
+
+.page-pending {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 70vh;
+    color: #6b7280;
+    font-size: 28rpx;
 }
 
 /* 骨架页面固定浅色卡片，锁定 uView 的浅色变量，避免系统深色模式让文字变白。 */

@@ -12,10 +12,21 @@ export type User = {
     email: string;
 };
 
+export type MenuNode = {
+    id: number;
+    parent_id: number | null;
+    permission_id: number | null;
+    name: string;
+    path: string | null;
+    icon: string | null;
+    sort: number;
+    children: MenuNode[];
+};
+
 export type CurrentUser = User & {
     permissions: string[];
-    data_scope: string;
-    menus: unknown[];
+    data_scope: 'all' | 'factory' | 'line' | 'none';
+    menus: MenuNode[];
 };
 
 export type LoginPayload = {

@@ -1,46 +1,53 @@
 <template>
-    <view class="report">
-        <view class="report__hero">
-            <text class="report__eyebrow">生产报工</text>
-            <text class="report__title">扫码报工入口</text>
-            <text class="report__desc">
-                本期仅提供页面与路由骨架，工单选择、扫码报工将在 V1.1 接入。
-            </text>
+    <view>
+        <view v-if="ready" class="report">
+            <view class="report__hero">
+                <text class="report__eyebrow">生产报工</text>
+                <text class="report__title">扫码报工入口</text>
+                <text class="report__desc">
+                    本期仅提供页面与路由骨架，工单选择、扫码报工将在 V1.1 接入。
+                </text>
+            </view>
+
+            <up-cell-group border>
+                <up-cell title="登录账号" :value="displayName" />
+                <up-cell title="后端契约" value="POST /api/v1/auth/tokens" />
+                <up-cell title="本期状态" value="骨架占位" />
+            </up-cell-group>
+
+            <view class="report__actions">
+                <up-button
+                    type="primary"
+                    text="前往 SN 扫码占位"
+                    :custom-style="{ width: '100%' }"
+                    @click="goToScan"
+                />
+                <up-button
+                    text="退出登录"
+                    :custom-style="{ width: '100%' }"
+                    @click="handleLogout"
+                />
+            </view>
         </view>
-
-        <up-cell-group border>
-            <up-cell title="登录账号" :value="displayName" />
-            <up-cell title="后端契约" value="POST /api/v1/auth/tokens" />
-            <up-cell title="本期状态" value="骨架占位" />
-        </up-cell-group>
-
-        <view class="report__actions">
-            <up-button
-                type="primary"
-                text="前往 SN 扫码占位"
-                :custom-style="{ width: '100%' }"
-                @click="goToScan"
-            />
-            <up-button
-                text="退出登录"
-                :custom-style="{ width: '100%' }"
-                @click="handleLogout"
-            />
+        <view v-else class="page-pending">
+            <text>正在恢复登录态…</text>
         </view>
     </view>
 </template>
 
 <script setup lang="ts">
-import { onShow } from '@dcloudio/uni-app';
 import { computed } from 'vue';
-import { LOGIN_PAGE } from '@/constants/routes';
-import { goToScan, requireAuth, session, signOut } from '@/stores/auth';
+import { useAuthGuard } from '@/composables/use-auth-guard';
+import { LOGIN_PAGE, SCAN_PAGE } from '@/constants/routes';
+import { session, signOut } from '@/stores/auth';
 
-onShow(() => {
-    requireAuth();
-});
+const ready = useAuthGuard();
 
 const displayName = computed(() => session.user?.name ?? '已登录用户');
+
+function goToScan(): void {
+    uni.navigateTo({ url: SCAN_PAGE });
+}
 
 async function handleLogout(): Promise<void> {
     await signOut();

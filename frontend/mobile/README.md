@@ -25,12 +25,14 @@ UniApp + Vue 3 + TypeScript + uView Plus 的移动端工程骨架。
 cd frontend/mobile
 npm install
 npm run dev:h5       # H5 开发，端口 15174，/api 代理到 http://mes.test
+npm run dev:app      # App 开发资源，使用 HBuilderX 运行
 npm run typecheck
 npm run test
 npm run build:h5     # 独立构建 H5 产物到 dist/build/h5
+npm run build:app    # 构建 App 资源到 dist/build/app
 ```
 
-当前构建脚本以 H5 作为工程验证目标；App 或小程序打包需在 HBuilderX 中接入，或补充对应平台依赖后再执行。
+H5 与 App 资源构建均已通过。App 产物需要用 HBuilderX 导入 `dist/build/app` 运行；正式发布前再配置 `manifest.json` 的 appid。小程序平台尚未接入依赖。
 
 ## 请求层与登录态
 

@@ -1,6 +1,6 @@
-import { LOGIN_PAGE } from '@/constants/routes';
 import { clearSession, getToken } from '@/stores/session';
 import type { ApiEnvelope } from '@/types/api';
+import { redirectToLogin } from '@/utils/navigation';
 
 const API_BASE = import.meta.env.VITE_API_URL || '/api/v1';
 
@@ -20,11 +20,12 @@ type ErrorEnvelope = {
     } | null;
 };
 
+// 移动端与 Web 独立构建，错误类型各自维护，避免跨工程运行依赖。
 export class ApiRequestError extends Error {
     public constructor(
         message: string,
         public readonly status: number,
-        public readonly code: number,
+        public readonly code: number = status,
         public readonly errors?: Record<string, string[]>,
     ) {
         super(message);
@@ -34,20 +35,6 @@ export class ApiRequestError extends Error {
 
 function resolveUrl(path: string): string {
     return `${API_BASE.replace(/\/$/, '')}${path.startsWith('/') ? path : `/${path}`}`;
-}
-
-function currentRoute(): string {
-    const pages = getCurrentPages();
-
-    return pages.length > 0 ? `/${pages[pages.length - 1].route ?? ''}` : '';
-}
-
-function redirectToLogin(): void {
-    if (currentRoute() === LOGIN_PAGE) {
-        return;
-    }
-
-    uni.reLaunch({ url: LOGIN_PAGE });
 }
 
 function buildError(status: number, envelope: ErrorEnvelope): ApiRequestError {

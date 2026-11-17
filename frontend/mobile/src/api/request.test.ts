@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { installUniMock } from '@/test/uni';
 
 type RequestOptions = {
     url: string;
@@ -14,44 +15,21 @@ type RequestOptions = {
     fail: (error: { errMsg: string }) => void;
 };
 
-const storage = new Map<string, unknown>();
-const requestMock = vi.fn();
-const reLaunchMock = vi.fn();
-
-function installUniMock(): void {
-    Object.defineProperty(globalThis, 'getCurrentPages', {
-        configurable: true,
-        value: () => [],
-    });
-    Object.defineProperty(globalThis, 'uni', {
-        configurable: true,
-        value: {
-            getStorageSync: (key: string) => storage.get(key) ?? '',
-            setStorageSync: (key: string, value: unknown) => storage.set(key, value),
-            removeStorageSync: (key: string) => storage.delete(key),
-            request: requestMock,
-            reLaunch: reLaunchMock,
-            getCurrentPages: () => [],
-        },
-    });
-}
-
 async function loadRequest(): Promise<typeof import('./request')> {
     vi.resetModules();
     return import('./request');
 }
 
 describe('request', () => {
+    let uniMock: ReturnType<typeof installUniMock>;
+
     beforeEach(() => {
-        storage.clear();
-        requestMock.mockReset();
-        reLaunchMock.mockReset();
-        installUniMock();
+        uniMock = installUniMock();
     });
 
     it('unwraps the envelope and injects the stored token', async () => {
-        storage.set('mes.mobile.token', 'token-1');
-        requestMock.mockImplementation((options: RequestOptions) => {
+        uniMock.storage.set('mes.mobile.token', 'token-1');
+        uniMock.request.mockImplementation((options: RequestOptions) => {
             options.success({
                 statusCode: 200,
                 data: { code: 200, message: 'ok', data: { id: 7 }, timestamp: 1 },
@@ -63,17 +41,20 @@ describe('request', () => {
         const { request } = await loadRequest();
 
         await expect(request<{ id: number }>({ url: '/me' })).resolves.toEqual({ id: 7 });
-        expect(requestMock).toHaveBeenCalledWith(
+        expect(uniMock.request).toHaveBeenCalledWith(
             expect.objectContaining({
                 url: '/api/v1/me',
-                header: expect.objectContaining({ Authorization: 'Bearer token-1' }),
+                header: expect.objectContaining({
+                    Authorization: 'Bearer token-1',
+                    'Content-Type': 'application/json',
+                }),
             }),
         );
     });
 
     it('clears the session and redirects to login on 401', async () => {
-        storage.set('mes.mobile.token', 'expired');
-        requestMock.mockImplementation((options: RequestOptions) => {
+        uniMock.storage.set('mes.mobile.token', 'expired');
+        uniMock.request.mockImplementation((options: RequestOptions) => {
             options.success({
                 statusCode: 401,
                 data: { code: 401, message: 'Unauthenticated.', data: null, timestamp: 1 },
@@ -88,12 +69,12 @@ describe('request', () => {
             status: 401,
             message: 'Unauthenticated.',
         });
-        expect(storage.has('mes.mobile.token')).toBe(false);
-        expect(reLaunchMock).toHaveBeenCalledWith({ url: '/pages/login/index' });
+        expect(uniMock.storage.has('mes.mobile.token')).toBe(false);
+        expect(uniMock.reLaunch).toHaveBeenCalledWith({ url: '/pages/login/index' });
     });
 
     it('rejects business errors with field errors intact', async () => {
-        requestMock.mockImplementation((options: RequestOptions) => {
+        uniMock.request.mockImplementation((options: RequestOptions) => {
             options.success({
                 statusCode: 422,
                 data: {

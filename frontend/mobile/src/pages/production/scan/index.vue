@@ -1,41 +1,44 @@
 <template>
-    <view class="scan">
-        <up-empty
-            mode="data"
-            text="SN 扫码功能将在 V1.1 接入"
-            text-color="#6b7280"
-            icon-color="#9ca3af"
-            margin-top="80"
-        />
-
-        <view class="scan__card">
-            <text class="scan__title">接入点已预留</text>
-            <text class="scan__desc">
-                后续扫码报工与扫码检验将复用 /api/v1 契约，本期不调用扫码设备，也不新增后端接口。
-            </text>
-        </view>
-
-        <view class="scan__actions">
-            <up-button
-                type="primary"
-                text="返回报工占位页"
-                :custom-style="{ width: '100%' }"
-                @click="backToReport"
+    <view>
+        <view v-if="ready" class="scan">
+            <up-empty
+                mode="data"
+                text="SN 扫码功能将在 V1.1 接入"
+                text-color="#6b7280"
+                icon-color="#9ca3af"
+                margin-top="80"
             />
+
+            <view class="scan__card">
+                <text class="scan__title">接入点已预留</text>
+                <text class="scan__desc">
+                    后续扫码报工与扫码检验将复用 /api/v1 契约，本期不调用扫码设备，也不新增后端接口。
+                </text>
+            </view>
+
+            <view class="scan__actions">
+                <up-button
+                    type="primary"
+                    text="返回报工占位页"
+                    :custom-style="{ width: '100%' }"
+                    @click="backToReport"
+                />
+            </view>
+        </view>
+        <view v-else class="page-pending">
+            <text>正在恢复登录态…</text>
         </view>
     </view>
 </template>
 
 <script setup lang="ts">
-import { onShow } from '@dcloudio/uni-app';
-import { requireAuth, goToReport } from '@/stores/auth';
+import { useAuthGuard } from '@/composables/use-auth-guard';
+import { REPORT_PAGE } from '@/constants/routes';
 
-onShow(() => {
-    requireAuth();
-});
+const ready = useAuthGuard();
 
 function backToReport(): void {
-    goToReport();
+    uni.reLaunch({ url: REPORT_PAGE });
 }
 </script>
 

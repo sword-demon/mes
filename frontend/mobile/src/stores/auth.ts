@@ -1,31 +1,69 @@
+import { ApiRequestError } from '@/api/request';
 import { fetchMe, login as requestLogin, logout as requestLogout } from '@/api/auth';
-import { LOGIN_PAGE, REPORT_PAGE, SCAN_PAGE } from '@/constants/routes';
 import {
     clearSession,
     getToken,
     hydrateSession,
     session,
+    setSessionStatus,
     setSession,
     updateSessionUser,
 } from '@/stores/session';
 import type { LoginPayload } from '@/types/api';
+import { redirectToLogin } from '@/utils/navigation';
 
 export { session };
 
-export function restoreSession(): void {
+let restorePromise: Promise<void> | null = null;
+
+export function restoreSession(): Promise<void> {
     hydrateSession();
 
-    if (!getToken()) {
-        return;
+    if (restorePromise) {
+        return restorePromise;
     }
 
-    void fetchMe()
+    if (!getToken()) {
+        setSessionStatus('anonymous');
+
+        return Promise.resolve();
+    }
+
+    if (session.status === 'ready' && session.user) {
+        return Promise.resolve();
+    }
+
+    const tokenAtStart = session.token;
+    setSessionStatus('restoring');
+
+    restorePromise = fetchMe()
         .then((user) => {
+            if (getToken() !== tokenAtStart) {
+                return;
+            }
+
             updateSessionUser(user);
+            setSessionStatus('ready');
         })
-        .catch(() => {
-            // 请求层在 401 时会清理登录态；网络异常时保留本地 Token。
+        .catch((error: unknown) => {
+            if (getToken() !== tokenAtStart) {
+                return;
+            }
+
+            if (error instanceof ApiRequestError && error.status === 401) {
+                clearSession();
+
+                return;
+            }
+
+            // 网络异常时保留本地 Token，页面仍可展示本地登录态。
+            setSessionStatus('ready');
+        })
+        .finally(() => {
+            restorePromise = null;
         });
+
+    return restorePromise;
 }
 
 export async function signIn(payload: LoginPayload): Promise<void> {
@@ -43,23 +81,18 @@ export async function signOut(): Promise<void> {
         // 本地退出不依赖网络是否可达。
     } finally {
         clearSession();
+        restorePromise = null;
     }
 }
 
-export function requireAuth(): boolean {
-    if (getToken()) {
+export async function requireAuth(): Promise<boolean> {
+    await restoreSession();
+
+    if (session.token) {
         return true;
     }
 
-    uni.reLaunch({ url: LOGIN_PAGE });
+    redirectToLogin();
 
     return false;
-}
-
-export function goToReport(): void {
-    uni.reLaunch({ url: REPORT_PAGE });
-}
-
-export function goToScan(): void {
-    uni.navigateTo({ url: SCAN_PAGE });
 }

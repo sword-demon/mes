@@ -1,57 +1,77 @@
 <template>
     <view class="login">
-        <view class="login__brand">
-            <view class="login__logo">MES</view>
-            <text class="login__title">移动端工作台</text>
-            <text class="login__subtitle">扫码报工与扫码检验入口</text>
+        <view v-if="checking" class="page-pending">
+            <text>正在恢复登录态…</text>
         </view>
+        <view v-else>
+            <view class="login__brand">
+                <view class="login__logo">MES</view>
+                <text class="login__title">移动端工作台</text>
+                <text class="login__subtitle">扫码报工与扫码检验入口</text>
+            </view>
 
-        <view class="login__card">
-            <up-input v-model="form.email" placeholder="邮箱" border="surround" clearable />
-            <up-input
-                v-model="form.password"
-                :password="true"
-                placeholder="密码"
-                border="surround"
-                clearable
-            />
-            <up-button
-                type="primary"
-                text="登录"
-                :loading="submitting"
-                :custom-style="{ width: '100%' }"
-                @click="submit"
-            />
+            <view class="login__card">
+                <up-input v-model="form.email" placeholder="邮箱" border="surround" clearable />
+                <up-input
+                    v-model="form.password"
+                    :password="true"
+                    placeholder="密码"
+                    border="surround"
+                    clearable
+                />
+                <up-button
+                    type="primary"
+                    text="登录"
+                    :loading="submitting"
+                    :custom-style="{ width: '100%' }"
+                    @click="submit"
+                />
+            </view>
+
+            <text class="login__note">
+                当前为移动端骨架，仅登录可用；生产报工与 SN 扫码业务将在 V1.1 接入。
+            </text>
         </view>
-
-        <text class="login__note">
-            当前为移动端骨架，仅登录可用；生产报工与 SN 扫码业务将在 V1.1 接入。
-        </text>
     </view>
 </template>
 
 <script setup lang="ts">
 import { onLoad } from '@dcloudio/uni-app';
 import { reactive, ref } from 'vue';
-import { ApiRequestError } from '@/api/request';
+import { loginErrorMessage } from '@/api/auth';
 import { REPORT_PAGE } from '@/constants/routes';
-import { session, signIn } from '@/stores/auth';
+import { restoreSession, session, signIn } from '@/stores/auth';
 
 const form = reactive({
     email: '',
     password: '',
 });
 const submitting = ref(false);
+const checking = ref(true);
 
-onLoad(() => {
+onLoad(async () => {
+    await restoreSession();
+
     if (session.token) {
         uni.reLaunch({ url: REPORT_PAGE });
+
+        return;
     }
+
+    checking.value = false;
 });
 
 async function submit(): Promise<void> {
-    if (!form.email.trim() || !form.password) {
+    const email = form.email.trim();
+
+    if (!email || !form.password) {
         uni.showToast({ title: '请输入邮箱和密码', icon: 'none' });
+
+        return;
+    }
+
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+        uni.showToast({ title: '请输入正确的邮箱', icon: 'none' });
 
         return;
     }
@@ -60,17 +80,12 @@ async function submit(): Promise<void> {
 
     try {
         await signIn({
-            email: form.email.trim(),
+            email,
             password: form.password,
         });
         uni.reLaunch({ url: REPORT_PAGE });
     } catch (error) {
-        const message =
-            error instanceof ApiRequestError
-                ? (Object.values(error.errors ?? {}).flat()[0] ?? error.message)
-                : '登录失败，请稍后重试';
-
-        uni.showToast({ title: message, icon: 'none' });
+        uni.showToast({ title: loginErrorMessage(error), icon: 'none' });
     } finally {
         submitting.value = false;
     }
