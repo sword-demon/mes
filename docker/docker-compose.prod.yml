@@ -1,6 +1,7 @@
 name: mes-prod
 
 # 生产环境只编排中间件；Laravel 由服务器 PHP-FPM 运行，Nginx 回源到本机应用。
+# 生产编排独立维护，不复用开发文件，避免开发默认值渗入生产。
 services:
   mysql:
     image: mysql:8.4

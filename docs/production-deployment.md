@@ -76,7 +76,7 @@ EMQX_DASHBOARD_HOST_PORT=18083
 - `APP_ENV=production` 与 `APP_DEBUG=false` 必须同时成立；生产环境禁止开启调试。
 - `APP_KEY` 用 `php artisan key:generate --force` 生成，之后不要更换，否则已加密数据与登录态失效。
 - `DB_PASSWORD`、`MYSQL_ROOT_PASSWORD`、`EMQX_DASHBOARD_PASSWORD` 缺失时，生产 Compose 会直接报错拒绝启动。
-- 生产启动流程不执行任何 Seeder；`php artisan migrate --force` 只建表，不填充演示数据。
+- 生产启动流程不执行全量 `DatabaseSeeder`；RBAC 元数据与首个管理员由 `php artisan mes:create-admin` 显式初始化，不填充演示业务数据。
 - 不要把 `.env` 提交到 Git，也不要在 Nginx 根目录暴露它。
 
 ## 4. 首次部署
@@ -105,9 +105,12 @@ docker compose --env-file .env -f docker/docker-compose.prod.yml ps
 ```bash
 php artisan migrate --force
 php artisan storage:link
+php artisan mes:create-admin --email=admin@example.com
 ```
 
-生产环境默认不执行 Seeder。只有明确需要演示数据时，才设置 `SEED_PASSWORD` 后手工执行一次 `php artisan db:seed --force`；该命令不会出现在启动脚本或系统服务中。
+`mes:create-admin` 会初始化菜单、权限与角色（不含演示用户和部门），并创建超级管理员。未传 `--password` 时会生成一次性强密码并打印在终端，登录后应立即修改。需要单独补齐 RBAC 元数据时，执行 `php artisan db:seed --class=AccessControlSeeder --force`。
+
+生产环境默认不执行全量演示 Seeder。只有明确需要演示业务数据时，才设置 `SEED_PASSWORD` 后手工执行一次 `php artisan db:seed --force`；该命令不会出现在启动脚本或系统服务中。
 
 ### 4.4 构建前端
 
@@ -152,7 +155,7 @@ sudo certbot --nginx -d mes.example.com
 模板的路由规则：
 
 - `/` 读取 React 静态资源，刷新前端路由时回退到 `index.html`。
-- `/api/` 交给 Laravel 的 `public/index.php`，由 PHP-FPM 处理。
+- `/api` 与 `/api/` 交给 Laravel 的 `public/index.php`，由 PHP-FPM 处理。
 - `/api-docs` 在临时开启 `OPENAPI_ENABLED=true` 时交给 Laravel；生产默认关闭时返回 404。
 - `/storage/` 直接读取上传目录。
 - `/up` 是 Laravel 健康检查。
@@ -232,7 +235,7 @@ sudo systemctl status mes-queue mes-scheduler mes-mqtt
 
 1. 填写 `.env`，确认 `APP_ENV=production`、`APP_DEBUG=false`、三个密码变量均已设置。
 2. `docker compose ... up -d --wait` 启动 MySQL、Redis、EMQX，并等待健康检查通过。
-3. `composer install --no-dev`、`php artisan migrate --force`、`php artisan storage:link`。
+3. `composer install --no-dev`、`php artisan migrate --force`、`php artisan storage:link`、`php artisan mes:create-admin --email=...`。
 4. `npm ci && npm run build` 生成 React 静态资源。
 5. 配置并重载 Nginx，申请 HTTPS 证书。
 6. `php artisan optimize`，启动 PHP-FPM 与三个 systemd 服务。
@@ -255,6 +258,7 @@ php artisan up
 ```
 
 `queue:work` 与 `mes:consume-mqtt` 不会自动加载新代码，发布后必须重启对应服务。数据库迁移前先备份数据库与 `storage/app/public`。
+若本次发布包含菜单、权限或角色定义变更，额外执行 `php artisan db:seed --class=AccessControlSeeder --force`。
 
 ## 6. 数据持久化与备份
 
@@ -325,6 +329,10 @@ curl -i -X POST https://mes.example.com/api/v1/auth/tokens \
 
 同域部署下不应出现 CORS。若通过其他域名访问前端，把 `FRONTEND_URL` 改为前端的完整来源（含协议与端口），并重新缓存配置。
 
+**无法登录或登录后菜单为空**
+
+确认已执行 `php artisan mes:create-admin --email=admin@example.com`。该命令会补齐菜单、权限与超级管理员角色；若邮箱已存在，命令会拒绝重复创建，请改用已有管理员账号或通过用户管理重置密码。
+
 **队列或 MQTT 不消费**
 
 查看 `journalctl -u mes-queue -u mes-mqtt -f`。确认 Redis 健康、`MQTT_HOST=127.0.0.1`、`MQTT_PORT=11883`；远端设备连不上时检查 `MQTT_BIND` 与防火墙。改完代码后执行 `php artisan queue:restart` 并重启 `mes-mqtt`。
@@ -339,4 +347,4 @@ curl -i -X POST https://mes.example.com/api/v1/auth/tokens \
 
 **Seeder 提示需要 `SEED_PASSWORD`**
 
-生产不会自动填充演示数据。确需演示数据时，在 `.env` 设置强密码并重新缓存配置，再手工执行 `php artisan db:seed --force`；不要把它加入部署脚本。
+这是全量演示 Seeder 的保护，不是首个管理员的初始化路径。生产首个管理员请用 `php artisan mes:create-admin`；确需演示业务数据时，再设置 `SEED_PASSWORD` 并手工执行 `php artisan db:seed --force`。

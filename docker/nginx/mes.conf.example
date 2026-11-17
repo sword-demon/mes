@@ -10,6 +10,11 @@ server {
         try_files $uri $uri/ /index.html;
     }
 
+    location = /api {
+        root /var/www/mes/public;
+        try_files $uri /index.php?$query_string;
+    }
+
     location /api/ {
         root /var/www/mes/public;
         try_files $uri $uri/ /index.php?$query_string;

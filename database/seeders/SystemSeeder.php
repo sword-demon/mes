@@ -271,9 +271,20 @@ class SystemSeeder extends Seeder
     {
         $menuPermissions = $this->seedMenus();
         $permissions = $this->seedPermissions();
-        $departments = $this->seedDepartments();
+        $departments = $this->seedsDemoData() ? $this->seedDepartments() : [];
         $this->seedRoles($menuPermissions, $permissions);
-        $this->seedUsers($departments);
+
+        if ($this->seedsDemoData()) {
+            $this->seedUsers($departments);
+        }
+    }
+
+    /**
+     * Production bootstrapping seeds RBAC metadata without demo users.
+     */
+    protected function seedsDemoData(): bool
+    {
+        return true;
     }
 
     /**
