@@ -1,5 +1,7 @@
 <?php
 
+use App\Core\OpenApi\OpenApiConfig;
+
 $perPage = [
     'name' => 'per_page',
     'in' => 'query',
@@ -24,8 +26,49 @@ $endDate = [
     'schema' => ['type' => 'string', 'format' => 'date'],
 ];
 
+$bomCommonProperties = [
+    'code' => ['type' => 'string', 'maxLength' => 64, 'description' => 'BOM 编码'],
+    'version' => ['type' => 'string', 'maxLength' => 32, 'description' => 'BOM 版本'],
+    'remark' => ['type' => 'string', 'maxLength' => 255, 'nullable' => true],
+    'status' => ['type' => 'boolean', 'description' => '启用状态'],
+];
+
+$bomCreateProperties = [
+    'product_version_id' => ['type' => 'integer', 'description' => '产品版本 ID'],
+    ...$bomCommonProperties,
+];
+
+$orderProperties = [
+    'code' => ['type' => 'string', 'maxLength' => 64, 'description' => '生产订单号'],
+    'product_id' => ['type' => 'integer', 'description' => '产品 ID'],
+    'bom_id' => ['type' => 'integer', 'description' => 'BOM ID'],
+    'route_id' => ['type' => 'integer', 'description' => '工艺路线 ID'],
+    'production_line_id' => ['type' => 'integer', 'description' => '产线 ID'],
+    'planned_quantity' => [
+        'type' => 'number',
+        'minimum' => 0,
+        'exclusiveMinimum' => true,
+        'description' => '计划数量，必须大于 0',
+    ],
+    'planned_start_at' => ['type' => 'string', 'format' => 'date-time', 'description' => '计划开始时间'],
+    'planned_end_at' => [
+        'type' => 'string',
+        'format' => 'date-time',
+        'nullable' => true,
+        'description' => '计划结束时间，不得早于计划开始时间',
+    ],
+    'remark' => ['type' => 'string', 'maxLength' => 255, 'nullable' => true],
+];
+
+$exceptionProperties = [
+    'type' => ['type' => 'string', 'description' => '异常类型'],
+    'production_order_id' => ['type' => 'integer', 'nullable' => true, 'description' => '关联生产订单 ID'],
+    'process_record_id' => ['type' => 'integer', 'nullable' => true, 'description' => '关联工序执行记录 ID'],
+    'description' => ['type' => 'string', 'maxLength' => 2000],
+];
+
 return [
-    'enabled' => env('OPENAPI_ENABLED', in_array(env('APP_ENV', 'production'), ['local', 'testing'], true)),
+    'enabled' => env('OPENAPI_ENABLED', OpenApiConfig::enabledByDefault((string) (env('APP_ENV') ?: 'production'))),
 
     'title' => 'MES 生产管理系统 API',
 
@@ -55,9 +98,103 @@ return [
                 ],
             ],
         ],
+        'api.basic-data.boms.store' => [
+            'type' => 'object',
+            'required' => ['code', 'version', 'product_version_id'],
+            'properties' => $bomCreateProperties,
+        ],
+        'api.basic-data.boms.update' => [
+            'type' => 'object',
+            'properties' => $bomCommonProperties,
+        ],
+        'api.production.orders.store' => [
+            'type' => 'object',
+            'required' => ['code', 'product_id', 'bom_id', 'route_id', 'production_line_id', 'planned_quantity', 'planned_start_at'],
+            'properties' => $orderProperties,
+        ],
+        'api.production.orders.update' => [
+            'type' => 'object',
+            'properties' => $orderProperties,
+        ],
+        'api.production.exceptions.store' => [
+            'type' => 'object',
+            'required' => ['type', 'description'],
+            'properties' => $exceptionProperties,
+        ],
     ],
 
     'parameters' => [
+        'api.basic-data.boms.index' => [
+            [
+                'name' => 'product_version_id',
+                'in' => 'query',
+                'required' => false,
+                'description' => '产品版本 ID',
+                'schema' => ['type' => 'integer'],
+            ],
+            [
+                'name' => 'audit_status',
+                'in' => 'query',
+                'required' => false,
+                'description' => '审核状态',
+                'schema' => ['type' => 'string'],
+            ],
+            [
+                'name' => 'status',
+                'in' => 'query',
+                'required' => false,
+                'description' => '启用状态',
+                'schema' => ['type' => 'boolean'],
+            ],
+            [
+                'name' => 'keyword',
+                'in' => 'query',
+                'required' => false,
+                'description' => 'BOM 编码或版本关键字',
+                'schema' => ['type' => 'string'],
+            ],
+            [
+                'name' => 'usable',
+                'in' => 'query',
+                'required' => false,
+                'description' => '仅返回可用 BOM',
+                'schema' => ['type' => 'boolean'],
+            ],
+            $perPage,
+        ],
+        'api.production.orders.index' => [
+            [
+                'name' => 'status',
+                'in' => 'query',
+                'required' => false,
+                'description' => '订单状态',
+                'schema' => ['type' => 'string'],
+            ],
+            $startDate,
+            $endDate,
+            [
+                'name' => 'product_id',
+                'in' => 'query',
+                'required' => false,
+                'description' => '产品 ID',
+                'schema' => ['type' => 'integer'],
+            ],
+            [
+                'name' => 'production_line_id',
+                'in' => 'query',
+                'required' => false,
+                'description' => '产线 ID',
+                'schema' => ['type' => 'integer'],
+            ],
+            [
+                'name' => 'keyword',
+                'in' => 'query',
+                'required' => false,
+                'description' => '生产订单号关键字',
+                'schema' => ['type' => 'string'],
+            ],
+            $perPage,
+        ],
         'api.equipments.history' => [
             [
                 'name' => 'start_at',

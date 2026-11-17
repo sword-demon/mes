@@ -1,11 +1,14 @@
 <?php
 
+use App\Core\OpenApi\OpenApiConfig;
 use Illuminate\Routing\Route as RoutingRoute;
-use Illuminate\Support\Facades\Process;
 use Illuminate\Support\Facades\Route;
 
-test('openapi documentation is enabled by default while developing', function () {
-    expect(config('openapi.enabled'))->toBeTrue();
+test('openapi documentation defaults to on only in local and testing', function () {
+    expect(OpenApiConfig::enabledByDefault('local'))->toBeTrue()
+        ->and(OpenApiConfig::enabledByDefault('testing'))->toBeTrue()
+        ->and(OpenApiConfig::enabledByDefault('staging'))->toBeFalse()
+        ->and(OpenApiConfig::enabledByDefault('production'))->toBeFalse();
 });
 
 test('swagger ui is served locally', function () {
@@ -72,7 +75,10 @@ test('every operation documents the unified response envelope', function () {
     foreach ($spec['paths'] as $path => $operations) {
         foreach ($operations as $method => $operation) {
             expect($operation['responses']['200']['content']['application/json']['schema']['$ref'])
-                ->toBe('#/components/schemas/ApiResponse', "{$method} {$path} 缺少统一响应契约");
+                ->toBeIn(
+                    ['#/components/schemas/ApiResponse', '#/components/schemas/PaginatedApiResponse'],
+                    "{$method} {$path} 缺少统一响应契约",
+                );
         }
     }
 });
@@ -98,7 +104,8 @@ test('response codes and parameters match the implementation', function () {
         ->toContain('equipment', 'start_at', 'end_at')
         ->and($spec['paths']['/api/v1/me']['get']['responses'])->not->toHaveKey('403')
         ->and($spec['paths']['/api/v1/basic-data/boms']['get']['responses'])->toHaveKey('403')
-        ->and($spec['paths']['/api/v1/basic-data/boms/{bom}']['put']['responses'])->toHaveKey('404');
+        ->and($spec['paths']['/api/v1/basic-data/boms/{bom}']['put']['responses'])->toHaveKey('404')
+        ->and($spec['paths']['/api/v1/equipments/alarms']['get']['responses'])->not->toHaveKey('404');
 });
 
 test('documentation access is closed when disabled', function () {
@@ -108,11 +115,64 @@ test('documentation access is closed when disabled', function () {
     $this->getJson('/api-docs/openapi.json')->assertNotFound();
 });
 
-test('openapi documentation defaults to off in production', function () {
-    $result = Process::path(base_path())
-        ->env(['APP_ENV' => 'production'])
-        ->run('php artisan tinker --execute="echo config(\'openapi.enabled\') ? \'on\' : \'off\';"');
+test('major write endpoints document their form fields', function () {
+    $spec = $this->getJson('/api-docs/openapi.json')->assertOk()->json();
 
-    expect($result->successful())->toBeTrue()
-        ->and(trim($result->output()))->toBe('off');
+    $bom = $spec['paths']['/api/v1/basic-data/boms']['post']['requestBody']['content']['application/json']['schema'];
+    $order = $spec['paths']['/api/v1/production/orders']['post']['requestBody']['content']['application/json']['schema'];
+
+    expect($bom['required'])->toContain('code', 'version', 'product_version_id')
+        ->and($bom['properties'])->toHaveKeys(['code', 'version', 'remark', 'status', 'product_version_id'])
+        ->and($order['required'])->toContain('code', 'product_id', 'bom_id', 'route_id', 'production_line_id', 'planned_quantity')
+        ->and($order['properties'])->toHaveKeys(['code', 'product_id', 'bom_id', 'route_id', 'production_line_id', 'planned_quantity', 'planned_start_at']);
+});
+
+test('file upload endpoints use multipart form data', function () {
+    $spec = $this->getJson('/api-docs/openapi.json')->assertOk()->json();
+
+    $exception = $spec['paths']['/api/v1/production/exceptions']['post']['requestBody'];
+    $images = $spec['paths']['/api/v1/quality/inspection-tasks/{task}/images']['post']['requestBody'];
+
+    expect(array_keys($exception['content']))->toBe(['multipart/form-data'])
+        ->and($exception['content']['multipart/form-data']['schema']['properties'])->toHaveKey('images')
+        ->and(array_keys($images['content']))->toBe(['multipart/form-data'])
+        ->and($images['content']['multipart/form-data']['schema']['properties'])->toHaveKey('images');
+});
+
+test('state transitions document business validation failures', function () {
+    $spec = $this->getJson('/api-docs/openapi.json')->assertOk()->json();
+
+    expect($spec['paths']['/api/v1/basic-data/boms/{bom}/submit']['post']['responses'])->toHaveKey('422')
+        ->and($spec['paths']['/api/v1/basic-data/boms/{bom}/approve']['post']['responses'])->toHaveKey('422')
+        ->and($spec['paths']['/api/v1/production/orders/{order}/release']['post']['responses'])->toHaveKey('422');
+});
+
+test('paginated endpoints reference the paginated response schema', function () {
+    $spec = $this->getJson('/api-docs/openapi.json')->assertOk()->json();
+
+    expect($spec['paths']['/api/v1/basic-data/boms']['get']['responses']['200']['content']['application/json']['schema']['$ref'])
+        ->toBe('#/components/schemas/PaginatedApiResponse')
+        ->and($spec['paths']['/api/v1/basic-data/boms']['post']['responses']['200']['content']['application/json']['schema']['$ref'])
+        ->toBe('#/components/schemas/ApiResponse');
+});
+
+test('documented query parameters exist in the controller implementation', function () {
+    foreach (config('openapi.parameters') as $routeName => $documented) {
+        $route = Route::getRoutes()->getByName($routeName);
+
+        expect($route)->not->toBeNull("{$routeName} 未注册");
+
+        [$controller, $method] = explode('@', $route->getActionName(), 2);
+        $reflection = new ReflectionMethod($controller, $method);
+        $lines = file($reflection->getFileName());
+        $source = implode('', array_slice(
+            $lines,
+            $reflection->getStartLine() - 1,
+            $reflection->getEndLine() - $reflection->getStartLine() + 1,
+        ));
+
+        foreach ($documented as $parameter) {
+            expect($source)->toContain($parameter['name']);
+        }
+    }
 });
