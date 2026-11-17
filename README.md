@@ -431,6 +431,8 @@ npm test
 ## 文档
 
 - [产品需求文档](docs/prd.md)
+- [MES MVP 入门教程：从 Compose 到 Laravel API 与 React 管理端](docs/mes-mvp-tutorial.md)
+- [MES RBAC 权限模型教程：用户、角色、菜单与接口鉴权](docs/mes-rbac-tutorial.md)
 - [Docker 中间件编排](docs/docker-compose.md)
 - [生产部署说明](docs/production-deployment.md)
 - [已沉淀解决方案](docs/solutions)
