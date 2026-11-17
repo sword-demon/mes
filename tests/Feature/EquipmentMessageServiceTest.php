@@ -3,7 +3,55 @@
 use App\Modules\Equipment\Model\Equipment;
 use App\Modules\Equipment\Model\EquipmentData;
 use App\Modules\Equipment\Service\EquipmentMessageService;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
+
+it('rejects a payload larger than the configured MQTT limit', function () {
+    config(['mqtt.factory' => 'F001', 'mqtt.max_payload_bytes' => 1024]);
+    Equipment::factory()->create(['code' => 'EQ-SMT-01']);
+
+    $exception = null;
+
+    try {
+        app(EquipmentMessageService::class)->consume('mes/F001/EQ-SMT-01/data', json_encode([
+            'device_code' => 'EQ-SMT-01',
+            'timestamp' => '2026-11-16T04:00:00Z',
+            'status' => Equipment::RUNNING,
+            'temperature' => 30,
+            'speed' => 0,
+            'pressure' => 0,
+            'output' => 120,
+            'padding' => str_repeat('x', 2048),
+        ], JSON_THROW_ON_ERROR));
+    } catch (ValidationException $caught) {
+        $exception = $caught;
+    }
+
+    expect($exception)->toBeInstanceOf(ValidationException::class)
+        ->and($exception->errors()['payload'][0] ?? '')->toContain('1024');
+    $this->assertDatabaseCount('mes_equipment_data', 0);
+});
+
+it('keeps a telemetry message within a bounded query count', function () {
+    config(['mqtt.factory' => 'F001']);
+    Equipment::factory()->create(['code' => 'EQ-SMT-01']);
+    $queries = 0;
+    DB::listen(function () use (&$queries): void {
+        $queries++;
+    });
+
+    app(EquipmentMessageService::class)->consume('mes/F001/EQ-SMT-01/data', json_encode([
+        'device_code' => 'EQ-SMT-01',
+        'timestamp' => '2026-11-16T04:00:00Z',
+        'status' => Equipment::RUNNING,
+        'temperature' => 69,
+        'speed' => 1470,
+        'pressure' => 0.90,
+        'output' => 120,
+    ], JSON_THROW_ON_ERROR));
+
+    expect($queries)->toBeLessThanOrEqual(9);
+});
 
 it('rejects a device clock more than five minutes ahead without blocking the next valid state', function () {
     $this->travelTo('2026-11-16 04:00:00');

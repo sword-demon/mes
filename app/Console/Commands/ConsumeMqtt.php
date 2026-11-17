@@ -42,6 +42,11 @@ class ConsumeMqtt extends Command
             $mqtt->interrupt();
         });
         $received = 0;
+        $invalid = 0;
+        $invalidPending = 0;
+        $lastInvalidWarningAt = 0.0;
+        $processedSinceReport = 0;
+        $lastReportAt = microtime(true);
         $failure = null;
         $exitCode = self::SUCCESS;
 
@@ -51,10 +56,12 @@ class ConsumeMqtt extends Command
                 ->setPassword(config('mqtt.password'))
                 ->setConnectTimeout(5)
                 ->setKeepAliveInterval(30);
-            $mqtt->connect($settings, true);
+            // php-mqtt sends the QoS 1 PUBACK before invoking the callback. A persistent
+            // session covers messages missed while offline, not a failure inside the callback.
+            $mqtt->connect($settings, (bool) config('mqtt.clean_session', false));
 
             foreach (EquipmentData::MESSAGE_TYPES as $kind) {
-                $mqtt->subscribe("mes/{$factory}/+/{$kind}", function (string $topic, string $message) use ($mqtt, $messages, $limit, &$received, &$failure): void {
+                $mqtt->subscribe("mes/{$factory}/+/{$kind}", function (string $topic, string $message) use ($mqtt, $messages, $limit, &$received, &$invalid, &$invalidPending, &$lastInvalidWarningAt, &$processedSinceReport, &$lastReportAt, &$failure): void {
                     if ($failure !== null || ($limit > 0 && $received >= $limit)) {
                         return;
                     }
@@ -62,16 +69,36 @@ class ConsumeMqtt extends Command
                     try {
                         $messages->consume($topic, $message);
                         $received++;
+                        $processedSinceReport++;
                     } catch (ValidationException) {
-                        $this->warn("忽略无效设备消息：{$topic}");
+                        $invalid++;
+                        $invalidPending++;
+
+                        if (microtime(true) - $lastInvalidWarningAt >= 5) {
+                            $this->warn("忽略无效设备消息：{$topic}（最近 {$invalidPending} 条）");
+                            $invalidPending = 0;
+                            $lastInvalidWarningAt = microtime(true);
+                        }
 
                         return;
                     } catch (Throwable $exception) {
-                        // SDK 会捕获回调异常，需在循环外重新抛出，避免静默丢失入库失败。
+                        // SDK 会捕获回调异常；记录失败并在循环外退出，避免继续消费后续消息。
                         $failure = $exception;
                         $mqtt->interrupt();
 
                         return;
+                    }
+
+                    if (microtime(true) - $lastReportAt >= 30) {
+                        $this->info(sprintf(
+                            'MQTT 消费中：已处理 %d 条，无效 %d 条，近 30 秒 %d 条，内存 %.1f MB',
+                            $received,
+                            $invalid,
+                            $processedSinceReport,
+                            memory_get_usage(true) / 1048576,
+                        ));
+                        $processedSinceReport = 0;
+                        $lastReportAt = microtime(true);
                     }
 
                     if ($limit > 0 && $received >= $limit) {
@@ -113,7 +140,7 @@ class ConsumeMqtt extends Command
                 throw $failure;
             }
 
-            $this->info("已处理 {$received} 条设备消息");
+            $this->info("已处理 {$received} 条设备消息，忽略 {$invalid} 条无效消息");
         } catch (Throwable $exception) {
             report($exception);
             $this->error('MQTT 消费失败，请检查应用日志');

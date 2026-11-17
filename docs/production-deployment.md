@@ -58,6 +58,10 @@ MQTT_FACTORY=F001
 MQTT_CLIENT_ID=mes-consumer
 MQTT_USERNAME=
 MQTT_PASSWORD=
+MQTT_CLEAN_SESSION=false
+MQTT_MAX_PAYLOAD_BYTES=65536
+
+EQUIPMENT_DATA_RETENTION_DAYS=31
 
 # 生产默认关闭接口文档；需要临时查阅时改为 true 并重新缓存配置
 OPENAPI_ENABLED=false
@@ -77,6 +81,9 @@ EMQX_DASHBOARD_HOST_PORT=18083
 - `APP_BUSINESS_TIMEZONE=Asia/Shanghai` 决定业务自然日与接口日期筛选口径；数据库时间与应用运行时保持 UTC，不要修改 `config/app.php` 的 `timezone`。
 - `APP_KEY` 用 `php artisan key:generate --force` 生成，之后不要更换，否则已加密数据与登录态失效。
 - `DB_PASSWORD`、`MYSQL_ROOT_PASSWORD`、`EMQX_DASHBOARD_PASSWORD` 缺失时，生产 Compose 会直接报错拒绝启动。
+- `MQTT_CLEAN_SESSION=false` 让 EMQX 保留消费者离线期间的 QoS 1 消息；运行多个消费者时，每个实例必须配置唯一的 `MQTT_CLIENT_ID`。
+- `php-mqtt` 在回调执行前确认 QoS 1 消息；持久会话只覆盖离线期间。若入库失败也必须重投，需要改用支持手动 ACK 的客户端或 broker bridge。
+- `MQTT_MAX_PAYLOAD_BYTES` 限制单条设备消息大小；`EQUIPMENT_DATA_RETENTION_DAYS` 控制历史保留天数，`mes:prune-equipment-data` 由 `mes-scheduler` 每天 03:10 清理。
 - 生产启动流程不执行全量 `DatabaseSeeder`；RBAC 元数据与首个管理员由 `php artisan mes:create-admin` 显式初始化，不填充演示业务数据。
 - 不要把 `.env` 提交到 Git，也不要在 Nginx 根目录暴露它。
 

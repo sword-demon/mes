@@ -24,7 +24,7 @@ it('consumes the three MQTT topics into history and updates equipment through th
     $client->shouldReceive('connect')->once()->with(Mockery::on(fn (ConnectionSettings $settings) => $settings->getUsername() === 'consumer'
         && $settings->getPassword() === 'test-password'
         && $settings->getConnectTimeout() === 5
-        && $settings->getKeepAliveInterval() === 30), true);
+        && $settings->getKeepAliveInterval() === 30), false);
     foreach (['status', 'data', 'alarm'] as $kind) {
         $client->shouldReceive('subscribe')->once()->with("mes/F001/+/{$kind}", Mockery::type('callable'), 1)
             ->andReturnUsing(function (string $topic, callable $callback) use (&$callbacks, $kind): void {

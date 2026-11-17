@@ -7,4 +7,6 @@ return [
     'client_id' => env('MQTT_CLIENT_ID', 'mes-consumer'),
     'username' => env('MQTT_USERNAME'),
     'password' => env('MQTT_PASSWORD'),
+    'clean_session' => (bool) env('MQTT_CLEAN_SESSION', false),
+    'max_payload_bytes' => (int) env('MQTT_MAX_PAYLOAD_BYTES', 65536),
 ];

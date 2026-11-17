@@ -27,6 +27,14 @@ class EquipmentMessageService
             throw ValidationException::withMessages(['topic' => '设备 MQTT 主题无效']);
         }
 
+        $maxPayloadBytes = max(1, (int) config('mqtt.max_payload_bytes', 65536));
+
+        if (strlen($message) > $maxPayloadBytes) {
+            throw ValidationException::withMessages([
+                'payload' => "设备消息不能超过 {$maxPayloadBytes} 字节",
+            ]);
+        }
+
         try {
             $payload = json_decode($message, true, 32, JSON_THROW_ON_ERROR);
         } catch (JsonException) {

@@ -8,6 +8,7 @@ use App\Modules\Equipment\Model\EquipmentData;
 use App\Modules\Organization\Model\ProductionLine;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\DB;
 
 class EquipmentService
 {
@@ -90,47 +91,74 @@ class EquipmentService
     {
         $rangeSeconds = max(0, (int) $start->diffInSeconds($end));
         $bucketSeconds = max(1, (int) ceil(($rangeSeconds + 1) / EquipmentData::HISTORY_POINT_LIMIT));
-        $startTimestamp = $start->getTimestamp();
-        $buckets = [];
+        $bucketExpression = match (DB::connection()->getDriverName()) {
+            'sqlite' => "CAST(strftime('%s', recorded_at) AS INTEGER) / ?",
+            'pgsql' => 'FLOOR(EXTRACT(EPOCH FROM recorded_at) / ?)',
+            default => "FLOOR(TIMESTAMPDIFF(SECOND, '1970-01-01 00:00:00', recorded_at) / ?)",
+        };
 
-        EquipmentData::query()
-            ->where('equipment_id', $equipment->id)
-            ->where('message_type', EquipmentData::TYPE_DATA)
-            ->whereBetween('recorded_at', [
+        $rows = DB::select(
+            <<<SQL
+                WITH bucketed AS (
+                    SELECT
+                        {$bucketExpression} AS bucket_key,
+                        id,
+                        recorded_at,
+                        temperature,
+                        speed,
+                        pressure,
+                        output
+                    FROM mes_equipment_data
+                    WHERE equipment_id = ?
+                        AND message_type = ?
+                        AND recorded_at BETWEEN ? AND ?
+                ),
+                ranked AS (
+                    SELECT
+                        bucket_key,
+                        recorded_at,
+                        output,
+                        AVG(temperature) OVER (PARTITION BY bucket_key) AS average_temperature,
+                        AVG(speed) OVER (PARTITION BY bucket_key) AS average_speed,
+                        AVG(pressure) OVER (PARTITION BY bucket_key) AS average_pressure,
+                        ROW_NUMBER() OVER (
+                            PARTITION BY bucket_key
+                            ORDER BY recorded_at DESC, id DESC
+                        ) AS bucket_rank
+                    FROM bucketed
+                )
+                SELECT
+                    bucket_key,
+                    recorded_at,
+                    output,
+                    average_temperature,
+                    average_speed,
+                    average_pressure
+                FROM ranked
+                WHERE bucket_rank = 1
+                ORDER BY bucket_key
+                SQL,
+            [
+                $bucketSeconds,
+                $equipment->id,
+                EquipmentData::TYPE_DATA,
                 $start->format('Y-m-d H:i:s.u'),
                 $end->format('Y-m-d H:i:s.u'),
-            ])
-            ->orderBy('recorded_at')
-            ->orderBy('id')
-            ->select(['recorded_at', 'temperature', 'speed', 'pressure', 'output'])
-            ->cursor()
-            ->each(function (EquipmentData $sample) use (&$buckets, $bucketSeconds, $startTimestamp): void {
-                $key = intdiv($sample->recorded_at->getTimestamp() - $startTimestamp, $bucketSeconds);
-                $buckets[$key] ??= [
-                    'recorded_at' => $sample->recorded_at,
-                    'temperature' => 0.0,
-                    'speed' => 0,
-                    'pressure' => 0.0,
-                    'output' => $sample->output,
-                    'count' => 0,
+            ],
+        );
+
+        return collect($rows)
+            ->map(function (object $bucket): array {
+                $row = (array) $bucket;
+
+                return [
+                    'recorded_at' => CarbonImmutable::parse((string) $row['recorded_at'])->utc()->format('Y-m-d\TH:i:s.u\Z'),
+                    'temperature' => round((float) $row['average_temperature'], 3),
+                    'speed' => (int) round((float) $row['average_speed']),
+                    'pressure' => round((float) $row['average_pressure'], 3),
+                    'output' => (int) $row['output'],
                 ];
-
-                $buckets[$key]['recorded_at'] = $sample->recorded_at;
-                $buckets[$key]['temperature'] += $sample->temperature;
-                $buckets[$key]['speed'] += $sample->speed;
-                $buckets[$key]['pressure'] += $sample->pressure;
-                $buckets[$key]['output'] = $sample->output;
-                $buckets[$key]['count']++;
-            });
-
-        return collect($buckets)
-            ->map(fn (array $bucket): array => [
-                'recorded_at' => $bucket['recorded_at']->utc()->format('Y-m-d\TH:i:s.u\Z'),
-                'temperature' => round($bucket['temperature'] / $bucket['count'], 3),
-                'speed' => (int) round($bucket['speed'] / $bucket['count']),
-                'pressure' => round($bucket['pressure'] / $bucket['count'], 3),
-                'output' => $bucket['output'],
-            ])
+            })
             ->values();
     }
 

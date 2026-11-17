@@ -12,7 +12,10 @@ use Symfony\Component\Process\Process;
 
 it('consumes real MQTT packets from EMQX through the Artisan command', function () {
     $factory = 'protocol-'.bin2hex(random_bytes(6));
-    config(['mqtt.factory' => $factory]);
+    config([
+        'mqtt.factory' => $factory,
+        'mqtt.client_id' => 'test-command-'.$factory,
+    ]);
     $equipment = Equipment::factory()->create(['code' => 'PROTOCOL-001']);
     $repository = new MemoryRepository;
     $subscriber = new MqttClient(config('mqtt.host'), config('mqtt.port'), 'test-sub-'.$factory, MqttClient::MQTT_3_1_1, $repository);
@@ -64,7 +67,10 @@ it('consumes real MQTT packets from EMQX through the Artisan command', function 
 })->skip(fn () => getenv('MQTT_PROTOCOL_TESTS') !== '1', 'Set MQTT_PROTOCOL_TESTS=1 with local EMQX running.');
 
 it('ingests the running Compose simulator telemetry for all five ledger devices', function () {
-    config(['mqtt.factory' => 'F001']);
+    config([
+        'mqtt.factory' => 'F001',
+        'mqtt.client_id' => 'test-sim-command-'.bin2hex(random_bytes(6)),
+    ]);
     $codes = ['EQ-SMT-01', 'EQ-REFLOW-01', 'EQ-CNC-01', 'EQ-ASM-01', 'EQ-TEST-01'];
     foreach ($codes as $code) {
         Equipment::factory()->create(['code' => $code]);

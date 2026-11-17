@@ -7,6 +7,7 @@ use App\Modules\Equipment\Model\EquipmentAlarm;
 use App\Modules\Equipment\Model\EquipmentData;
 use App\Modules\System\Model\User;
 use Closure;
+use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 
@@ -72,6 +73,8 @@ class EquipmentAlarmService
 
     private function evaluateMetrics(EquipmentData $sample): void
     {
+        $matches = [];
+
         foreach (EquipmentAlarm::METRICS as $metric) {
             $measured = (float) $sample->getAttribute($metric);
             $match = EquipmentAlarm::levelFor($metric, $measured);
@@ -80,14 +83,37 @@ class EquipmentAlarmService
                 continue;
             }
 
+            $matches[$metric] = [
+                'measured' => $measured,
+                'level' => $match['level'],
+                'threshold' => $match['threshold'],
+            ];
+        }
+
+        if ($matches === []) {
+            return;
+        }
+
+        $open = $this->openAlarms(
+            $sample->equipment_id,
+            array_map(
+                fn (string $metric): string => EquipmentAlarm::alarmCodeForMetric($metric),
+                array_keys($matches),
+            ),
+        );
+
+        foreach ($matches as $metric => $match) {
+            $alarmCode = EquipmentAlarm::alarmCodeForMetric($metric);
+
             $this->record(
                 $sample,
-                EquipmentAlarm::alarmCodeForMetric($metric),
+                $alarmCode,
                 EquipmentAlarm::messageForMetric($metric),
                 $match['level'],
                 $metric,
                 $match['threshold'],
-                $measured,
+                $match['measured'],
+                $open->get($alarmCode),
             );
         }
     }
@@ -103,6 +129,7 @@ class EquipmentAlarmService
         $metric = EquipmentAlarm::metricForAlarmCode($alarm['code']);
         $measured = $metric === null ? null : (float) $sample->getAttribute($metric);
         $match = $metric === null ? null : EquipmentAlarm::levelFor($metric, $measured);
+        $open = $this->openAlarm($sample->equipment_id, $alarm['code']);
 
         $this->record(
             $sample,
@@ -112,6 +139,7 @@ class EquipmentAlarmService
             $metric,
             $match['threshold'] ?? null,
             $measured,
+            $open,
         );
     }
 
@@ -123,9 +151,8 @@ class EquipmentAlarmService
         ?string $metric,
         ?float $threshold,
         ?float $measured,
+        ?EquipmentAlarm $open = null,
     ): void {
-        $open = $this->openAlarm($sample->equipment_id, $alarmCode);
-
         if ($open !== null) {
             if (EquipmentAlarm::LEVEL_RANKS[$level] > EquipmentAlarm::LEVEL_RANKS[$open->level]) {
                 $open->update([
@@ -154,6 +181,22 @@ class EquipmentAlarmService
             'measured_value' => $measured,
             'triggered_at' => $sample->recorded_at,
         ]);
+    }
+
+    /**
+     * @param  array<int, string>  $alarmCodes
+     * @return Collection<string, EquipmentAlarm>
+     */
+    private function openAlarms(int $equipmentId, array $alarmCodes): Collection
+    {
+        return EquipmentAlarm::query()
+            ->where('equipment_id', $equipmentId)
+            ->whereIn('alarm_code', $alarmCodes)
+            ->whereIn('status', EquipmentAlarm::OPEN_STATUSES)
+            ->orderByDesc('id')
+            ->get()
+            ->unique('alarm_code')
+            ->keyBy('alarm_code');
     }
 
     /**

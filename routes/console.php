@@ -1,5 +1,6 @@
 <?php
 
+use App\Console\Commands\PruneEquipmentData;
 use App\Console\Commands\ScanInventoryAlerts;
 use Illuminate\Foundation\DevCommands;
 use Illuminate\Foundation\Inspiring;
@@ -15,3 +16,7 @@ DevCommands::register('cd frontend/web && npm run dev', 'web');
 Schedule::command(ScanInventoryAlerts::class)
     ->everyFiveMinutes()
     ->withoutOverlapping(10);
+
+Schedule::command(PruneEquipmentData::class)
+    ->dailyAt('03:10')
+    ->withoutOverlapping(30);
