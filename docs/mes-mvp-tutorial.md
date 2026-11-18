@@ -1213,6 +1213,7 @@ npm run build
 
 - `docs/docker-compose.md`：中间件编排的运维细节；
 - `docs/mes-rbac-tutorial.md`：用户、角色、菜单与接口权限；
+- `docs/tutorials/README.md`：按业务 issue 拆分的 05–37 分篇教程；
 - `docs/prd.md`：MES 业务范围和页面需求；
 - `docs/production-deployment.md`：生产部署方式；
 - `app/Modules/Production/Service/`：生产订单、任务、报工的状态流转；
