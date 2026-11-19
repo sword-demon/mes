@@ -109,15 +109,15 @@ class ProductionOrderService
     /**
      * @throws ApiException
      */
-    public function transition(ProductionOrder $order, string $target): ProductionOrder
+    public function transition(ProductionOrder $order, string $action): ProductionOrder
     {
-        return DB::transaction(function () use ($order, $target): ProductionOrder {
+        return DB::transaction(function () use ($order, $action): ProductionOrder {
             $locked = ProductionOrder::query()
                 ->lockForUpdate()
                 ->whereKey($order->getKey())
                 ->firstOrFail();
             $before = $locked->statusLabel();
-            $locked->transitionTo($target);
+            $locked->applyAction($action);
 
             $this->operationLogs->record(new OperationLogEntry(
                 action: 'production.order.transition',

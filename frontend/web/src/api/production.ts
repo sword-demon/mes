@@ -141,6 +141,10 @@ export type ProductionOrder = {
     planned_end_at: string | null;
     status: ProductionOrderStatus;
     status_label: string;
+    allowed_actions: ProductionOrderAction[];
+    editable: boolean;
+    can_split: boolean;
+    can_requisition: boolean;
     remark: string | null;
     product?: NamedRef;
     product_version?: { id: number; version: string };

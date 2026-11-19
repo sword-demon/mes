@@ -3,7 +3,7 @@ import { App as AntdApp } from 'antd';
 import { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import ProductionTasks from './index';
+import ProductionTasks, { filterSplittableOrders } from './index';
 import { http } from '@/api/client';
 import { useAuthStore } from '@/stores/auth';
 import { currentUserFixture } from '@/test/fixtures';
@@ -32,6 +32,22 @@ type Call = { method: string; url: string };
 let calls: Call[] = [];
 
 const meta = { current_page: 1, per_page: 15, total: 1, last_page: 1 };
+const splittableOrder = {
+    id: 11,
+    code: 'PO-2026-001',
+    planned_quantity: '100.000',
+    planned_start_at: '2026-11-16T08:00:00Z',
+    planned_end_at: null,
+    status: 'released',
+    status_label: '已下达',
+    can_split: true,
+};
+const blockedOrder = {
+    ...splittableOrder,
+    id: 12,
+    code: 'PO-2026-002',
+    can_split: false,
+};
 const task = {
     id: 21,
     code: 'PO-2026-001-T01',
@@ -86,7 +102,7 @@ describe('生产任务页', () => {
 
             const data =
                 config.url === '/production/orders'
-                    ? { items: [task.production_order], meta }
+                    ? { items: [splittableOrder, blockedOrder], meta }
                     : config.url === '/basic-data/production-lines'
                       ? { items: [task.production_line], meta }
                       : { items: [task], meta };
@@ -137,5 +153,9 @@ describe('生产任务页', () => {
         });
 
         expect(calls).toContainEqual({ method: 'post', url: '/production/tasks/21/pause' });
+    });
+
+    it('filters split options by can_split', () => {
+        expect(filterSplittableOrders([splittableOrder, blockedOrder])).toEqual([splittableOrder]);
     });
 });

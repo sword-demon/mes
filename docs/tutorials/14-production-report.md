@@ -4,15 +4,7 @@
 
 ## 1. 哪些任务可以报工
 
-```php
-public const array REPORTABLE_ORDER_STATUSES = [
-    ProductionOrder::RELEASED,
-    ProductionOrder::IN_PROGRESS,
-    ProductionOrder::PAUSED,
-];
-```
-
-同时任务不能是 `completed`。报工必须关联：
+订单必须处于可报工状态（`released`、`in_progress` 或 `paused`），该事实由 `ProductionOrder` 的 `isReportable()` 表达；任务自身不能是 `completed`。报工必须关联：
 
 - 任务；
 - 工艺路线中的工序；
@@ -77,12 +69,16 @@ POST /api/v1/production/reports/{report}/reverse
 - 从任务和订单累计数量中扣回原报工数量；
 - 保留原记录作为审计证据。
 
-有效报工使用 `scopeEffective()` 排除已冲销记录：
+有效报工使用 `scopeEffective()` 排除已冲销记录和已取消订单的报工：
 
 ```php
 public function scopeEffective(Builder $query): void
 {
-    $query->where('type', '<>', self::REVERSED);
+    $query->where($query->qualifyColumn('type'), '!=', self::REVERSED)
+        ->whereHas(
+            'productionTask.productionOrder',
+            fn (Builder $order) => $order->countable(),
+        );
 }
 ```
 

@@ -176,11 +176,7 @@ class MaterialRequisitionService
      */
     private function ensureOrderCanRequisition(ProductionOrder $order): void
     {
-        if (in_array($order->status, [
-            ProductionOrder::RELEASED,
-            ProductionOrder::IN_PROGRESS,
-            ProductionOrder::PAUSED,
-        ], true)) {
+        if ($order->isRequisitionable()) {
             return;
         }
 

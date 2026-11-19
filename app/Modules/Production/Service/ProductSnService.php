@@ -17,12 +17,6 @@ class ProductSnService
 {
     public function __construct(private readonly EquipmentService $equipments) {}
 
-    public const array GENERATABLE_ORDER_STATUSES = [
-        ProductionOrder::RELEASED,
-        ProductionOrder::IN_PROGRESS,
-        ProductionOrder::PAUSED,
-    ];
-
     /**
      * Serial numbers are unique per day, so two concurrent batches can compute
      * the same next number; the unique index rejects one and the retry takes
@@ -153,7 +147,7 @@ class ProductSnService
         $order = ProductionOrder::query()->lockForUpdate()->whereKey($data['production_order_id'])->firstOrFail();
         $quantity = (int) $data['quantity'];
 
-        if (! in_array($order->status, self::GENERATABLE_ORDER_STATUSES, true)) {
+        if (! $order->canGenerateSn()) {
             $message = match ($order->status) {
                 ProductionOrder::DRAFT => '生产订单尚未审核下达，不能生成 SN',
                 ProductionOrder::CANCELLED, ProductionOrder::CLOSED => '已取消或已关闭的生产订单不能生成 SN',

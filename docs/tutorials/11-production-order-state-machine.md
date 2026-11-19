@@ -64,7 +64,7 @@ return ProductionOrder::query()->create([
 ```php
 public function ensureEditable(): void
 {
-    if ($this->status === self::DRAFT) {
+    if ($this->isEditable()) {
         return;
     }
 
@@ -87,10 +87,10 @@ $order->ensureEditable();
 所有动作最终调用：
 
 ```php
-$locked->transitionTo($target);
+$locked->applyAction($action);
 ```
 
-`transitionTo()` 只允许在 `TRANSITIONS` 表中出现的目标状态，非法转移返回 422。各动作是独立接口：
+`ProductionOrder` 的 action 表定义每个动作允许的来源状态和目标状态；`applyAction()` 只接受表中定义的动作，非法动作返回 422。`allowedActions()` 与 `applyAction()` 共用同一张表，API 的 `allowed_actions` 直接来自它。各动作是独立接口：
 
 ```text
 POST /orders/{order}/submit
@@ -112,7 +112,7 @@ POST /orders/{order}/cancel
 
 - 状态、产品、产线、日期、订单号筛选；
 - 创建和编辑订单；
-- 按当前状态显示不同操作按钮；
+- 从 API 的 `allowed_actions` 读取当前状态允许的动作，再与权限码取交集后渲染按钮；
 - 提交审核、审核、下达、开工、暂停、恢复、完成、关闭、取消。
 
 前端按钮只做体验，后端状态机才是唯一规则来源。

@@ -33,9 +33,9 @@ class DashboardService
         $end = BusinessDay::endUtc($today);
 
         $orders = ProductionOrder::query()
+            ->countable()
             ->where('created_at', '>=', $start)
             ->where('created_at', '<', $end)
-            ->where('status', '!=', ProductionOrder::CANCELLED)
             ->selectRaw('COUNT(*) as order_count, COALESCE(SUM(planned_quantity), 0) as planned_quantity')
             ->first();
 
@@ -152,7 +152,7 @@ class DashboardService
         $defectReasons = DefectiveProduct::query()
             ->whereHas(
                 'productionOrder',
-                fn (Builder $order) => $order->where('status', '!=', ProductionOrder::CANCELLED),
+                fn (Builder $order) => $order->countable(),
             )
             ->join('mes_defect_codes', 'mes_defect_codes.id', '=', 'mes_defective_products.defect_code_id')
             ->selectRaw(
@@ -209,8 +209,8 @@ class DashboardService
     public function latestOrders(): EloquentCollection
     {
         return ProductionOrder::query()
+            ->countable()
             ->with(['product:id,code,name', 'productionLine:id,code,name'])
-            ->where('status', '!=', ProductionOrder::CANCELLED)
             ->orderByDesc('created_at')
             ->orderByDesc('id')
             ->limit(self::LATEST_LIMIT)

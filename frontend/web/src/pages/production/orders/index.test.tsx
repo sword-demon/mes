@@ -32,7 +32,7 @@ type Call = { method: string; url: string };
 let calls: Call[] = [];
 
 const meta = { current_page: 1, per_page: 15, total: 1, last_page: 1 };
-const order = {
+const baseOrder = {
     id: 11,
     code: 'PO-2026-001',
     product_id: 1,
@@ -50,10 +50,15 @@ const order = {
     planned_end_at: null,
     status: 'approved',
     status_label: '已审核',
+    allowed_actions: ['release', 'cancel'],
+    editable: false,
+    can_split: false,
+    can_requisition: false,
     remark: null,
     product: { id: 1, code: 'P001', name: '智能电表' },
     production_line: { id: 2, code: 'PL01', name: '一号线' },
 };
+let order = { ...baseOrder };
 
 async function renderPage() {
     const container = document.createElement('div');
@@ -78,6 +83,7 @@ async function renderPage() {
 describe('生产订单页', () => {
     beforeEach(() => {
         calls = [];
+        order = { ...baseOrder };
         http.defaults.adapter = async (config) => {
             calls.push({ method: config.method ?? 'get', url: config.url ?? '' });
 
@@ -133,5 +139,30 @@ describe('生产订单页', () => {
         });
 
         expect(calls).toContainEqual({ method: 'post', url: '/production/orders/11/release' });
+    });
+
+    it('renders actions from allowed_actions instead of the raw status', async () => {
+        order = {
+            ...baseOrder,
+            allowed_actions: ['submit'],
+            editable: true,
+        };
+        useAuthStore.setState({
+            token: 'token',
+            user: currentUserFixture({
+                permissions: [
+                    'production.orders.index',
+                    'button.production.orders.submit',
+                    'button.production.orders.release',
+                    'button.production.orders.update',
+                ],
+            }),
+        });
+
+        await renderPage();
+
+        expect(document.body.textContent).toContain('提交审核');
+        expect(document.body.textContent).toContain('编辑');
+        expect(document.body.textContent).not.toContain('下达');
     });
 });

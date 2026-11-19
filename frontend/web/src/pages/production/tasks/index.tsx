@@ -36,11 +36,14 @@ import type {
 } from '@/api/production';
 import { ApiRequestError } from '@/utils/api-error';
 
-const SPLITTABLE_ORDER_STATUSES = ['released'];
 const statusOptions = PRODUCTION_TASK_STATUSES.map(({ value, label }) => ({ value, label }));
 const statusColor = Object.fromEntries(
     PRODUCTION_TASK_STATUSES.map(({ value, color }) => [value, color]),
 );
+
+export function filterSplittableOrders<T extends { can_split: boolean }>(orders: T[]): T[] {
+    return orders.filter((order) => order.can_split);
+}
 
 function SplitTaskModal({
     onSave,
@@ -57,9 +60,7 @@ function SplitTaskModal({
         queryKey: ['production.orders', 'options'],
         queryFn: () => listOrders({ per_page: 100 }),
     });
-    const splittableOrders = (orders.data?.items ?? []).filter((order) =>
-        SPLITTABLE_ORDER_STATUSES.includes(order.status),
-    );
+    const splittableOrders = filterSplittableOrders(orders.data?.items ?? []);
 
     return (
         <Modal

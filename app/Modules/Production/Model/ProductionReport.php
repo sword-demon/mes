@@ -88,7 +88,7 @@ class ProductionReport extends Model
         $query->where($query->qualifyColumn('type'), '!=', self::REVERSED)
             ->whereHas(
                 'productionTask.productionOrder',
-                fn (Builder $order) => $order->where('status', '!=', ProductionOrder::CANCELLED),
+                fn (Builder $order) => $order->countable(),
             );
     }
 

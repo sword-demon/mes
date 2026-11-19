@@ -91,7 +91,7 @@ class ProductionReportController extends Controller
         // shortcut: one page covers a demo factory's open tasks; add paging when it does not.
         $tasks = ProductionTask::query()
             ->with(['product:id,code,name', 'productionOrder:id,code,production_line_id'])
-            ->whereHas('productionOrder', fn (Builder $order) => $order->whereIn('status', ProductionReportService::REPORTABLE_ORDER_STATUSES))
+            ->whereHas('productionOrder', fn (Builder $order) => $order->reportable())
             ->where('status', '!=', ProductionTask::COMPLETED)
             ->orderBy('id')
             ->limit(100)

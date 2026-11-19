@@ -82,8 +82,8 @@ class ProductSnController extends Controller
     {
         // shortcut: one page covers a demo factory's open orders; add paging when it does not.
         $orders = ProductionOrder::query()
+            ->generatableSn()
             ->with('product:id,code,name')
-            ->whereIn('status', ProductSnService::GENERATABLE_ORDER_STATUSES)
             ->orderByDesc('id')
             ->limit(100)
             ->get(['id', 'code', 'product_id', 'planned_quantity'])

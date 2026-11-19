@@ -31,7 +31,7 @@ class ProductionTaskService
                 ->whereKey($order->getKey())
                 ->firstOrFail();
 
-            if ($locked->status !== ProductionOrder::RELEASED) {
+            if (! $locked->canSplit()) {
                 throw new ApiException('只有已下达的生产订单可以拆分生产任务', 422);
             }
 

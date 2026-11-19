@@ -34,6 +34,10 @@ class ProductionOrderResource extends JsonResource
             'planned_end_at' => $this->planned_end_at,
             'status' => $this->status,
             'status_label' => $this->statusLabel(),
+            'allowed_actions' => $this->allowedActions(),
+            'editable' => $this->isEditable(),
+            'can_split' => $this->canSplit(),
+            'can_requisition' => $this->isRequisitionable(),
             'remark' => $this->remark,
             'product' => $this->whenLoaded('product', fn () => [
                 'id' => $this->product->id,

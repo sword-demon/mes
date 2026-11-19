@@ -72,53 +72,53 @@ class ProductionOrderController extends Controller
 
     public function submit(ProductionOrder $order): JsonResponse
     {
-        return $this->transition($order, ProductionOrder::PENDING);
+        return $this->transition($order, 'submit');
     }
 
     public function approve(ProductionOrder $order): JsonResponse
     {
-        return $this->transition($order, ProductionOrder::APPROVED);
+        return $this->transition($order, 'approve');
     }
 
     public function release(ProductionOrder $order): JsonResponse
     {
-        return $this->transition($order, ProductionOrder::RELEASED);
+        return $this->transition($order, 'release');
     }
 
     public function start(ProductionOrder $order): JsonResponse
     {
-        return $this->transition($order, ProductionOrder::IN_PROGRESS);
+        return $this->transition($order, 'start');
     }
 
     public function pause(ProductionOrder $order): JsonResponse
     {
-        return $this->transition($order, ProductionOrder::PAUSED);
+        return $this->transition($order, 'pause');
     }
 
     public function resume(ProductionOrder $order): JsonResponse
     {
-        return $this->transition($order, ProductionOrder::IN_PROGRESS);
+        return $this->transition($order, 'resume');
     }
 
     public function complete(ProductionOrder $order): JsonResponse
     {
-        return $this->transition($order, ProductionOrder::COMPLETED);
+        return $this->transition($order, 'complete');
     }
 
     public function close(ProductionOrder $order): JsonResponse
     {
-        return $this->transition($order, ProductionOrder::CLOSED);
+        return $this->transition($order, 'close');
     }
 
     public function cancel(ProductionOrder $order): JsonResponse
     {
-        return $this->transition($order, ProductionOrder::CANCELLED);
+        return $this->transition($order, 'cancel');
     }
 
-    private function transition(ProductionOrder $order, string $target): JsonResponse
+    private function transition(ProductionOrder $order, string $action): JsonResponse
     {
         return ApiResponse::success(ProductionOrderResource::make(
-            $this->orders->transition($order, $target)->load(self::RELATIONS),
+            $this->orders->transition($order, $action)->load(self::RELATIONS),
         ));
     }
 }

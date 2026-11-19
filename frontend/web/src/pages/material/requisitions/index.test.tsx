@@ -4,7 +4,7 @@ import { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import type { Root } from 'react-dom/client';
 import { afterEach, expect, it } from 'vitest';
-import MaterialRequisitions from './index';
+import MaterialRequisitions, { filterRequisitionableOrders } from './index';
 import { http } from '@/api/client';
 import { useAuthStore } from '@/stores/auth';
 import { currentUserFixture } from '@/test/fixtures';
@@ -43,6 +43,19 @@ const requisition = {
     }],
     created_at: '2026-11-15T01:00:00Z',
 };
+const requisitionableOrder = {
+    id: 1,
+    code: 'PO-100001',
+    status: 'released',
+    status_label: '已下达',
+    can_requisition: true,
+};
+const blockedOrder = {
+    ...requisitionableOrder,
+    id: 2,
+    code: 'PO-100002',
+    can_requisition: false,
+};
 
 async function render(permissions: string[]) {
     useAuthStore.setState({ token: 'token', user: currentUserFixture({ permissions }) });
@@ -62,7 +75,7 @@ async function render(permissions: string[]) {
                 code: 200,
                 data: config.url?.startsWith('/materials/requisitions')
                     ? { items: [requisition], meta: { current_page: 1, per_page: 15, total: 1, last_page: 1 } }
-                    : { items: [{ id: 1, code: 'PO-100001', status: 'released', status_label: '已下达' }], meta: { current_page: 1, per_page: 100, total: 1, last_page: 1 } },
+                    : { items: [requisitionableOrder, blockedOrder], meta: { current_page: 1, per_page: 100, total: 2, last_page: 1 } },
             },
         };
     };
@@ -98,4 +111,8 @@ it('shows issuing for the warehouse permission', async () => {
 
     expect(document.body.textContent).toContain('发料');
     expect(requests.some((request) => request.url?.startsWith('/materials/requisitions'))).toBe(true);
+});
+
+it('filters requisition options by can_requisition', () => {
+    expect(filterRequisitionableOrders([requisitionableOrder, blockedOrder])).toEqual([requisitionableOrder]);
 });

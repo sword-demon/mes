@@ -9,6 +9,7 @@ use App\Modules\Process\Model\RouteOperation;
 use App\Modules\Product\Model\Product;
 use App\Modules\Product\Model\ProductVersion;
 use App\Modules\Production\Model\ProductionOrder;
+use App\Modules\Production\Resource\ProductionOrderResource;
 use App\Modules\Production\Service\ProductionOrderService;
 
 /**
@@ -176,6 +177,10 @@ it('walks the full order state machine and rejects transitions that skip states'
 
     $order = bearer($actor)->postJson('/api/v1/production/orders', productionOrderPayload($product, $bom, $route, $line))
         ->assertOk()
+        ->assertJsonPath('data.allowed_actions', ['submit', 'cancel'])
+        ->assertJsonPath('data.editable', true)
+        ->assertJsonPath('data.can_split', false)
+        ->assertJsonPath('data.can_requisition', false)
         ->json('data');
 
     bearer($actor)->postJson("/api/v1/production/orders/{$order['id']}/approve")
@@ -360,6 +365,38 @@ it('filters orders by status, product, line and planned date', function () {
         ->assertOk()
         ->assertJsonCount(1, 'data.items')
         ->assertJsonPath('data.items.0.product.id', $otherProduct->id);
+});
+
+it('exposes the order actions and order-level capabilities', function () {
+    $draft = new ProductionOrder(['status' => ProductionOrder::DRAFT]);
+    $released = new ProductionOrder(['status' => ProductionOrder::RELEASED]);
+    $cancelled = new ProductionOrder(['status' => ProductionOrder::CANCELLED]);
+
+    $draftData = ProductionOrderResource::make($draft)->resolve();
+    $releasedData = ProductionOrderResource::make($released)->resolve();
+    $cancelledData = ProductionOrderResource::make($cancelled)->resolve();
+
+    expect($draftData['allowed_actions'])->toBe(['submit', 'cancel'])
+        ->and($draftData['editable'])->toBeTrue()
+        ->and($draftData['can_split'])->toBeFalse()
+        ->and($draftData['can_requisition'])->toBeFalse()
+        ->and($releasedData['allowed_actions'])->toBe(['start', 'cancel'])
+        ->and($releasedData['editable'])->toBeFalse()
+        ->and($releasedData['can_split'])->toBeTrue()
+        ->and($releasedData['can_requisition'])->toBeTrue()
+        ->and($cancelledData['allowed_actions'])->toBe([])
+        ->and($cancelledData['can_split'])->toBeFalse()
+        ->and($cancelledData['can_requisition'])->toBeFalse();
+});
+
+it('filters countable orders', function () {
+    $active = ProductionOrder::factory()->create(['status' => ProductionOrder::DRAFT]);
+    $cancelled = ProductionOrder::factory()->create(['status' => ProductionOrder::CANCELLED]);
+
+    $ids = ProductionOrder::query()->countable()->pluck('id')->all();
+
+    expect($ids)->toContain($active->id)
+        ->not->toContain($cancelled->id);
 });
 
 it('requires the matching permission for every order endpoint', function () {

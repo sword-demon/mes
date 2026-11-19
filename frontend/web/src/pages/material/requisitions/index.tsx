@@ -31,7 +31,9 @@ import { useAuthStore } from '@/stores/auth';
 import { ApiRequestError } from '@/utils/api-error';
 import { can } from '@/utils/permission';
 
-const REQUISITION_STATUSES = ['released', 'in_progress', 'paused'] as const;
+export function filterRequisitionableOrders<T extends { can_requisition: boolean }>(orders: T[]): T[] {
+    return orders.filter((order) => order.can_requisition);
+}
 
 function CreateModal({ onClose }: { onClose: () => void }) {
     const { message } = App.useApp();
@@ -85,8 +87,7 @@ function CreateModal({ onClose }: { onClose: () => void }) {
                         showSearch
                         optionFilterProp="label"
                         placeholder="请选择已下达、生产中或已暂停的订单"
-                        options={(orders.data?.items ?? [])
-                            .filter((order) => REQUISITION_STATUSES.includes(order.status as typeof REQUISITION_STATUSES[number]))
+                        options={filterRequisitionableOrders(orders.data?.items ?? [])
                             .map((order) => ({ value: order.id, label: `${order.code} ${order.status_label}` }))}
                     />
                 </Form.Item>

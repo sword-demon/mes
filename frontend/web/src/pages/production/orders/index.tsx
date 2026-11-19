@@ -43,6 +43,22 @@ const statusOptions = PRODUCTION_ORDER_STATUSES.map(({ value, label }) => ({ val
 const statusColor = Object.fromEntries(
     PRODUCTION_ORDER_STATUSES.map(({ value, color }) => [value, color]),
 );
+const orderActionConfig: Record<ProductionOrderAction, {
+    label: string;
+    permission: string;
+    confirm?: boolean;
+    danger?: boolean;
+}> = {
+    submit: { label: '提交审核', permission: 'submit' },
+    approve: { label: '审核', permission: 'audit' },
+    release: { label: '下达', permission: 'release' },
+    start: { label: '开工', permission: 'start' },
+    pause: { label: '暂停', permission: 'pause' },
+    resume: { label: '恢复', permission: 'resume' },
+    complete: { label: '完成', permission: 'complete' },
+    close: { label: '关闭', permission: 'close', confirm: true },
+    cancel: { label: '取消', permission: 'cancel', confirm: true, danger: true },
+};
 
 function OrderFormModal({
     editing,
@@ -213,14 +229,14 @@ function OrderActions({
     onAct: (action: ProductionOrderAction) => void;
 }) {
     const button = (action: ProductionOrderAction, label: string, permission: string, danger = false) => (
-        <Can code={`button.production.orders.${permission}`}>
+        <Can key={action} code={`button.production.orders.${permission}`}>
             <Button type="link" danger={danger} onClick={() => onAct(action)}>
                 {label}
             </Button>
         </Can>
     );
     const confirm = (action: ProductionOrderAction, label: string, permission: string) => (
-        <Can code={`button.production.orders.${permission}`}>
+        <Can key={action} code={`button.production.orders.${permission}`}>
             <Popconfirm title={`确认${label}该订单？`} okText={label} cancelText="取消" onConfirm={() => onAct(action)}>
                 <Button type="link" danger>
                     {label}
@@ -231,16 +247,13 @@ function OrderActions({
 
     return (
         <Space wrap>
-            {record.status === 'draft' && button('submit', '提交审核', 'submit')}
-            {record.status === 'pending' && button('approve', '审核', 'audit')}
-            {record.status === 'approved' && button('release', '下达', 'release')}
-            {record.status === 'released' && button('start', '开工', 'start')}
-            {record.status === 'in_progress' && button('pause', '暂停', 'pause')}
-            {record.status === 'in_progress' && button('complete', '完成', 'complete')}
-            {record.status === 'paused' && button('resume', '恢复', 'resume')}
-            {record.status === 'completed' && confirm('close', '关闭', 'close')}
-            {['draft', 'pending', 'approved', 'released', 'in_progress', 'paused'].includes(record.status) &&
-                confirm('cancel', '取消', 'cancel')}
+            {record.allowed_actions.map((action) => {
+                const config = orderActionConfig[action];
+
+                return config.confirm
+                    ? confirm(action, config.label, config.permission)
+                    : button(action, config.label, config.permission, config.danger);
+            })}
         </Space>
     );
 }
@@ -432,7 +445,7 @@ export default function ProductionOrders() {
                         width: 220,
                         render: (_, record) => (
                             <Space wrap>
-                                {record.status === 'draft' && (
+                                {record.editable && (
                                     <Can code="button.production.orders.update">
                                         <Button type="link" onClick={() => setEditing({ mode: 'edit', record })}>
                                             编辑

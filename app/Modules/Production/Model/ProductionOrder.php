@@ -13,6 +13,7 @@ use Database\Factories\ProductionOrderFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\Table;
 use Illuminate\Database\Eloquent\Attributes\UseFactory;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -80,20 +81,59 @@ class ProductionOrder extends Model
     public const string CANCELLED = 'cancelled';
 
     /**
-     * The only legal moves; pause and resume share the in-progress state.
+     * Capability sets stay separate even while they match: one rule may change
+     * without silently changing the other two.
      *
-     * @var array<string, array<int, string>>
+     * Orders that accept production reports.
+     *
+     * @var array<int, string>
      */
-    public const array TRANSITIONS = [
-        self::DRAFT => [self::PENDING, self::CANCELLED],
-        self::PENDING => [self::APPROVED, self::CANCELLED],
-        self::APPROVED => [self::RELEASED, self::CANCELLED],
-        self::RELEASED => [self::IN_PROGRESS, self::CANCELLED],
-        self::IN_PROGRESS => [self::PAUSED, self::COMPLETED, self::CANCELLED],
-        self::PAUSED => [self::IN_PROGRESS, self::CANCELLED],
-        self::COMPLETED => [self::CLOSED],
-        self::CLOSED => [],
-        self::CANCELLED => [],
+    public const array REPORTABLE_STATUSES = [
+        self::RELEASED,
+        self::IN_PROGRESS,
+        self::PAUSED,
+    ];
+
+    /**
+     * Orders that may issue serial numbers.
+     *
+     * @var array<int, string>
+     */
+    public const array GENERATABLE_STATUSES = [
+        self::RELEASED,
+        self::IN_PROGRESS,
+        self::PAUSED,
+    ];
+
+    /**
+     * Orders that may create material requisitions.
+     *
+     * @var array<int, string>
+     */
+    public const array REQUISITIONABLE_STATUSES = [
+        self::RELEASED,
+        self::IN_PROGRESS,
+        self::PAUSED,
+    ];
+
+    /**
+     * The only legal order actions; the source statuses and target status are defined in one place.
+     *
+     * @var array<string, array{from: array<int, string>, to: string}>
+     */
+    public const array ACTIONS = [
+        'submit' => ['from' => [self::DRAFT], 'to' => self::PENDING],
+        'approve' => ['from' => [self::PENDING], 'to' => self::APPROVED],
+        'release' => ['from' => [self::APPROVED], 'to' => self::RELEASED],
+        'start' => ['from' => [self::RELEASED], 'to' => self::IN_PROGRESS],
+        'pause' => ['from' => [self::IN_PROGRESS], 'to' => self::PAUSED],
+        'complete' => ['from' => [self::IN_PROGRESS], 'to' => self::COMPLETED],
+        'resume' => ['from' => [self::PAUSED], 'to' => self::IN_PROGRESS],
+        'close' => ['from' => [self::COMPLETED], 'to' => self::CLOSED],
+        'cancel' => [
+            'from' => [self::DRAFT, self::PENDING, self::APPROVED, self::RELEASED, self::IN_PROGRESS, self::PAUSED],
+            'to' => self::CANCELLED,
+        ],
     ];
 
     public const array STATUS_LABELS = [
@@ -127,25 +167,89 @@ class ProductionOrder extends Model
      */
     public function ensureEditable(): void
     {
-        if ($this->status === self::DRAFT) {
+        if ($this->isEditable()) {
             return;
         }
 
         throw new ApiException('生产订单已提交，不可修改', 403, status: 403);
     }
 
+    public function isEditable(): bool
+    {
+        return $this->status === self::DRAFT;
+    }
+
+    public function isReportable(): bool
+    {
+        return in_array($this->status, self::REPORTABLE_STATUSES, true);
+    }
+
+    public function canGenerateSn(): bool
+    {
+        return in_array($this->status, self::GENERATABLE_STATUSES, true);
+    }
+
+    public function isRequisitionable(): bool
+    {
+        return in_array($this->status, self::REQUISITIONABLE_STATUSES, true);
+    }
+
+    public function canSplit(): bool
+    {
+        return $this->status === self::RELEASED;
+    }
+
+    /**
+     * @return array<int, string>
+     */
+    public function allowedActions(): array
+    {
+        return array_keys(array_filter(
+            self::ACTIONS,
+            fn (array $action): bool => in_array($this->status, $action['from'], true),
+        ));
+    }
+
     /**
      * @throws ApiException
      */
-    public function transitionTo(string $target): void
+    public function applyAction(string $action): void
     {
-        if (! in_array($target, self::TRANSITIONS[$this->status] ?? [], true)) {
-            $label = self::STATUS_LABELS[$target] ?? $target;
+        $definition = self::ACTIONS[$action] ?? null;
+
+        if ($definition === null || ! in_array($this->status, $definition['from'], true)) {
+            $label = $definition === null
+                ? $action
+                : self::STATUS_LABELS[$definition['to']];
 
             throw new ApiException("生产订单当前状态为「{$this->statusLabel()}」，不能变更为「{$label}」", 422);
         }
 
-        $this->update(['status' => $target]);
+        $this->update(['status' => $definition['to']]);
+    }
+
+    /**
+     * @param  Builder<ProductionOrder>  $query
+     */
+    public function scopeCountable(Builder $query): void
+    {
+        $query->where('status', '!=', self::CANCELLED);
+    }
+
+    /**
+     * @param  Builder<ProductionOrder>  $query
+     */
+    public function scopeReportable(Builder $query): void
+    {
+        $query->whereIn('status', self::REPORTABLE_STATUSES);
+    }
+
+    /**
+     * @param  Builder<ProductionOrder>  $query
+     */
+    public function scopeGeneratableSn(Builder $query): void
+    {
+        $query->whereIn('status', self::GENERATABLE_STATUSES);
     }
 
     /**
