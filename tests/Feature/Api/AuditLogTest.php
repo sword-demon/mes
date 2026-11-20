@@ -5,10 +5,14 @@ use App\Modules\Material\Model\Material;
 use App\Modules\Organization\Model\Employee;
 use App\Modules\Organization\Model\ProductionLine;
 use App\Modules\Organization\Model\Team;
+use App\Modules\Process\Model\Process;
 use App\Modules\Process\Model\RouteOperation;
+use App\Modules\Production\Model\ProcessRecord;
 use App\Modules\Production\Model\ProductionOrder;
 use App\Modules\Production\Model\ProductionReport;
 use App\Modules\Production\Model\ProductionTask;
+use App\Modules\Production\Service\ProcessRecordService;
+use App\Modules\Production\Service\ProductionTaskService;
 use App\Modules\System\Model\LoginLog;
 use App\Modules\System\Model\OperationLog;
 use App\Modules\System\Model\Permission;
@@ -494,4 +498,82 @@ it('records split, assign and transition logs for tasks', function () {
     expect($assign->object_name)->toBe($task->code)
         ->and($assign->changes['产线'])->toBe(['before' => null, 'after' => $line->name])
         ->and($assign->changes['状态'])->toBe(['before' => '待分配', 'after' => '生产中']);
+});
+
+it('records a log for every flow action with status, result and reason', function () {
+    $line = ProductionLine::factory()->create();
+    $order = createScopedOrder($line, 'PO-FLOW-001');
+    $team = Team::factory()->create();
+    $employee = Employee::factory()->create(['team_id' => $team->id]);
+    $actor = superAdmin();
+
+    RouteOperation::factory()->create([
+        'route_id' => $order->route_id,
+        'process_id' => Process::factory()->create(['requires_inspection' => false])->id,
+        'sequence' => 1,
+    ]);
+    RouteOperation::factory()->create([
+        'route_id' => $order->route_id,
+        'process_id' => Process::factory()->create(['requires_inspection' => true])->id,
+        'sequence' => 2,
+    ]);
+
+    $task = app(ProductionTaskService::class)->split($order, ['planned_quantity' => 100]);
+    $records = ProcessRecord::query()
+        ->where('production_task_id', $task->id)
+        ->orderBy('sequence')
+        ->get();
+
+    bearer($actor)->postJson("/api/v1/production/process-records/{$records[0]->id}/start", [
+        'employee_id' => $employee->id,
+    ])->assertOk();
+    bearer($actor)->postJson("/api/v1/production/process-records/{$records[0]->id}/exception", [
+        'reason' => '设备故障停机',
+    ])->assertOk();
+    bearer($actor)->postJson("/api/v1/production/process-records/{$records[0]->id}/start", [
+        'employee_id' => $employee->id,
+    ])->assertOk();
+    bearer($actor)->postJson("/api/v1/production/process-records/{$records[0]->id}/complete")->assertOk();
+    bearer($actor)->postJson("/api/v1/production/process-records/{$records[0]->id}/receive")->assertOk();
+
+    bearer($actor)->postJson("/api/v1/production/process-records/{$records[1]->id}/start", [
+        'employee_id' => $employee->id,
+    ])->assertOk();
+    bearer($actor)->postJson("/api/v1/production/process-records/{$records[1]->id}/complete")->assertOk();
+    app(ProcessRecordService::class)->inspect($records[1], true, null);
+    bearer($actor)->postJson("/api/v1/production/process-records/{$records[1]->id}/submit")->assertOk();
+    bearer($actor)->postJson("/api/v1/production/process-records/{$records[1]->id}/rework", [
+        'reason' => '尺寸超差返工',
+    ])->assertOk();
+
+    $logs = OperationLog::query()->orderBy('id')->get();
+
+    expect($logs->pluck('action')->all())->toBe([
+        'production.task.split',
+        'production.flow.start',
+        'production.flow.exception',
+        'production.flow.start',
+        'production.flow.complete',
+        'production.flow.receive',
+        'production.flow.start',
+        'production.flow.complete',
+        'production.flow.inspect',
+        'production.flow.submit',
+        'production.flow.rework',
+    ]);
+
+    $exceptionLog = $logs->firstWhere('action', 'production.flow.exception');
+
+    expect($exceptionLog->object_name)->toBe($task->code.' 第1道')
+        ->and($exceptionLog->changes['异常原因'])->toBe(['before' => null, 'after' => '设备故障停机'])
+        ->and($exceptionLog->changes['状态']['before'])->toBe('加工中');
+
+    $inspectLog = $logs->firstWhere('action', 'production.flow.inspect');
+
+    expect($inspectLog->changes['检验结果'])->toBe(['before' => null, 'after' => '合格']);
+
+    $reworkLog = $logs->firstWhere('action', 'production.flow.rework');
+
+    expect($reworkLog->changes['返工原因'])->toBe(['before' => null, 'after' => '尺寸超差返工'])
+        ->and($reworkLog->changes['返工次数'])->toBe(['before' => 0, 'after' => 1]);
 });

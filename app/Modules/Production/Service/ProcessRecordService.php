@@ -2,6 +2,7 @@
 
 namespace App\Modules\Production\Service;
 
+use App\Core\DataScope\DataScopeGuard;
 use App\Core\Exceptions\ApiException;
 use App\Modules\Equipment\Service\EquipmentService;
 use App\Modules\Organization\Model\Employee;
@@ -10,11 +11,17 @@ use App\Modules\Production\Model\ProcessRecord;
 use App\Modules\Production\Model\ProductionOrder;
 use App\Modules\Production\Model\ProductionTask;
 use App\Modules\Production\Model\ProductSn;
+use App\Modules\System\Service\OperationLogService;
+use App\Modules\System\ValueObject\OperationLogEntry;
 use Illuminate\Support\Facades\DB;
 
 class ProcessRecordService
 {
-    public function __construct(private readonly EquipmentService $equipments) {}
+    public function __construct(
+        private readonly EquipmentService $equipments,
+        private readonly DataScopeGuard $dataScope,
+        private readonly OperationLogService $operationLogs,
+    ) {}
 
     /**
      * A task inherits its whole route, so every step is visible as 待加工 from
@@ -50,6 +57,7 @@ class ProcessRecordService
     {
         return DB::transaction(function () use ($record, $data): ProcessRecord {
             $task = ProductionTask::query()->lockForUpdate()->whereKey($record->production_task_id)->firstOrFail();
+            $this->dataScope->ensure($task);
             $locked = ProcessRecord::query()->lockForUpdate()->whereKey($record->getKey())->firstOrFail();
 
             if ($task->status === ProductionTask::COMPLETED) {
@@ -71,6 +79,7 @@ class ProcessRecordService
                 );
             }
 
+            $before = $locked->statusLabel();
             $employeeId = $data['employee_id'] ?? $locked->employee_id ?? $task->owner_id;
 
             if ($employeeId === null) {
@@ -120,6 +129,16 @@ class ProcessRecordService
                 'started_at' => $locked->started_at ?? now(),
             ]);
 
+            $this->operationLogs->record(new OperationLogEntry(
+                action: 'production.flow.start',
+                actionName: '工序开工',
+                objectType: '工序执行',
+                objectId: $locked->id,
+                objectName: $this->taskLabel($locked),
+                before: ['状态' => $before],
+                after: ['状态' => $locked->statusLabel(), '操作人员' => $employee->name],
+            ));
+
             return $locked;
         });
     }
@@ -131,6 +150,8 @@ class ProcessRecordService
     {
         return DB::transaction(function () use ($record): ProcessRecord {
             $locked = ProcessRecord::query()->lockForUpdate()->whereKey($record->getKey())->firstOrFail();
+            $this->dataScope->ensure($locked);
+            $before = $locked->statusLabel();
             $this->ensureStatus($locked, ProcessRecord::PROCESSING, '完成加工');
             $this->ensureSerialNumberUsable($locked);
             $requiresInspection = $locked->requiresInspection();
@@ -144,6 +165,16 @@ class ProcessRecordService
                     : $locked->inspection_cycle,
             ]);
 
+            $this->operationLogs->record(new OperationLogEntry(
+                action: 'production.flow.complete',
+                actionName: '工序完工',
+                objectType: '工序执行',
+                objectId: $locked->id,
+                objectName: $this->taskLabel($locked),
+                before: ['状态' => $before],
+                after: ['状态' => $locked->statusLabel()],
+            ));
+
             return $locked;
         });
     }
@@ -155,6 +186,8 @@ class ProcessRecordService
     {
         return DB::transaction(function () use ($record, $passed, $reason): ProcessRecord {
             $locked = ProcessRecord::query()->lockForUpdate()->whereKey($record->getKey())->firstOrFail();
+            $this->dataScope->ensure($locked);
+            $before = $locked->statusLabel();
             $this->ensureStatus($locked, ProcessRecord::INSPECTING, '检验');
             $this->ensureSerialNumberUsable($locked);
 
@@ -163,15 +196,27 @@ class ProcessRecordService
                     'status' => ProcessRecord::INSPECTED,
                     'inspected_at' => now(),
                 ]);
+            } else {
+                if ($reason === null || trim($reason) === '') {
+                    throw new ApiException('检验不合格必须填写原因', 422);
+                }
 
-                return $locked;
+                $this->markForRework($locked, $reason);
             }
 
-            if ($reason === null || trim($reason) === '') {
-                throw new ApiException('检验不合格必须填写原因', 422);
-            }
-
-            $this->markForRework($locked, $reason);
+            $this->operationLogs->record(new OperationLogEntry(
+                action: 'production.flow.inspect',
+                actionName: '工序检验判定',
+                objectType: '工序执行',
+                objectId: $locked->id,
+                objectName: $this->taskLabel($locked),
+                before: ['状态' => $before],
+                after: [
+                    '状态' => $locked->statusLabel(),
+                    '检验结果' => $passed ? '合格' : '不合格',
+                    ...($passed ? [] : ['不合格原因' => $reason]),
+                ],
+            ));
 
             return $locked;
         });
@@ -184,6 +229,8 @@ class ProcessRecordService
     {
         return DB::transaction(function () use ($record): ProcessRecord {
             $locked = ProcessRecord::query()->lockForUpdate()->whereKey($record->getKey())->firstOrFail();
+            $this->dataScope->ensure($locked);
+            $before = $locked->statusLabel();
             $this->ensureSerialNumberUsable($locked);
 
             if ($locked->requiresInspection() && $locked->status !== ProcessRecord::INSPECTED) {
@@ -197,6 +244,16 @@ class ProcessRecordService
                 'submitted_at' => now(),
             ]);
 
+            $this->operationLogs->record(new OperationLogEntry(
+                action: 'production.flow.submit',
+                actionName: '提交下道',
+                objectType: '工序执行',
+                objectId: $locked->id,
+                objectName: $this->taskLabel($locked),
+                before: ['状态' => $before],
+                after: ['状态' => $locked->statusLabel()],
+            ));
+
             return $locked;
         });
     }
@@ -208,6 +265,8 @@ class ProcessRecordService
     {
         return DB::transaction(function () use ($record): ProcessRecord {
             $locked = ProcessRecord::query()->lockForUpdate()->whereKey($record->getKey())->firstOrFail();
+            $this->dataScope->ensure($locked);
+            $before = $locked->statusLabel();
             $this->ensureStatus($locked, ProcessRecord::PENDING_TRANSFER, '接收流转');
             $this->ensureSerialNumberUsable($locked);
 
@@ -215,6 +274,16 @@ class ProcessRecordService
                 'status' => ProcessRecord::TRANSFERRED,
                 'received_at' => now(),
             ]);
+
+            $this->operationLogs->record(new OperationLogEntry(
+                action: 'production.flow.receive',
+                actionName: '下道接收',
+                objectType: '工序执行',
+                objectId: $locked->id,
+                objectName: $this->taskLabel($locked),
+                before: ['状态' => $before],
+                after: ['状态' => $locked->statusLabel()],
+            ));
 
             return $locked;
         });
@@ -227,6 +296,8 @@ class ProcessRecordService
     {
         return DB::transaction(function () use ($record, $reason): ProcessRecord {
             $locked = ProcessRecord::query()->lockForUpdate()->whereKey($record->getKey())->firstOrFail();
+            $this->dataScope->ensure($locked);
+            $before = $locked->statusLabel();
 
             if (! in_array($locked->status, [
                 ProcessRecord::PROCESSING,
@@ -247,6 +318,16 @@ class ProcessRecordService
                 'exception_at' => now(),
             ]);
 
+            $this->operationLogs->record(new OperationLogEntry(
+                action: 'production.flow.exception',
+                actionName: '工序异常',
+                objectType: '工序执行',
+                objectId: $locked->id,
+                objectName: $this->taskLabel($locked),
+                before: ['状态' => $before],
+                after: ['状态' => $locked->statusLabel(), '异常原因' => $reason],
+            ));
+
             return $locked;
         });
     }
@@ -258,6 +339,9 @@ class ProcessRecordService
     {
         return DB::transaction(function () use ($record, $reason): ProcessRecord {
             $locked = ProcessRecord::query()->lockForUpdate()->whereKey($record->getKey())->firstOrFail();
+            $this->dataScope->ensure($locked);
+            $before = $locked->statusLabel();
+            $reworkCountBefore = $locked->rework_count;
 
             if (! in_array($locked->status, [
                 ProcessRecord::PROCESSING,
@@ -272,6 +356,16 @@ class ProcessRecordService
             }
 
             $this->markForRework($locked, $reason);
+
+            $this->operationLogs->record(new OperationLogEntry(
+                action: 'production.flow.rework',
+                actionName: '工序返工',
+                objectType: '工序执行',
+                objectId: $locked->id,
+                objectName: $this->taskLabel($locked),
+                before: ['状态' => $before, '返工次数' => $reworkCountBefore],
+                after: ['状态' => $locked->statusLabel(), '返工次数' => $locked->rework_count, '返工原因' => $reason],
+            ));
 
             return $locked;
         });
@@ -374,6 +468,17 @@ class ProcessRecordService
         if ($usedElsewhere) {
             throw new ApiException('SN 已用于其他生产任务', 422);
         }
+    }
+
+    /**
+     * Human-readable audit label; executions have no own code, so they are
+     * identified by their task and the step number within the route.
+     */
+    private function taskLabel(ProcessRecord $record): string
+    {
+        $taskCode = $record->productionTask?->code;
+
+        return $taskCode === null ? (string) $record->id : $taskCode.' 第'.$record->sequence.'道';
     }
 
     /**

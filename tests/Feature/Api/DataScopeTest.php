@@ -1,12 +1,17 @@
 <?php
 
+use App\Core\Exceptions\ApiException;
 use App\Modules\Organization\Model\Employee;
 use App\Modules\Organization\Model\Factory;
 use App\Modules\Organization\Model\ProductionLine;
 use App\Modules\Organization\Model\Team;
 use App\Modules\Organization\Model\Workshop;
+use App\Modules\Process\Model\Process;
+use App\Modules\Process\Model\RouteOperation;
+use App\Modules\Production\Model\ProcessRecord;
 use App\Modules\Production\Model\ProductionOrder;
 use App\Modules\Production\Model\ProductionTask;
+use App\Modules\Production\Service\ProcessRecordService;
 use App\Modules\System\Model\Permission;
 use App\Modules\System\Model\Role;
 use App\Modules\System\Model\User;
@@ -33,6 +38,13 @@ function productionScopeFixture(): array
         'production.tasks.create',
         'production.tasks.update',
         'production.tasks.pause',
+        'production.flows.index',
+        'production.flows.start',
+        'production.flows.complete',
+        'production.flows.submit',
+        'production.flows.receive',
+        'production.flows.exception',
+        'production.flows.rework',
     ], 'scope_director_a');
     $lineUser->update(['factory_id' => $factoryA->id]);
     $lineUser->productionLines()->sync([$lineA1->id]);
@@ -282,4 +294,109 @@ it('rejects moving an order to a line outside the scope', function () {
     ])
         ->assertForbidden()
         ->assertJsonPath('message', '生产产线不在您的数据范围内');
+});
+
+it('scopes the execution list through the line of their task or order', function () {
+    [, $lineA1, , $lineB, $lineUser] = productionScopeFixture();
+    $orderA = createScopedOrder($lineA1, 'PO-A-001');
+    $orderB = createScopedOrder($lineB, 'PO-B-001');
+    $taskA = ProductionTask::factory()->create(['production_order_id' => $orderA->id]);
+    $taskB = ProductionTask::factory()->create(['production_order_id' => $orderB->id]);
+    ProcessRecord::factory()->create(['production_task_id' => $taskA->id, 'sequence' => 1]);
+    ProcessRecord::factory()->create(['production_task_id' => $taskB->id, 'sequence' => 1]);
+
+    $taskIds = collect(bearer($lineUser)->getJson('/api/v1/production/process-records')
+        ->assertOk()
+        ->json('data.items'))->pluck('production_task_id')->unique()->values()->all();
+
+    expect($taskIds)->toBe([$taskA->id]);
+});
+
+it('rejects every routed flow action on executions outside the scope', function () {
+    [, , , $lineB, $lineUser] = productionScopeFixture();
+    $orderB = createScopedOrder($lineB, 'PO-B-001');
+    $team = Team::factory()->create();
+    $employee = Employee::factory()->create(['team_id' => $team->id]);
+    $process = Process::factory()->create(['requires_inspection' => true]);
+    $task = ProductionTask::factory()->create([
+        'production_order_id' => $orderB->id,
+        'status' => ProductionTask::IN_PROGRESS,
+    ]);
+
+    // One operation per action: (task, operation) is unique per execution.
+    $record = fn (string $status, int $sequence): ProcessRecord => ProcessRecord::factory()->create([
+        'production_task_id' => $task->id,
+        'route_operation_id' => RouteOperation::factory()->create([
+            'route_id' => $orderB->route_id,
+            'process_id' => $process->id,
+            'sequence' => $sequence,
+        ])->id,
+        'sequence' => $sequence,
+        'status' => $status,
+        'employee_id' => $employee->id,
+        'team_id' => $team->id,
+    ]);
+
+    bearer($lineUser)->postJson('/api/v1/production/process-records/'.$record(ProcessRecord::PENDING, 1)->id.'/start', [
+        'employee_id' => $employee->id,
+    ])->assertForbidden()->assertJsonPath('message', '该数据不在您的数据范围内');
+
+    bearer($lineUser)->postJson('/api/v1/production/process-records/'.$record(ProcessRecord::PROCESSING, 2)->id.'/complete')
+        ->assertForbidden()->assertJsonPath('message', '该数据不在您的数据范围内');
+
+    bearer($lineUser)->postJson('/api/v1/production/process-records/'.$record(ProcessRecord::INSPECTED, 3)->id.'/submit')
+        ->assertForbidden()->assertJsonPath('message', '该数据不在您的数据范围内');
+
+    bearer($lineUser)->postJson('/api/v1/production/process-records/'.$record(ProcessRecord::PENDING_TRANSFER, 4)->id.'/receive')
+        ->assertForbidden()->assertJsonPath('message', '该数据不在您的数据范围内');
+
+    bearer($lineUser)->postJson('/api/v1/production/process-records/'.$record(ProcessRecord::PROCESSING, 5)->id.'/exception', [
+        'reason' => '设备故障',
+    ])->assertForbidden()->assertJsonPath('message', '该数据不在您的数据范围内');
+
+    bearer($lineUser)->postJson('/api/v1/production/process-records/'.$record(ProcessRecord::PROCESSING, 6)->id.'/rework', [
+        'reason' => '尺寸超差',
+    ])->assertForbidden()->assertJsonPath('message', '该数据不在您的数据范围内');
+});
+
+it('rejects inspecting an execution outside the scope', function () {
+    [, , , $lineB, $lineUser] = productionScopeFixture();
+    $orderB = createScopedOrder($lineB, 'PO-B-001');
+    $task = ProductionTask::factory()->create(['production_order_id' => $orderB->id]);
+    $process = Process::factory()->create(['requires_inspection' => true]);
+    $operation = RouteOperation::factory()->create([
+        'route_id' => $orderB->route_id,
+        'process_id' => $process->id,
+        'sequence' => 1,
+    ]);
+    $record = ProcessRecord::factory()->create([
+        'production_task_id' => $task->id,
+        'route_operation_id' => $operation->id,
+        'sequence' => 1,
+        'status' => ProcessRecord::INSPECTING,
+    ]);
+
+    // Inspect has no HTTP route of its own: quality inspection calls into the
+    // service, so the guard is verified at that seam (ticket 08 covers the
+    // end-to-end route). The request first establishes the user context the
+    // guard resolves the scope from.
+    bearer($lineUser)->getJson('/api/v1/me')->assertOk();
+
+    expect(fn (): ProcessRecord => app(ProcessRecordService::class)->inspect($record, true, null))
+        ->toThrow(ApiException::class, '该数据不在您的数据范围内');
+});
+
+it('hides executions of a task assigned to another line of the same factory', function () {
+    // Assign puts a line on the task; that line then wins over the order's.
+    [, $lineA1, $lineA2, , $lineUser] = productionScopeFixture();
+    $orderA = createScopedOrder($lineA1, 'PO-A-001');
+    $task = ProductionTask::factory()->create([
+        'production_order_id' => $orderA->id,
+        'production_line_id' => $lineA2->id,
+    ]);
+    ProcessRecord::factory()->create(['production_task_id' => $task->id, 'sequence' => 1]);
+
+    bearer($lineUser)->getJson('/api/v1/production/process-records')
+        ->assertOk()
+        ->assertJsonCount(0, 'data.items');
 });
