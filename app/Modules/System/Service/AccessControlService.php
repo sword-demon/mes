@@ -2,6 +2,7 @@
 
 namespace App\Modules\System\Service;
 
+use App\Core\DataScope\DataScope;
 use App\Core\Exceptions\ApiException;
 use App\Modules\System\Model\Menu;
 use App\Modules\System\Model\Permission;
@@ -59,22 +60,81 @@ class AccessControlService
      *
      * `all` wins over a narrower scope; no grant means no data at all, so a
      * missing permission fails closed instead of silently showing everything.
+     * This is the display value; use `resolveDataScope()` when the scope must
+     * also carry the factory and production line identifiers.
+     *
+     * @param  array<int, string>|null  $granted  reuse a permission list already loaded for the same user
      */
-    public function dataScope(User $user): string
+    public function dataScope(User $user, ?array $granted = null): string
     {
         if ($this->isSuperAdmin($user)) {
             return self::SCOPE_ALL;
         }
 
-        $granted = $this->permissionCodes($user);
+        return $this->grantedLevel($granted ?? $this->permissionCodes($user));
+    }
 
-        foreach ([self::SCOPE_ALL, 'data.scope.factory', 'data.scope.line'] as $code) {
+    /**
+     * Resolve the enforceable data scope, including the factory and the
+     * production lines the user is responsible for.
+     *
+     * A `factory` or `line` grant without the matching assignment resolves to
+     * `none` so a half-configured account never sees the whole plant.
+     *
+     * @param  array<int, string>|null  $granted  reuse a permission list already loaded for the same user
+     */
+    public function resolveDataScope(User $user, ?array $granted = null): DataScope
+    {
+        if ($this->isSuperAdmin($user)) {
+            return DataScope::all();
+        }
+
+        $level = $this->grantedLevel($granted ?? $this->permissionCodes($user));
+
+        if ($level === DataScope::ALL) {
+            return DataScope::all();
+        }
+
+        if ($level === DataScope::FACTORY) {
+            return $user->factory_id === null
+                ? DataScope::none()
+                : new DataScope(DataScope::FACTORY, (int) $user->factory_id);
+        }
+
+        if ($level !== DataScope::LINE) {
+            return DataScope::none();
+        }
+
+        $productionLineIds = $user->relationLoaded('productionLines')
+            ? $user->productionLines->pluck('id')->sort()->values()->map(fn (mixed $id): int => (int) $id)->all()
+            : $user->productionLines()
+                ->orderBy('mes_production_lines.id')
+                ->pluck('mes_production_lines.id')
+                ->map(fn (mixed $id): int => (int) $id)
+                ->all();
+
+        if ($user->factory_id === null || $productionLineIds === []) {
+            return DataScope::none();
+        }
+
+        return new DataScope(DataScope::LINE, (int) $user->factory_id, $productionLineIds);
+    }
+
+    /**
+     * The widest `data.scope.*` grant, independent of whether the user has
+     * been assigned a factory or production line yet.
+     *
+     * @param  array<int, string>  $granted
+     */
+    private function grantedLevel(array $granted): string
+    {
+        foreach (['data.scope.all', 'data.scope.factory', 'data.scope.line'] as $code) {
             if (in_array($code, $granted, true)) {
                 return substr($code, strlen('data.scope.'));
             }
         }
 
-        return 'none';
+        return DataScope::NONE;
     }
 
     /**

@@ -21,13 +21,17 @@ class MeController extends Controller
         $user = $request->user()->load([
             'roles' => fn ($query) => $query->where('status', true),
             'employee',
+            'organizationFactory',
+            'productionLines',
         ]);
         $permissions = $this->access->permissionCodes($user);
+        $dataScope = $this->access->resolveDataScope($user, $permissions);
 
         return ApiResponse::success([
             ...UserResource::make($user)->resolve(),
             'permissions' => $permissions,
-            'data_scope' => $this->access->dataScope($user),
+            'data_scope' => $this->access->dataScope($user, $permissions),
+            'data_scope_detail' => $dataScope->toArray(),
             'menus' => $this->access->menuTree($user, $permissions),
         ]);
     }

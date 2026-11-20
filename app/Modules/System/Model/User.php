@@ -4,6 +4,8 @@ namespace App\Modules\System\Model;
 
 // use Illuminate\Contracts\Auth\MustVerifyEmail;
 use App\Modules\Organization\Model\Employee;
+use App\Modules\Organization\Model\Factory as OrganizationFactory;
+use App\Modules\Organization\Model\ProductionLine;
 use Database\Factories\UserFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\Hidden;
@@ -24,6 +26,7 @@ use Laravel\Sanctum\HasApiTokens;
  * @property string $email
  * @property string|null $phone
  * @property int|null $department_id
+ * @property int|null $factory_id
  * @property int|null $employee_id
  * @property string|null $position
  * @property Carbon|null $email_verified_at
@@ -33,7 +36,7 @@ use Laravel\Sanctum\HasApiTokens;
  * @property Carbon|null $created_at
  * @property Carbon|null $updated_at
  */
-#[Fillable(['username', 'name', 'email', 'phone', 'department_id', 'employee_id', 'position', 'password', 'status'])]
+#[Fillable(['username', 'name', 'email', 'phone', 'department_id', 'factory_id', 'employee_id', 'position', 'password', 'status'])]
 #[Hidden(['password', 'remember_token'])]
 #[UseFactory(UserFactory::class)]
 #[Table('sys_users')]
@@ -83,6 +86,34 @@ class User extends Authenticatable
     public function employee(): BelongsTo
     {
         return $this->belongsTo(Employee::class, 'employee_id');
+    }
+
+    /**
+     * The plant this account belongs to.
+     *
+     * Named `organizationFactory` because `factory()` is taken by the
+     * `HasFactory` trait.
+     *
+     * @return BelongsTo<OrganizationFactory, $this>
+     */
+    public function organizationFactory(): BelongsTo
+    {
+        return $this->belongsTo(OrganizationFactory::class, 'factory_id');
+    }
+
+    /**
+     * Production lines this account is responsible for.
+     *
+     * @return BelongsToMany<ProductionLine, $this>
+     */
+    public function productionLines(): BelongsToMany
+    {
+        return $this->belongsToMany(
+            ProductionLine::class,
+            'sys_user_production_lines',
+            'user_id',
+            'production_line_id',
+        );
     }
 
     /**

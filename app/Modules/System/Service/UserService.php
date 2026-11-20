@@ -21,7 +21,7 @@ class UserService
     public function paginate(?string $keyword = null, ?bool $status = null): LengthAwarePaginator
     {
         return User::query()
-            ->with(['roles', 'department', 'employee'])
+            ->with(['roles', 'department', 'employee', 'organizationFactory', 'productionLines'])
             ->when($keyword, function ($query, string $keyword): void {
                 $query->where(fn ($inner) => $inner
                     ->where('name', 'like', "%{$keyword}%")
@@ -42,10 +42,12 @@ class UserService
     public function create(User $actor, array $data, array $roleIds): User
     {
         $this->access->ensureCanGrantRoles($actor, $roleIds);
+        $productionLineIds = $this->pullProductionLineIds($data) ?? [];
 
-        return DB::transaction(function () use ($data, $roleIds): User {
+        return DB::transaction(function () use ($data, $roleIds, $productionLineIds): User {
             $user = User::query()->create($data);
             $user->roles()->sync($roleIds);
+            $user->productionLines()->sync($productionLineIds);
 
             $this->operationLogs->record(new OperationLogEntry(
                 action: 'system.user.created',
@@ -55,7 +57,7 @@ class UserService
                 objectName: $user->name,
             ));
 
-            return $user->load('roles');
+            return $user->load(['roles', 'organizationFactory', 'productionLines']);
         });
     }
 
@@ -70,11 +72,18 @@ class UserService
             throw new ApiException('不能停用当前登录账号', 403, status: 403);
         }
 
-        return DB::transaction(function () use ($user, $data): User {
-            $user->loadMissing('roles');
+        $productionLineIds = $this->pullProductionLineIds($data);
+
+        return DB::transaction(function () use ($user, $data, $productionLineIds): User {
+            $user->loadMissing(['roles', 'organizationFactory', 'productionLines']);
             $before = $this->snapshot($user);
             $user->update($data);
-            $user->load('roles');
+
+            if ($productionLineIds !== null) {
+                $user->productionLines()->sync($productionLineIds);
+            }
+
+            $user->load(['roles', 'organizationFactory', 'productionLines']);
 
             $this->operationLogs->record(new OperationLogEntry(
                 action: 'system.user.updated',
@@ -147,7 +156,30 @@ class UserService
             '手机号' => $user->phone,
             '状态' => $user->status ? '启用' : '停用',
             '岗位' => $user->position,
+            '工厂' => $user->organizationFactory?->name,
+            '负责产线' => $user->productionLines->pluck('name')->sort()->values()->all(),
             '角色' => $user->roles->pluck('name')->sort()->values()->all(),
         ];
+    }
+
+    /**
+     * Remove `production_line_ids` from the payload and return it.
+     *
+     * `null` means the request never mentioned production lines, so an update
+     * must leave the current assignment untouched; an empty array clears it.
+     *
+     * @param  array<string, mixed>  $data
+     * @return array<int, int>|null
+     */
+    private function pullProductionLineIds(array &$data): ?array
+    {
+        if (! array_key_exists('production_line_ids', $data)) {
+            return null;
+        }
+
+        $ids = array_map('intval', (array) ($data['production_line_ids'] ?? []));
+        unset($data['production_line_ids']);
+
+        return array_values(array_unique($ids));
     }
 }

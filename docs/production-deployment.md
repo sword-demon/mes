@@ -18,7 +18,8 @@
 
 - Linux 服务器（示例为 Ubuntu 24.04），已安装 Docker Engine 与 Compose 2.17+（使用 `up --wait`）。
 - Nginx、PHP 8.4-FPM、Composer 2、Node.js 22+、Git。
-- PHP 扩展：`mysql`、`redis`、`mbstring`、`xml`、`curl`、`zip`、`bcmath`、`intl`、`openssl`。
+- PHP 扩展：`mysql`、`redis`、`mbstring`、`xml`、`curl`、`zip`、`bcmath`、`intl`、`openssl`、`pcntl`。
+- `pcntl` 是队列任务超时的前提，缺失时 `--timeout` 不生效，长任务会永久占用 worker。用 `php -m | grep pcntl` 确认。
 - 运行用户：Nginx 与 PHP-FPM 使用 `www-data`；下文所有 artisan 命令在 `/var/www/mes` 下执行。
 
 ## 3. 环境变量清单
@@ -173,9 +174,9 @@ sudo certbot --nginx -d mes.example.com
 队列、调度与 MQTT 消费必须由进程管理器常驻。以 systemd 为例：
 
 ```ini
-# /etc/systemd/system/mes-queue.service
+# /etc/systemd/system/mes-queue-default.service
 [Unit]
-Description=MES queue worker
+Description=MES default queue worker
 After=network.target docker.service
 Wants=docker.service
 
@@ -184,7 +185,7 @@ Type=simple
 User=www-data
 Group=www-data
 WorkingDirectory=/var/www/mes
-ExecStart=/usr/bin/php /var/www/mes/artisan queue:work --sleep=3 --tries=3 --max-time=3600
+ExecStart=/usr/bin/php /var/www/mes/artisan queue:work redis --queue=default --sleep=3 --timeout=60 --tries=3 --max-time=3600
 ExecReload=/usr/bin/php /var/www/mes/artisan queue:restart
 Restart=always
 RestartSec=5
@@ -192,6 +193,29 @@ RestartSec=5
 [Install]
 WantedBy=multi-user.target
 ```
+
+```ini
+# /etc/systemd/system/mes-queue-ai.service
+[Unit]
+Description=MES AI queue worker
+After=network.target docker.service
+Wants=docker.service
+
+[Service]
+Type=simple
+User=www-data
+Group=www-data
+WorkingDirectory=/var/www/mes
+ExecStart=/usr/bin/php /var/www/mes/artisan queue:work redis --queue=ai --sleep=3 --timeout=180 --tries=2 --max-time=3600
+ExecReload=/usr/bin/php /var/www/mes/artisan queue:restart
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+```
+
+两个队列必须使用独立进程：AI 任务单次可执行 180 秒，与业务任务共用一个 worker 会互相阻塞，且超时只能取最大值。
 
 ```ini
 # /etc/systemd/system/mes-scheduler.service
@@ -235,8 +259,8 @@ WantedBy=multi-user.target
 
 ```bash
 sudo systemctl daemon-reload
-sudo systemctl enable --now mes-queue mes-scheduler mes-mqtt
-sudo systemctl status mes-queue mes-scheduler mes-mqtt
+sudo systemctl enable --now mes-queue-default mes-queue-ai mes-scheduler mes-mqtt
+sudo systemctl status mes-queue-default mes-queue-ai mes-scheduler mes-mqtt
 ```
 
 ### 4.8 启动顺序
@@ -246,7 +270,7 @@ sudo systemctl status mes-queue mes-scheduler mes-mqtt
 3. `composer install --no-dev`、`php artisan migrate --force`、`php artisan storage:link`、`php artisan mes:create-admin --email=...`。
 4. `npm ci && npm run build` 生成 React 静态资源。
 5. 配置并重载 Nginx，申请 HTTPS 证书。
-6. `php artisan optimize`，启动 PHP-FPM 与三个 systemd 服务。
+6. `php artisan optimize`，启动 PHP-FPM 与四个 systemd 服务（两个队列 worker、scheduler、MQTT）。
 
 ## 5. 日常发布
 
@@ -261,7 +285,7 @@ php artisan optimize
 sudo chown -R "$USER":www-data storage bootstrap/cache
 sudo chmod -R ug+rwX storage bootstrap/cache
 sudo systemctl reload php8.4-fpm
-sudo systemctl restart mes-queue mes-scheduler mes-mqtt
+sudo systemctl restart mes-queue-default mes-queue-ai mes-scheduler mes-mqtt
 php artisan up
 ```
 
@@ -343,7 +367,7 @@ curl -i -X POST https://mes.example.com/api/v1/auth/tokens \
 
 **队列或 MQTT 不消费**
 
-查看 `journalctl -u mes-queue -u mes-mqtt -f`。确认 Redis 健康、`MQTT_HOST=127.0.0.1`、`MQTT_PORT=11883`；远端设备连不上时检查 `MQTT_BIND` 与防火墙。改完代码后执行 `php artisan queue:restart` 并重启 `mes-mqtt`。
+查看 `journalctl -u mes-queue-default -u mes-queue-ai -u mes-mqtt -f`。确认 Redis 健康、`MQTT_HOST=127.0.0.1`、`MQTT_PORT=11883`；远端设备连不上时检查 `MQTT_BIND` 与防火墙。改完代码后执行 `php artisan queue:restart` 并重启 `mes-mqtt`。
 
 **Compose 报缺少密码**
 

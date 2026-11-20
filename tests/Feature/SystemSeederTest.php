@@ -5,6 +5,7 @@ use App\Modules\System\Model\Menu;
 use App\Modules\System\Model\Permission;
 use App\Modules\System\Model\Role;
 use App\Modules\System\Model\User;
+use Database\Seeders\OrganizationSeeder;
 use Database\Seeders\SystemSeeder;
 use Illuminate\Support\Facades\Artisan;
 
@@ -71,13 +72,16 @@ test('each seeded role only reaches its own menu roots', function () {
 
 test('the workshop director is scoped to its own production line', function () {
     $this->seed(SystemSeeder::class);
+    $this->seed(OrganizationSeeder::class);
 
     $director = User::query()->where('email', 'workshop@mes.test')->firstOrFail();
 
     $this->withToken($director->createToken('web')->plainTextToken)
         ->getJson('/api/v1/me')
         ->assertOk()
-        ->assertJsonPath('data.data_scope', 'line');
+        ->assertJsonPath('data.data_scope', 'line')
+        ->assertJsonPath('data.data_scope_detail.level', 'line')
+        ->assertJsonPath('data.data_scope_detail.factory_id', $director->factory_id);
 });
 
 test('the equipment manager can monitor equipment and read its history', function () {

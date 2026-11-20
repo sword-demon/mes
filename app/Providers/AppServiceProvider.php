@@ -2,6 +2,7 @@
 
 namespace App\Providers;
 
+use App\Core\Audit\AuditContext;
 use App\Modules\System\Model\User;
 use Carbon\CarbonImmutable;
 use Illuminate\Cache\RateLimiting\Limit;
@@ -34,6 +35,9 @@ class AppServiceProvider extends ServiceProvider
      */
     public function register(): void
     {
+        // 审计上下文：请求/进程级单例，供 HTTP、队列任务与系统进程共享来源信息
+        $this->app->singleton(AuditContext::class);
+
         // MQTT 订阅状态仓储：进程级单例，避免多次连接期间重复订阅
         $this->app->singleton(MqttRepository::class, MemoryRepository::class);
 
