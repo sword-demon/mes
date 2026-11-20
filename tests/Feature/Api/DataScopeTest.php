@@ -9,7 +9,9 @@ use App\Modules\Organization\Model\Workshop;
 use App\Modules\Process\Model\Process;
 use App\Modules\Process\Model\RouteOperation;
 use App\Modules\Production\Model\ProcessRecord;
+use App\Modules\Production\Model\ProductionDispatch;
 use App\Modules\Production\Model\ProductionOrder;
+use App\Modules\Production\Model\ProductionReport;
 use App\Modules\Production\Model\ProductionTask;
 use App\Modules\Production\Service\ProcessRecordService;
 use App\Modules\System\Model\Permission;
@@ -38,6 +40,11 @@ function productionScopeFixture(): array
         'production.tasks.create',
         'production.tasks.update',
         'production.tasks.pause',
+        'production.dispatches.index',
+        'production.dispatches.create',
+        'production.dispatches.mine',
+        'production.reports.index',
+        'production.reports.create',
         'production.flows.index',
         'production.flows.start',
         'production.flows.complete',
@@ -399,4 +406,86 @@ it('hides executions of a task assigned to another line of the same factory', fu
     bearer($lineUser)->getJson('/api/v1/production/process-records')
         ->assertOk()
         ->assertJsonCount(0, 'data.items');
+});
+
+it('scopes the dispatch list and my dispatches by line', function () {
+    [, $lineA1, , $lineB, $lineUser] = productionScopeFixture();
+    $taskA = ProductionTask::factory()->create(['production_order_id' => createScopedOrder($lineA1, 'PO-A-001')->id]);
+    $taskB = ProductionTask::factory()->create(['production_order_id' => createScopedOrder($lineB, 'PO-B-001')->id]);
+    $employee = Employee::factory()->create();
+    $operation = RouteOperation::factory()->create(['route_id' => $taskA->route_id, 'sequence' => 1]);
+    $dispatchA = ProductionDispatch::factory()->create([
+        'production_task_id' => $taskA->id,
+        'route_operation_id' => $operation->id,
+        'employee_id' => $employee->id,
+    ]);
+    $dispatchB = ProductionDispatch::factory()->create([
+        'production_task_id' => $taskB->id,
+        'route_operation_id' => $operation->id,
+        'employee_id' => $employee->id,
+    ]);
+    $lineUser->update(['employee_id' => $employee->id]);
+
+    $ids = collect(bearer($lineUser)->getJson('/api/v1/production/dispatches')
+        ->assertOk()
+        ->json('data.items'))->pluck('id')->values()->all();
+
+    expect($ids)->toBe([$dispatchA->id]);
+
+    $mine = collect(bearer($lineUser)->getJson('/api/v1/production/dispatches/mine')
+        ->assertOk()
+        ->json('data.items'))->pluck('id')->values()->all();
+
+    expect($mine)->toBe([$dispatchA->id])
+        ->and($mine)->not->toContain($dispatchB->id);
+});
+
+it('scopes the report list by line', function () {
+    [, $lineA1, , $lineB, $lineUser] = productionScopeFixture();
+    $taskA = ProductionTask::factory()->create(['production_order_id' => createScopedOrder($lineA1, 'PO-A-001')->id]);
+    $taskB = ProductionTask::factory()->create(['production_order_id' => createScopedOrder($lineB, 'PO-B-001')->id]);
+    $reportA = ProductionReport::factory()->create(['production_task_id' => $taskA->id]);
+    $reportB = ProductionReport::factory()->create(['production_task_id' => $taskB->id]);
+
+    $ids = collect(bearer($lineUser)->getJson('/api/v1/production/reports')
+        ->assertOk()
+        ->json('data.items'))->pluck('id')->values()->all();
+
+    expect($ids)->toBe([$reportA->id])
+        ->and($ids)->not->toContain($reportB->id);
+});
+
+it('rejects dispatching and reporting outside the scope', function () {
+    [, , , $lineB, $lineUser] = productionScopeFixture();
+    $orderB = createScopedOrder($lineB, 'PO-B-001');
+    $team = Team::factory()->create();
+    $employee = Employee::factory()->create(['team_id' => $team->id]);
+    $task = ProductionTask::factory()->create([
+        'production_order_id' => $orderB->id,
+        'status' => ProductionTask::IN_PROGRESS,
+    ]);
+    $operation = RouteOperation::factory()->create([
+        'route_id' => $orderB->route_id,
+        'sequence' => 1,
+    ]);
+
+    bearer($lineUser)->postJson('/api/v1/production/dispatches', [
+        'production_task_id' => $task->id,
+        'route_operation_id' => $operation->id,
+        'employee_id' => $employee->id,
+        'team_id' => $team->id,
+    ])
+        ->assertForbidden()
+        ->assertJsonPath('message', '该数据不在您的数据范围内');
+
+    bearer($lineUser)->postJson('/api/v1/production/reports', [
+        'production_task_id' => $task->id,
+        'route_operation_id' => $operation->id,
+        'employee_id' => $employee->id,
+        'quantity' => 5,
+        'qualified_quantity' => 5,
+        'defective_quantity' => 0,
+    ])
+        ->assertForbidden()
+        ->assertJsonPath('message', '该数据不在您的数据范围内');
 });

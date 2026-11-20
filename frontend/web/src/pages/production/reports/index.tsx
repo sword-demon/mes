@@ -227,6 +227,8 @@ export default function ProductionReports() {
     const [type, setType] = useState<ProductionReportType>();
     const [dates, setDates] = useState<[Dayjs, Dayjs] | null>(null);
     const [creating, setCreating] = useState(false);
+    const [reversing, setReversing] = useState<ProductionReport | null>(null);
+    const [reverseReason, setReverseReason] = useState('');
 
     const tasks = useQuery({
         queryKey: ['production.reports', 'options'],
@@ -274,10 +276,11 @@ export default function ProductionReports() {
         onError: showError,
     });
     const reverse = useMutation({
-        mutationFn: reverseReport,
+        mutationFn: ({ id, reason }: { id: number; reason: string }) => reverseReport(id, reason),
         onSuccess: async () => {
             await invalidate();
             message.success('报工已冲销');
+            setReversing(null);
         },
         onError: showError,
     });
@@ -421,14 +424,16 @@ export default function ProductionReports() {
                                 <Typography.Text type="secondary">不可冲销</Typography.Text>
                             ) : (
                                 <Can code="button.production.reports.reverse">
-                                    <Popconfirm
-                                        title="确认冲销该报工？冲销后数量将回退"
-                                        onConfirm={() => reverse.mutate(record.id)}
+                                    <Button
+                                        type="link"
+                                        danger
+                                        onClick={() => {
+                                            setReversing(record);
+                                            setReverseReason('');
+                                        }}
                                     >
-                                        <Button type="link" danger loading={reverse.isPending}>
-                                            冲销
-                                        </Button>
-                                    </Popconfirm>
+                                        冲销
+                                    </Button>
                                 </Can>
                             ),
                     },
@@ -441,6 +446,29 @@ export default function ProductionReports() {
                     onClose={() => setCreating(false)}
                 />
             )}
+            <Modal
+                title={`冲销报工 ${reversing?.code ?? ''}`}
+                open={reversing !== null}
+                onCancel={() => setReversing(null)}
+                okButtonProps={{ danger: true, disabled: reverseReason.trim() === '', loading: reverse.isPending }}
+                okText="确认冲销"
+                onOk={() => {
+                    if (reversing !== null) {
+                        reverse.mutate({ id: reversing.id, reason: reverseReason.trim() });
+                    }
+                }}
+            >
+                <Typography.Paragraph type="secondary">
+                    冲销后数量将从任务与订单累计中回退，且必须填写原因。
+                </Typography.Paragraph>
+                <Input.TextArea
+                    value={reverseReason}
+                    onChange={(event) => setReverseReason(event.target.value)}
+                    placeholder="冲销原因"
+                    maxLength={255}
+                    rows={3}
+                />
+            </Modal>
         </>
     );
 }

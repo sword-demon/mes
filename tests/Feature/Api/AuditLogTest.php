@@ -132,7 +132,9 @@ it('records operation logs for report submission and reversal', function () {
         'reported_at' => '2026-11-15 09:30:00',
     ])->assertOk()->json('data.id');
 
-    bearer($actor)->postJson("/api/v1/production/reports/{$reportId}/reverse")->assertOk();
+    bearer($actor)->postJson("/api/v1/production/reports/{$reportId}/reverse", [
+        'reason' => '数量录错，重新报工',
+    ])->assertOk();
 
     $logs = OperationLog::query()->orderBy('id')->get();
     $report = ProductionReport::query()->findOrFail($reportId);
@@ -576,4 +578,63 @@ it('records a log for every flow action with status, result and reason', functio
 
     expect($reworkLog->changes['返工原因'])->toBe(['before' => null, 'after' => '尺寸超差返工'])
         ->and($reworkLog->changes['返工次数'])->toBe(['before' => 0, 'after' => 1]);
+});
+
+it('records a dispatch log with the task and operator', function () {
+    $line = ProductionLine::factory()->create();
+    $order = createScopedOrder($line, 'PO-DISP-001');
+    $team = Team::factory()->create();
+    $employee = Employee::factory()->create(['team_id' => $team->id]);
+    $operation = RouteOperation::factory()->create(['route_id' => $order->route_id, 'sequence' => 1]);
+    $task = ProductionTask::factory()->create(['production_order_id' => $order->id]);
+
+    bearer(superAdmin())->postJson('/api/v1/production/dispatches', [
+        'production_task_id' => $task->id,
+        'route_operation_id' => $operation->id,
+        'employee_id' => $employee->id,
+        'team_id' => $team->id,
+    ])->assertOk();
+
+    $log = OperationLog::query()->sole();
+
+    expect($log->action)->toBe('production.dispatch.create')
+        ->and($log->action_name)->toBe('新增派工单')
+        ->and($log->object_type)->toBe('派工单')
+        ->and($log->object_name)->toBe($task->code.'-D01')
+        ->and($log->changes['所属任务'])->toBe(['before' => null, 'after' => $task->code])
+        ->and($log->changes['作业人员'])->toBe(['before' => null, 'after' => $employee->employee_no]);
+});
+
+it('records report quantities and the reversal reason', function () {
+    $line = ProductionLine::factory()->create();
+    $order = createScopedOrder($line, 'PO-REV-001', ProductionOrder::RELEASED);
+    $team = Team::factory()->create();
+    $employee = Employee::factory()->create(['team_id' => $team->id]);
+    $operation = RouteOperation::factory()->create(['route_id' => $order->route_id, 'sequence' => 1]);
+    $task = ProductionTask::factory()->create([
+        'production_order_id' => $order->id,
+        'planned_quantity' => 100,
+        'status' => ProductionTask::IN_PROGRESS,
+    ]);
+    $actor = superAdmin();
+
+    $reportId = bearer($actor)->postJson('/api/v1/production/reports', [
+        'production_task_id' => $task->id,
+        'route_operation_id' => $operation->id,
+        'employee_id' => $employee->id,
+        'quantity' => 12,
+        'qualified_quantity' => 10,
+        'defective_quantity' => 2,
+    ])->assertOk()->json('data.id');
+
+    bearer($actor)->postJson("/api/v1/production/reports/{$reportId}/reverse", [
+        'reason' => '数量录错，重新报工',
+    ])->assertOk();
+
+    $logs = OperationLog::query()->orderBy('id')->get();
+
+    expect($logs[0]->changes['报工数量'])->toBe(['before' => null, 'after' => '12.000'])
+        ->and($logs[0]->changes['合格数量'])->toBe(['before' => null, 'after' => '10.000'])
+        ->and($logs[0]->changes['不良数量'])->toBe(['before' => null, 'after' => '2.000'])
+        ->and($logs[1]->changes['冲销原因'])->toBe(['before' => null, 'after' => '数量录错，重新报工']);
 });

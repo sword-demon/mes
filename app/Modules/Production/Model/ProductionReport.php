@@ -2,10 +2,12 @@
 
 namespace App\Modules\Production\Model;
 
+use App\Core\DataScope\HasDataScope;
 use App\Modules\Equipment\Model\Equipment;
 use App\Modules\Organization\Model\Employee;
 use App\Modules\Organization\Model\Team;
 use App\Modules\Process\Model\RouteOperation;
+use App\Modules\Production\Model\Concerns\ScopedThroughTask;
 use Database\Factories\ProductionReportFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\Table;
@@ -49,10 +51,10 @@ use Illuminate\Support\Carbon;
 ])]
 #[Table('mes_production_reports')]
 #[UseFactory(ProductionReportFactory::class)]
-class ProductionReport extends Model
+class ProductionReport extends Model implements HasDataScope
 {
     /** @use HasFactory<ProductionReportFactory> */
-    use HasFactory;
+    use HasFactory, ScopedThroughTask;
 
     public const string NORMAL = 'normal';
 

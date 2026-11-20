@@ -2,6 +2,7 @@
 
 namespace App\Modules\Production\Controller;
 
+use App\Core\DataScope\DataScopeGuard;
 use App\Core\Services\BusinessDay;
 use App\Core\Services\EntityService;
 use App\Http\Controllers\Controller;
@@ -9,6 +10,7 @@ use App\Http\Responses\ApiResponse;
 use App\Modules\Equipment\Model\Equipment;
 use App\Modules\Equipment\Resource\EquipmentResource;
 use App\Modules\Organization\Model\Employee;
+use App\Modules\Production\FormRequest\ReverseProductionReportRequest;
 use App\Modules\Production\FormRequest\StoreProductionReportRequest;
 use App\Modules\Production\Model\ProductionReport;
 use App\Modules\Production\Model\ProductionTask;
@@ -32,6 +34,7 @@ class ProductionReportController extends Controller
     public function __construct(
         private readonly ProductionReportService $reports,
         private readonly EntityService $entities,
+        private readonly DataScopeGuard $dataScope,
     ) {}
 
     public function index(Request $request): JsonResponse
@@ -43,6 +46,7 @@ class ProductionReportController extends Controller
 
         $query = ProductionReport::query()
             ->with(self::RELATIONS)
+            ->inDataScope($this->dataScope->scope())
             ->when(
                 is_string($orderId) && $orderId !== '',
                 fn (Builder $query) => $query->whereHas(
@@ -134,10 +138,10 @@ class ProductionReportController extends Controller
         ));
     }
 
-    public function reverse(ProductionReport $report): JsonResponse
+    public function reverse(ReverseProductionReportRequest $request, ProductionReport $report): JsonResponse
     {
         return ApiResponse::success(ProductionReportResource::make(
-            $this->reports->reverse($report)->load(self::RELATIONS),
+            $this->reports->reverse($report, $request->string('reason')->toString())->load(self::RELATIONS),
         ));
     }
 }

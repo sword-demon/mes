@@ -304,7 +304,9 @@ it('reverses a report and rolls the quantities back without deleting it', functi
         ->assertOk();
     $report = ProductionReport::query()->firstOrFail();
 
-    bearer($actor)->postJson("/api/v1/production/reports/{$report->id}/reverse")
+    bearer($actor)->postJson("/api/v1/production/reports/{$report->id}/reverse", [
+        'reason' => '数量录错，重新报工',
+    ])
         ->assertOk()
         ->assertJsonPath('data.type', ProductionReport::REVERSED)
         ->assertJsonPath('data.type_label', '已冲销');
@@ -326,7 +328,9 @@ it('reverses a report and rolls the quantities back without deleting it', functi
         'defective_quantity' => 0,
     ]);
 
-    bearer($actor)->postJson("/api/v1/production/reports/{$report->id}/reverse")
+    bearer($actor)->postJson("/api/v1/production/reports/{$report->id}/reverse", [
+        'reason' => '重复冲销',
+    ])
         ->assertUnprocessable()
         ->assertJsonPath('message', '报工已冲销，不能重复冲销');
 
@@ -377,7 +381,9 @@ it('refuses to reverse when the task counters no longer cover the report', funct
     $task->refresh();
     $task->forceFill(['produced_quantity' => 0])->save();
 
-    bearer($actor)->postJson("/api/v1/production/reports/{$report->id}/reverse")
+    bearer($actor)->postJson("/api/v1/production/reports/{$report->id}/reverse", [
+        'reason' => '计数器不一致',
+    ])
         ->assertUnprocessable()
         ->assertJsonPath('message', '冲销数量超过任务或订单累计数量，数据不一致');
 
@@ -386,4 +392,19 @@ it('refuses to reverse when the task counters no longer cover the report', funct
 
 it('requires authentication for report endpoints', function () {
     $this->getJson('/api/v1/production/reports')->assertUnauthorized();
+});
+
+it('requires a reason to reverse a report', function () {
+    [$task, $operation, $employee] = reportReferences();
+    $actor = userWithPermissions(['production.reports.create', 'production.reports.reverse']);
+
+    $reportId = bearer($actor)->postJson('/api/v1/production/reports', reportPayload($task, $operation, $employee))
+        ->assertOk()
+        ->json('data.id');
+
+    bearer($actor)->postJson("/api/v1/production/reports/{$reportId}/reverse")
+        ->assertUnprocessable()
+        ->assertJsonPath('message', '冲销必须填写原因');
+
+    expect(ProductionReport::query()->findOrFail($reportId)->type)->toBe(ProductionReport::NORMAL);
 });
