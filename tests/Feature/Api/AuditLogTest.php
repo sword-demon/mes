@@ -14,6 +14,7 @@ use App\Modules\Production\Model\ProductionTask;
 use App\Modules\Production\Model\ProductSn;
 use App\Modules\Production\Service\ProcessRecordService;
 use App\Modules\Production\Service\ProductionTaskService;
+use App\Modules\Quality\Model\InspectionItem;
 use App\Modules\System\Model\LoginLog;
 use App\Modules\System\Model\OperationLog;
 use App\Modules\System\Model\Permission;
@@ -22,6 +23,7 @@ use App\Modules\System\Model\User;
 use App\Modules\System\Service\LoginLogService;
 use App\Modules\System\Service\OperationLogService;
 use App\Modules\System\ValueObject\OperationLogEntry;
+use Illuminate\Http\UploadedFile;
 use RuntimeException;
 
 it('records successful and failed login attempts with account, ip and result', function () {
@@ -702,4 +704,87 @@ it('records report, process and close logs for exceptions', function () {
     expect($logs[1]->changes['处理结果'])->toBe(['before' => null, 'after' => '已联系设备部维修'])
         ->and($logs[2]->changes['状态']['before'])->toBe('处理中')
         ->and($logs[2]->changes['状态']['after'])->toBe('已关闭');
+});
+
+it('records a log when an inspection standard is saved', function () {
+    bearer(superAdmin())->postJson('/api/v1/quality/inspection-items', [
+        'code' => 'TEMP-01',
+        'name' => '工作电压',
+        'unit' => 'V',
+        'standard_value' => 5,
+        'min_value' => 4.8,
+        'max_value' => 5.2,
+    ])->assertOk();
+
+    $log = OperationLog::query()->sole();
+
+    expect($log->action)->toBe('quality.standard.save')
+        ->and($log->action_name)->toBe('维护检验标准')
+        ->and($log->object_type)->toBe('检验标准')
+        ->and($log->object_name)->toBe('TEMP-01')
+        ->and($log->changes['标准值'])->toBe(['before' => null, 'after' => '5.000']);
+});
+
+it('records logs for inspection task creation, recording and images', function () {
+    $line = ProductionLine::factory()->create();
+    $order = createScopedOrder($line, 'PO-IPQC-001', ProductionOrder::IN_PROGRESS);
+    $task = ProductionTask::factory()->create(['production_order_id' => $order->id]);
+    $process = Process::factory()->create(['requires_inspection' => true]);
+    $operation = RouteOperation::factory()->create([
+        'route_id' => $order->route_id,
+        'process_id' => $process->id,
+        'sequence' => 1,
+    ]);
+    $record = ProcessRecord::factory()->create([
+        'production_task_id' => $task->id,
+        'route_operation_id' => $operation->id,
+        'sequence' => 1,
+        'status' => ProcessRecord::INSPECTING,
+        'completed_at' => now()->subMinute(),
+    ]);
+    $actor = superAdmin();
+
+    $itemId = bearer($actor)->postJson('/api/v1/quality/inspection-items', [
+        'code' => 'VOLT-01',
+        'name' => '工作电压',
+        'unit' => 'V',
+        'standard_value' => 5,
+        'min_value' => 4.8,
+        'max_value' => 5.2,
+    ])->assertOk()->json('data.id');
+    $item = InspectionItem::query()->findOrFail($itemId);
+
+    $inspectionId = bearer($actor)->postJson('/api/v1/quality/inspection-tasks', [
+        'production_order_id' => $order->id,
+        'inspection_type' => 'ipqc',
+        'process_record_id' => $record->id,
+    ])->assertOk()->json('data.id');
+
+    bearer($actor)->postJson("/api/v1/quality/inspection-tasks/{$inspectionId}/record", [
+        'items' => [['inspection_item_id' => $item->id, 'measured_value' => '5.201']],
+    ])->assertOk();
+
+    bearer($actor)->postJson("/api/v1/quality/inspection-tasks/{$inspectionId}/images", [
+        'images' => [UploadedFile::fake()->image('a.jpg'), UploadedFile::fake()->image('b.jpg')],
+    ])->assertOk();
+
+    $logs = OperationLog::query()->orderBy('id')->get();
+
+    // The standard save precedes the task; the failed judgement also writes
+    // the flow-inspect log on the execution (ticket 05).
+    expect($logs->pluck('action')->all())->toBe([
+        'quality.standard.save',
+        'quality.inspection.create',
+        'production.flow.inspect',
+        'quality.inspection.record',
+        'quality.inspection.add-images',
+    ]);
+
+    expect($logs[1]->object_name)->toBe('PO-IPQC-001 IPQC#'.$inspectionId)
+        ->and($logs[2]->object_name)->toBe($task->code.' 第1道')
+        ->and($logs[3]->object_name)->toBe('PO-IPQC-001 IPQC#'.$inspectionId)
+        ->and($logs[3]->changes['检验结果'])->toBe(['before' => null, 'after' => '不合格'])
+        ->and($logs[3]->changes['不合格项数量'])->toBe(['before' => null, 'after' => 1])
+        ->and($logs[3]->changes['检验轮次'])->toBe(['before' => null, 'after' => 0])
+        ->and($logs[4]->changes['图片数量'])->toBe(['before' => null, 'after' => 2]);
 });

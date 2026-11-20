@@ -2,6 +2,7 @@
 
 namespace App\Modules\Quality\Controller;
 
+use App\Core\DataScope\DataScopeGuard;
 use App\Core\Services\BusinessDay;
 use App\Core\Services\EntityService;
 use App\Http\Controllers\Controller;
@@ -24,11 +25,14 @@ class InspectionTaskController extends Controller
     public function __construct(
         private readonly EntityService $entities,
         private readonly InspectionTaskService $tasks,
+        private readonly DataScopeGuard $dataScope,
     ) {}
 
     public function index(Request $request): JsonResponse
     {
-        $query = InspectionTask::query()->with(InspectionTaskService::RELATIONS);
+        $query = InspectionTask::query()
+            ->with(InspectionTaskService::RELATIONS)
+            ->inDataScope($this->dataScope->scope());
         $result = $request->query('result');
         $judged = filter_var($request->query('judged'), FILTER_VALIDATE_BOOLEAN, FILTER_NULL_ON_FAILURE);
         $orderId = $request->query('production_order_id');

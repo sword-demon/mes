@@ -16,9 +16,12 @@ use App\Modules\Production\Model\ProductionReport;
 use App\Modules\Production\Model\ProductionTask;
 use App\Modules\Production\Model\ProductSn;
 use App\Modules\Production\Service\ProcessRecordService;
+use App\Modules\Quality\Model\InspectionItem;
+use App\Modules\Quality\Model\InspectionTask;
 use App\Modules\System\Model\Permission;
 use App\Modules\System\Model\Role;
 use App\Modules\System\Model\User;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Testing\TestResponse;
 
 /**
@@ -61,6 +64,9 @@ function productionScopeFixture(): array
         'production.exceptions.index',
         'production.exceptions.create',
         'production.exceptions.process',
+        'quality.inspections.index',
+        'quality.inspections.create',
+        'quality.inspections.record',
     ], 'scope_director_a');
     $lineUser->update(['factory_id' => $factoryA->id]);
     $lineUser->productionLines()->sync([$lineA1->id]);
@@ -592,4 +598,68 @@ it('rejects an exception without an order or an execution', function () {
     ])->assertUnprocessable(function (TestResponse $response): void {
         expect($response->json('message'))->toContain('请关联生产订单或工序执行记录');
     });
+});
+
+it('scopes the inspection task list by the order line', function () {
+    [, $lineA1, , $lineB, $lineUser] = productionScopeFixture();
+    $inspectionA = InspectionTask::factory()->create([
+        'production_order_id' => createScopedOrder($lineA1, 'PO-A-001')->id,
+    ]);
+    InspectionTask::factory()->create([
+        'production_order_id' => createScopedOrder($lineB, 'PO-B-001')->id,
+    ]);
+
+    $ids = collect(bearer($lineUser)->getJson('/api/v1/quality/inspection-tasks')
+        ->assertOk()
+        ->json('data.items'))->pluck('id')->values()->all();
+
+    expect($ids)->toBe([$inspectionA->id]);
+});
+
+it('rejects creating an inspection task outside the scope', function () {
+    [, , , $lineB, $lineUser] = productionScopeFixture();
+    $orderB = createScopedOrder($lineB, 'PO-B-001', ProductionOrder::IN_PROGRESS);
+    $task = ProductionTask::factory()->create(['production_order_id' => $orderB->id]);
+    $process = Process::factory()->create(['requires_inspection' => true]);
+    $operation = RouteOperation::factory()->create([
+        'route_id' => $orderB->route_id,
+        'process_id' => $process->id,
+        'sequence' => 1,
+    ]);
+    $record = ProcessRecord::factory()->create([
+        'production_task_id' => $task->id,
+        'route_operation_id' => $operation->id,
+        'sequence' => 1,
+        'status' => ProcessRecord::INSPECTING,
+        'completed_at' => now()->subMinute(),
+    ]);
+
+    bearer($lineUser)->postJson('/api/v1/quality/inspection-tasks', [
+        'production_order_id' => $orderB->id,
+        'inspection_type' => 'ipqc',
+        'process_record_id' => $record->id,
+    ])
+        ->assertForbidden()
+        ->assertJsonPath('message', '该数据不在您的数据范围内');
+});
+
+it('rejects recording results and images outside the scope', function () {
+    // End-to-end regression for the flow-inspect guard wired in ticket 05:
+    // quality inspection is the HTTP entry that reaches it.
+    [, , , $lineB, $lineUser] = productionScopeFixture();
+    $orderB = createScopedOrder($lineB, 'PO-B-001', ProductionOrder::IN_PROGRESS);
+    $inspection = InspectionTask::factory()->create(['production_order_id' => $orderB->id]);
+    $item = InspectionItem::factory()->create();
+
+    bearer($lineUser)->postJson("/api/v1/quality/inspection-tasks/{$inspection->id}/record", [
+        'items' => [['inspection_item_id' => $item->id, 'measured_value' => '5']],
+    ])
+        ->assertForbidden()
+        ->assertJsonPath('message', '该数据不在您的数据范围内');
+
+    bearer($lineUser)->postJson("/api/v1/quality/inspection-tasks/{$inspection->id}/images", [
+        'images' => [UploadedFile::fake()->image('shot.jpg')],
+    ])
+        ->assertForbidden()
+        ->assertJsonPath('message', '该数据不在您的数据范围内');
 });

@@ -4,16 +4,21 @@ namespace App\Modules\Quality\Service;
 
 use App\Core\Exceptions\ApiException;
 use App\Modules\Quality\Model\InspectionItem;
+use App\Modules\System\Service\OperationLogService;
+use App\Modules\System\ValueObject\OperationLogEntry;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\DB;
 
 class InspectionItemService
 {
+    public function __construct(private readonly OperationLogService $operationLogs) {}
+
     /** @param array<string, mixed> $data */
     public function save(array $data, ?InspectionItem $item = null): InspectionItem
     {
         return DB::transaction(function () use ($data, $item): InspectionItem {
             $item ??= new InspectionItem;
+            $before = $item->exists ? $this->snapshot($item->load('standard')) : [];
             $item->fill(Arr::only($data, ['code', 'name', 'unit', 'status']))->save();
             $values = Arr::only($data, ['standard_value', 'min_value', 'max_value']);
 
@@ -34,7 +39,34 @@ class InspectionItemService
                 $item->standard()->updateOrCreate([], $values);
             }
 
-            return $item->load('standard');
+            $item->load('standard');
+
+            $this->operationLogs->record(new OperationLogEntry(
+                action: 'quality.standard.save',
+                actionName: '维护检验标准',
+                objectType: '检验标准',
+                objectId: $item->id,
+                objectName: $item->code,
+                before: $before,
+                after: $this->snapshot($item),
+            ));
+
+            return $item;
         });
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function snapshot(InspectionItem $item): array
+    {
+        return [
+            '名称' => $item->name,
+            '单位' => $item->unit,
+            '启用' => $item->status ? '是' : '否',
+            '标准值' => $item->standard?->standard_value,
+            '最小值' => $item->standard?->min_value,
+            '最大值' => $item->standard?->max_value,
+        ];
     }
 }
