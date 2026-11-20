@@ -2,6 +2,9 @@
 
 namespace App\Modules\Production\Model;
 
+use App\Core\DataScope\DataScope;
+use App\Core\DataScope\DataScopeQuery;
+use App\Core\DataScope\HasDataScope;
 use App\Core\Exceptions\ApiException;
 use App\Core\Models\Concerns\HasStatusLabels;
 use App\Modules\Bom\Model\Bom;
@@ -57,7 +60,7 @@ use Illuminate\Support\Carbon;
 ])]
 #[Table('mes_production_orders')]
 #[UseFactory(ProductionOrderFactory::class)]
-class ProductionOrder extends Model
+class ProductionOrder extends Model implements HasDataScope
 {
     /** @use HasFactory<ProductionOrderFactory> */
     use HasFactory, HasStatusLabels;
@@ -290,6 +293,33 @@ class ProductionOrder extends Model
     public function productionLine(): BelongsTo
     {
         return $this->belongsTo(ProductionLine::class, 'production_line_id');
+    }
+
+    /**
+     * Orders live on one production line, so the row filter is direct.
+     *
+     * @param  Builder<self>  $query
+     */
+    public function scopeInDataScope(Builder $query, DataScope $scope): void
+    {
+        if ($scope->isAll()) {
+            return;
+        }
+
+        $lineIds = DataScopeQuery::scopedProductionLineIds($scope);
+
+        if ($lineIds === []) {
+            $query->whereRaw('1 = 0');
+
+            return;
+        }
+
+        $query->whereIn($this->getTable().'.production_line_id', $lineIds);
+    }
+
+    public function dataScopeProductionLineId(): ?int
+    {
+        return $this->production_line_id;
     }
 
     /**

@@ -2,6 +2,9 @@
 
 namespace App\Modules\Production\Model;
 
+use App\Core\DataScope\DataScope;
+use App\Core\DataScope\DataScopeQuery;
+use App\Core\DataScope\HasDataScope;
 use App\Core\Exceptions\ApiException;
 use App\Core\Models\Concerns\HasStatusLabels;
 use App\Modules\Organization\Model\Employee;
@@ -13,6 +16,7 @@ use Database\Factories\ProductionTaskFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\Table;
 use Illuminate\Database\Eloquent\Attributes\UseFactory;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -52,7 +56,7 @@ use Illuminate\Support\Carbon;
 ])]
 #[Table('mes_production_tasks')]
 #[UseFactory(ProductionTaskFactory::class)]
-class ProductionTask extends Model
+class ProductionTask extends Model implements HasDataScope
 {
     /** @use HasFactory<ProductionTaskFactory> */
     use HasFactory, HasStatusLabels;
@@ -156,6 +160,45 @@ class ProductionTask extends Model
     public function productionLine(): BelongsTo
     {
         return $this->belongsTo(ProductionLine::class, 'production_line_id');
+    }
+
+    /**
+     * A task without its own line inherits the order's line: splitting a
+     * task does not place it on a line until it is assigned.
+     *
+     * @param  Builder<self>  $query
+     */
+    public function scopeInDataScope(Builder $query, DataScope $scope): void
+    {
+        if ($scope->isAll()) {
+            return;
+        }
+
+        $lineIds = DataScopeQuery::scopedProductionLineIds($scope);
+
+        if ($lineIds === []) {
+            $query->whereRaw('1 = 0');
+
+            return;
+        }
+
+        $query->where(function (Builder $query) use ($lineIds): void {
+            $query->whereIn($this->getTable().'.production_line_id', $lineIds)
+                ->orWhere(function (Builder $query) use ($lineIds): void {
+                    $query->whereNull($this->getTable().'.production_line_id')
+                        ->whereIn(
+                            $this->getTable().'.production_order_id',
+                            ProductionOrder::query()
+                                ->whereIn('production_line_id', $lineIds)
+                                ->select('id'),
+                        );
+                });
+        });
+    }
+
+    public function dataScopeProductionLineId(): ?int
+    {
+        return $this->production_line_id ?? $this->productionOrder?->production_line_id;
     }
 
     /**

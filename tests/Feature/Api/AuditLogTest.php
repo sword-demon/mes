@@ -3,6 +3,7 @@
 use App\Modules\Inventory\Model\Inventory;
 use App\Modules\Material\Model\Material;
 use App\Modules\Organization\Model\Employee;
+use App\Modules\Organization\Model\ProductionLine;
 use App\Modules\Organization\Model\Team;
 use App\Modules\Process\Model\RouteOperation;
 use App\Modules\Production\Model\ProductionOrder;
@@ -423,4 +424,74 @@ it('lists operation logs and filters by user, action and date', function () {
     expect(collect($options->json('data.users'))->pluck('name')->all())
         ->toContain('张三')
         ->toContain('李四');
+});
+
+it('records operation logs for order creation and edit', function () {
+    $order = createScopedOrder(ProductionLine::factory()->create(), 'PO-AUDIT-001', ProductionOrder::DRAFT);
+    $actor = superAdmin();
+
+    expect(OperationLog::query()->count())->toBe(0);
+
+    bearer($actor)->postJson('/api/v1/production/orders', [
+        'code' => 'PO-AUDIT-002',
+        'product_id' => $order->product_id,
+        'bom_id' => $order->bom_id,
+        'route_id' => $order->route_id,
+        'production_line_id' => $order->production_line_id,
+        'planned_quantity' => 50,
+        'planned_start_at' => '2026-11-21 08:00:00',
+    ])->assertOk();
+
+    bearer($actor)->putJson("/api/v1/production/orders/{$order->id}", [
+        'remark' => '改期首单',
+    ])->assertOk();
+
+    $logs = OperationLog::query()->orderBy('id')->get();
+
+    expect($logs)->toHaveCount(2)
+        ->and($logs[0]->action)->toBe('production.order.create')
+        ->and($logs[0]->action_name)->toBe('新增生产订单')
+        ->and($logs[0]->object_name)->toBe('PO-AUDIT-002')
+        ->and($logs[1]->action)->toBe('production.order.update')
+        ->and($logs[1]->changes['备注'])->toBe(['before' => null, 'after' => '改期首单']);
+});
+
+it('records split, assign and transition logs for tasks', function () {
+    [$factory, $line] = factoryWithLines();
+    $order = createScopedOrder($line, 'PO-AUDIT-003');
+    $team = Team::factory()->create();
+    $employee = Employee::factory()->create(['team_id' => $team->id]);
+    $actor = superAdmin();
+
+    bearer($actor)->postJson("/api/v1/production/orders/{$order->id}/tasks", [
+        'planned_quantity' => 40,
+    ])->assertOk();
+
+    $task = ProductionTask::query()->where('production_order_id', $order->id)->sole();
+
+    bearer($actor)->putJson("/api/v1/production/tasks/{$task->id}", [
+        'production_line_id' => $line->id,
+        'team_id' => $team->id,
+        'owner_id' => $employee->id,
+    ])->assertOk();
+
+    bearer($actor)->postJson("/api/v1/production/tasks/{$task->id}/pause")->assertOk();
+    bearer($actor)->postJson("/api/v1/production/tasks/{$task->id}/resume")->assertOk();
+    bearer($actor)->postJson("/api/v1/production/tasks/{$task->id}/complete")->assertOk();
+
+    $actions = OperationLog::query()->orderBy('id')->pluck('action')->all();
+
+    expect($actions)->toBe([
+        'production.task.split',
+        'production.task.assign',
+        'production.task.pause',
+        'production.task.resume',
+        'production.task.complete',
+    ]);
+
+    $assign = OperationLog::query()->where('action', 'production.task.assign')->sole();
+
+    expect($assign->object_name)->toBe($task->code)
+        ->and($assign->changes['产线'])->toBe(['before' => null, 'after' => $line->name])
+        ->and($assign->changes['状态'])->toBe(['before' => '待分配', 'after' => '生产中']);
 });

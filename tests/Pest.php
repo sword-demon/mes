@@ -1,7 +1,15 @@
 <?php
 
+use App\Modules\Bom\Model\Bom;
 use App\Modules\Inventory\Model\StorageLocation;
 use App\Modules\Inventory\Model\Warehouse;
+use App\Modules\Organization\Model\Factory;
+use App\Modules\Organization\Model\ProductionLine;
+use App\Modules\Organization\Model\Workshop;
+use App\Modules\Process\Model\ProcessRoute;
+use App\Modules\Product\Model\Product;
+use App\Modules\Product\Model\ProductVersion;
+use App\Modules\Production\Model\ProductionOrder;
 use App\Modules\System\Model\Permission;
 use App\Modules\System\Model\Role;
 use App\Modules\System\Model\User;
@@ -55,12 +63,78 @@ function something()
 }
 
 /**
+ * A factory with two production lines under one workshop.
+ *
+ * @return array{0: Factory, 1: ProductionLine, 2: ProductionLine}
+ */
+function factoryWithLines(): array
+{
+    $factory = Factory::factory()->create();
+    $workshop = Workshop::factory()->create(['factory_id' => $factory->id]);
+
+    return [
+        $factory,
+        ProductionLine::factory()->create(['workshop_id' => $workshop->id]),
+        ProductionLine::factory()->create(['workshop_id' => $workshop->id]),
+    ];
+}
+
+/**
+ * @return array{0: Product, 1: Bom, 2: ProcessRoute}
+ */
+function usableProductionRefs(): array
+{
+    $product = Product::factory()->create();
+    $version = ProductVersion::factory()->create(['product_id' => $product->id]);
+    $bom = Bom::factory()->create([
+        'product_version_id' => $version->id,
+        'version' => 'B1.0',
+        'audit_status' => Bom::APPROVED,
+    ]);
+    $route = ProcessRoute::factory()->create([
+        'product_id' => $product->id,
+        'version' => 'R1.0',
+        'audit_status' => ProcessRoute::APPROVED,
+    ]);
+
+    return [$product, $bom, $route];
+}
+
+function createScopedOrder(ProductionLine $line, string $code, string $status = ProductionOrder::RELEASED): ProductionOrder
+{
+    [$product, $bom, $route] = usableProductionRefs();
+
+    return ProductionOrder::factory()->create([
+        'code' => $code,
+        'product_id' => $product->id,
+        'bom_id' => $bom->id,
+        'route_id' => $route->id,
+        'production_line_id' => $line->id,
+        'bom_version' => $bom->version,
+        'route_version' => $route->version,
+        'planned_quantity' => 100,
+        'planned_start_at' => '2026-11-21 08:00:00',
+        'planned_end_at' => '2026-11-23 18:00:00',
+        'status' => $status,
+    ]);
+}
+
+/**
  * A user holding a role that grants exactly these permission codes.
+ *
+ * A list with no `data.scope.*` grant gains `data.scope.all`, so tests that
+ * do not target data scoping keep seeing every row; pass a `data.scope.*`
+ * code explicitly to test scoping behaviour.
  *
  * @param  array<int, string>  $permissionCodes
  */
 function userWithPermissions(array $permissionCodes, string $roleCode = 'tester'): User
 {
+    if (! collect($permissionCodes)
+        ->contains(fn (string $code): bool => str_starts_with($code, 'data.scope.'))) {
+        $permissionCodes[] = 'data.scope.all';
+    }
+
     $role = Role::factory()->create(['code' => $roleCode]);
 
     foreach ($permissionCodes as $code) {

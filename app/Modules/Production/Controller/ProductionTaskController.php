@@ -2,6 +2,7 @@
 
 namespace App\Modules\Production\Controller;
 
+use App\Core\DataScope\DataScopeGuard;
 use App\Core\Services\BusinessDay;
 use App\Core\Services\EntityService;
 use App\Http\Controllers\Controller;
@@ -29,11 +30,14 @@ class ProductionTaskController extends Controller
     public function __construct(
         private readonly ProductionTaskService $tasks,
         private readonly EntityService $entities,
+        private readonly DataScopeGuard $dataScope,
     ) {}
 
     public function index(Request $request): JsonResponse
     {
-        $query = ProductionTask::query()->with(self::RELATIONS);
+        $query = ProductionTask::query()
+            ->with(self::RELATIONS)
+            ->inDataScope($this->dataScope->scope());
         $status = $request->query('status');
         $startDate = BusinessDay::resolveDate($request->query('start_date'), 'start_date');
         $endDate = BusinessDay::resolveDate($request->query('end_date'), 'end_date');
