@@ -2,12 +2,16 @@
 
 namespace App\Modules\Production\Model;
 
+use App\Core\DataScope\DataScope;
+use App\Core\DataScope\DataScopeQuery;
+use App\Core\DataScope\HasDataScope;
 use App\Core\Models\Concerns\HasStatusLabels;
 use App\Modules\System\Model\User;
 use Database\Factories\ProductionExceptionFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\Table;
 use Illuminate\Database\Eloquent\Attributes\UseFactory;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -47,7 +51,7 @@ use Illuminate\Support\Carbon;
 ])]
 #[Table('mes_production_exceptions')]
 #[UseFactory(ProductionExceptionFactory::class)]
-class ProductionException extends Model
+class ProductionException extends Model implements HasDataScope
 {
     /** @use HasFactory<ProductionExceptionFactory> */
     use HasFactory, HasStatusLabels;
@@ -117,6 +121,50 @@ class ProductionException extends Model
     public function productionOrder(): BelongsTo
     {
         return $this->belongsTo(ProductionOrder::class, 'production_order_id');
+    }
+
+    /**
+     * An exception is visible through the line of its order, or — when it was
+     * raised without an order — through the line of its execution. A row with
+     * neither (legacy data) resolves to null and is only visible to `all`.
+     *
+     * @param  Builder<self>  $query
+     */
+    public function scopeInDataScope(Builder $query, DataScope $scope): void
+    {
+        if ($scope->isAll()) {
+            return;
+        }
+
+        $lineIds = DataScopeQuery::scopedProductionLineIds($scope);
+
+        if ($lineIds === []) {
+            $query->whereRaw('1 = 0');
+
+            return;
+        }
+
+        $query->where(function (Builder $query) use ($lineIds, $scope): void {
+            $query->whereIn(
+                $this->getTable().'.production_order_id',
+                ProductionOrder::query()->whereIn('production_line_id', $lineIds)->select('id'),
+            )->orWhere(function (Builder $query) use ($scope): void {
+                $query->whereNull($this->getTable().'.production_order_id')
+                    ->whereIn(
+                        $this->getTable().'.process_record_id',
+                        ProcessRecord::query()->inDataScope($scope)->select('id'),
+                    );
+            });
+        });
+    }
+
+    public function dataScopeProductionLineId(): ?int
+    {
+        $lineId = $this->productionOrder?->production_line_id;
+
+        return $lineId !== null
+            ? $lineId
+            : $this->processRecord?->dataScopeProductionLineId();
     }
 
     /**

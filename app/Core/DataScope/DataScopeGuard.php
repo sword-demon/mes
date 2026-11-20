@@ -23,6 +23,8 @@ class DataScopeGuard
 {
     private ?DataScope $scope = null;
 
+    private ?int $scopeUserId = null;
+
     /**
      * @var array<int, int>|null
      */
@@ -33,13 +35,21 @@ class DataScopeGuard
         private readonly Request $request,
     ) {}
 
+    /**
+     * Cached per user: the framework can reuse a resolved controller across
+     * requests, so the cache must key on who is calling instead of letting
+     * the first resolution win.
+     */
     public function scope(): DataScope
     {
-        if ($this->scope === null) {
-            $user = $this->request->user();
+        $user = $this->request->user();
+
+        if ($this->scope === null || $this->scopeUserId !== $user?->id) {
+            $this->scopeUserId = $user?->id;
             $this->scope = $user === null
                 ? DataScope::all()
                 : $this->access->resolveDataScope($user);
+            $this->scopedLineIds = null;
         }
 
         return $this->scope;

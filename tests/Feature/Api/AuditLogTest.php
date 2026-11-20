@@ -11,6 +11,7 @@ use App\Modules\Production\Model\ProcessRecord;
 use App\Modules\Production\Model\ProductionOrder;
 use App\Modules\Production\Model\ProductionReport;
 use App\Modules\Production\Model\ProductionTask;
+use App\Modules\Production\Model\ProductSn;
 use App\Modules\Production\Service\ProcessRecordService;
 use App\Modules\Production\Service\ProductionTaskService;
 use App\Modules\System\Model\LoginLog;
@@ -637,4 +638,68 @@ it('records report quantities and the reversal reason', function () {
         ->and($logs[0]->changes['合格数量'])->toBe(['before' => null, 'after' => '10.000'])
         ->and($logs[0]->changes['不良数量'])->toBe(['before' => null, 'after' => '2.000'])
         ->and($logs[1]->changes['冲销原因'])->toBe(['before' => null, 'after' => '数量录错，重新报工']);
+});
+
+it('records a log for every SN action', function () {
+    $line = ProductionLine::factory()->create();
+    $order = createScopedOrder($line, 'PO-SN-001', ProductionOrder::RELEASED);
+    $actor = superAdmin();
+
+    bearer($actor)->postJson('/api/v1/production/sns', [
+        'production_order_id' => $order->id,
+        'quantity' => 2,
+    ])->assertOk();
+
+    $sn = ProductSn::query()->orderBy('id')->firstOrFail();
+
+    bearer($actor)->putJson("/api/v1/production/sns/{$sn->sn}/bind", [
+        'material_batch_no' => 'MB-20261121',
+    ])->assertOk();
+
+    bearer($actor)->postJson("/api/v1/production/sns/{$sn->sn}/print")->assertOk();
+    bearer($actor)->postJson("/api/v1/production/sns/{$sn->sn}/void", ['reason' => '标签打印错误'])->assertOk();
+
+    $logs = OperationLog::query()->orderBy('id')->get();
+
+    expect($logs->pluck('action')->all())->toBe([
+        'production.sn.generate',
+        'production.sn.bind',
+        'production.sn.print',
+        'production.sn.void',
+    ]);
+
+    expect($logs[0]->changes['所属订单'])->toBe(['before' => null, 'after' => 'PO-SN-001'])
+        ->and($logs[1]->object_name)->toBe($sn->sn)
+        ->and($logs[1]->changes['物料批次'])->toBe(['before' => null, 'after' => 'MB-20261121'])
+        ->and($logs[3]->changes['作废原因'])->toBe(['before' => null, 'after' => '标签打印错误']);
+});
+
+it('records report, process and close logs for exceptions', function () {
+    $line = ProductionLine::factory()->create();
+    $order = createScopedOrder($line, 'PO-EXC-001', ProductionOrder::RELEASED);
+    $actor = superAdmin();
+
+    $exceptionId = bearer($actor)->postJson('/api/v1/production/exceptions', [
+        'type' => 'equipment',
+        'production_order_id' => $order->id,
+        'description' => '设备异常停机',
+    ])->assertOk()->json('data.id');
+
+    bearer($actor)->postJson("/api/v1/production/exceptions/{$exceptionId}/process", [
+        'handling_result' => '已联系设备部维修',
+    ])->assertOk();
+
+    bearer($actor)->postJson("/api/v1/production/exceptions/{$exceptionId}/close")->assertOk();
+
+    $logs = OperationLog::query()->orderBy('id')->get();
+
+    expect($logs->pluck('action')->all())->toBe([
+        'production.exception.report',
+        'production.exception.process',
+        'production.exception.close',
+    ]);
+
+    expect($logs[1]->changes['处理结果'])->toBe(['before' => null, 'after' => '已联系设备部维修'])
+        ->and($logs[2]->changes['状态']['before'])->toBe('处理中')
+        ->and($logs[2]->changes['状态']['after'])->toBe('已关闭');
 });

@@ -10,13 +10,16 @@ use App\Modules\Process\Model\Process;
 use App\Modules\Process\Model\RouteOperation;
 use App\Modules\Production\Model\ProcessRecord;
 use App\Modules\Production\Model\ProductionDispatch;
+use App\Modules\Production\Model\ProductionException;
 use App\Modules\Production\Model\ProductionOrder;
 use App\Modules\Production\Model\ProductionReport;
 use App\Modules\Production\Model\ProductionTask;
+use App\Modules\Production\Model\ProductSn;
 use App\Modules\Production\Service\ProcessRecordService;
 use App\Modules\System\Model\Permission;
 use App\Modules\System\Model\Role;
 use App\Modules\System\Model\User;
+use Illuminate\Testing\TestResponse;
 
 /**
  * A factory plus a second factory, a line-scoped user bound to the first
@@ -52,6 +55,12 @@ function productionScopeFixture(): array
         'production.flows.receive',
         'production.flows.exception',
         'production.flows.rework',
+        'production.sns.index',
+        'production.sns.create',
+        'production.sns.void',
+        'production.exceptions.index',
+        'production.exceptions.create',
+        'production.exceptions.process',
     ], 'scope_director_a');
     $lineUser->update(['factory_id' => $factoryA->id]);
     $lineUser->productionLines()->sync([$lineA1->id]);
@@ -488,4 +497,99 @@ it('rejects dispatching and reporting outside the scope', function () {
     ])
         ->assertForbidden()
         ->assertJsonPath('message', '该数据不在您的数据范围内');
+});
+
+it('scopes the serial number list and hides out-of-scope details', function () {
+    [, $lineA1, , $lineB, $lineUser] = productionScopeFixture();
+    $snA = ProductSn::factory()->create(['production_order_id' => createScopedOrder($lineA1, 'PO-A-001')->id]);
+    $snB = ProductSn::factory()->create(['production_order_id' => createScopedOrder($lineB, 'PO-B-001')->id]);
+
+    bearer($lineUser)->getJson('/api/v1/production/sns')
+        ->assertOk()
+        ->assertJsonCount(1, 'data.items')
+        ->assertJsonPath('data.items.0.sn', $snA->sn);
+
+    // A missing SN and an out-of-scope SN are indistinguishable: both 404.
+    bearer($lineUser)->getJson("/api/v1/production/sns/{$snB->sn}")
+        ->assertNotFound()
+        ->assertJsonPath('message', 'SN 不存在');
+});
+
+it('scopes the exception list and keeps unlinked rows to the all scope', function () {
+    [, $lineA1, , $lineB, $lineUser] = productionScopeFixture();
+    $exceptionA = ProductionException::factory()->create([
+        'production_order_id' => createScopedOrder($lineA1, 'PO-A-001')->id,
+    ]);
+    ProductionException::factory()->create([
+        'production_order_id' => createScopedOrder($lineB, 'PO-B-001')->id,
+    ]);
+    $unlinked = ProductionException::factory()->create([
+        'production_order_id' => null,
+        'process_record_id' => null,
+    ]);
+
+    $codes = collect(bearer($lineUser)->getJson('/api/v1/production/exceptions')
+        ->assertOk()
+        ->json('data.items'))->pluck('code')->values()->all();
+
+    expect($codes)->toBe([$exceptionA->code]);
+
+    // Legacy rows with no order and no execution are only for the all scope.
+    $allCodes = collect(bearer(superAdmin())->getJson('/api/v1/production/exceptions')
+        ->assertOk()
+        ->json('data.items'))->pluck('code')->values()->all();
+
+    expect($allCodes)->toHaveCount(3)
+        ->and($allCodes)->toContain($exceptionA->code)
+        ->and($allCodes)->toContain($unlinked->code);
+});
+
+it('rejects SN actions on orders outside the scope', function () {
+    [, , , $lineB, $lineUser] = productionScopeFixture();
+    $orderB = createScopedOrder($lineB, 'PO-B-001', ProductionOrder::RELEASED);
+    $sn = ProductSn::factory()->create(['production_order_id' => $orderB->id]);
+
+    bearer($lineUser)->postJson('/api/v1/production/sns', [
+        'production_order_id' => $orderB->id,
+        'quantity' => 1,
+    ])
+        ->assertForbidden()
+        ->assertJsonPath('message', '该数据不在您的数据范围内');
+
+    bearer($lineUser)->postJson("/api/v1/production/sns/{$sn->sn}/void", ['reason' => '错发'])
+        ->assertForbidden()
+        ->assertJsonPath('message', '该数据不在您的数据范围内');
+});
+
+it('rejects handling exceptions outside the scope', function () {
+    [, , , $lineB, $lineUser] = productionScopeFixture();
+    $exception = ProductionException::factory()->create([
+        'production_order_id' => createScopedOrder($lineB, 'PO-B-001')->id,
+        'status' => ProductionException::REPORTED,
+    ]);
+
+    bearer($lineUser)->postJson("/api/v1/production/exceptions/{$exception->id}/process", [
+        'handling_result' => '已维修',
+    ])
+        ->assertForbidden()
+        ->assertJsonPath('message', '该数据不在您的数据范围内');
+});
+
+it('rejects an exception without an order or an execution', function () {
+    // Built by hand: the helper would append data.scope.all, and this case is
+    // about the D1 link requirement, not scoping.
+    $role = Role::factory()->create(['code' => 'exception_reporter']);
+    $role->permissions()->attach(Permission::query()->firstOrCreate(
+        ['code' => 'production.exceptions.create'],
+        ['name' => 'production.exceptions.create', 'type' => 'api'],
+    ));
+    $user = User::factory()->create();
+    $user->roles()->attach($role);
+
+    bearer($user)->postJson('/api/v1/production/exceptions', [
+        'type' => 'equipment',
+        'description' => '设备异常',
+    ])->assertUnprocessable(function (TestResponse $response): void {
+        expect($response->json('message'))->toContain('请关联生产订单或工序执行记录');
+    });
 });
