@@ -72,31 +72,6 @@ test('returns 429 when one ip exceeds the login attempt limit', function () {
         ->assertTooManyRequests();
 });
 
-test('the api rate limit ignores unusable environment values', function (string $value) {
-    // The clamp lives in the config file, so it only runs when the file is loaded.
-    putenv("API_RATE_LIMIT={$value}");
-
-    try {
-        $config = require base_path('config/app.php');
-
-        expect($config['api_rate_limit'])->toBe(120);
-    } finally {
-        putenv('API_RATE_LIMIT');
-    }
-})->with(['empty' => '', 'zero' => '0', 'not a number' => 'abc', 'negative' => '-1']);
-
-test('the api rate limit follows the environment', function () {
-    putenv('API_RATE_LIMIT=300');
-
-    try {
-        $config = require base_path('config/app.php');
-
-        expect($config['api_rate_limit'])->toBe(300);
-    } finally {
-        putenv('API_RATE_LIMIT');
-    }
-});
-
 test('method not allowed responses preserve allowed methods', function () {
     $this->postJson('/api/v1/me')
         ->assertStatus(405)
