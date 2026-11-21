@@ -2,6 +2,7 @@
 
 namespace App\Core\Queue;
 
+use App\Core\Audit\AuditContext;
 use App\Modules\System\Model\AiTask;
 use App\Modules\System\Service\AiTaskService;
 use Illuminate\Support\Facades\Log;
@@ -16,12 +17,16 @@ use Throwable;
  */
 abstract class AiTaskJob extends AiQueuedJob
 {
-    final public function __construct(public readonly int $aiTaskId)
-    {
-        parent::__construct();
+    final public function __construct(
+        public readonly int $aiTaskId,
+        ?int $auditActorId = null,
+        ?string $auditActorIp = null,
+        ?string $auditTraceId = null,
+    ) {
+        parent::__construct($auditActorId, $auditActorIp, $auditTraceId);
     }
 
-    final public function handle(AiTaskService $tasks): void
+    final public function handle(AiTaskService $tasks, AuditContext $context): void
     {
         $task = AiTask::query()->find($this->aiTaskId);
 
@@ -38,27 +43,29 @@ abstract class AiTaskJob extends AiQueuedJob
             return;
         }
 
-        $tasks->markRunning($task);
-        $startedAt = microtime(true);
+        $this->withAuditContext($context, AuditContext::SOURCE_AI, function () use ($tasks, $task): void {
+            $tasks->markRunning($task);
+            $startedAt = microtime(true);
 
-        try {
-            $result = $this->execute($task);
-            $tasks->markSucceeded(
-                $task,
-                $result->output,
-                $this->elapsedMilliseconds($startedAt),
-                $result->promptTokens,
-                $result->completionTokens,
-            );
-        } catch (Throwable $exception) {
-            $tasks->markFailed(
-                $task,
-                $exception->getMessage() ?: $exception::class,
-                $this->elapsedMilliseconds($startedAt),
-            );
+            try {
+                $result = $this->execute($task);
+                $tasks->markSucceeded(
+                    $task,
+                    $result->output,
+                    $this->elapsedMilliseconds($startedAt),
+                    $result->promptTokens,
+                    $result->completionTokens,
+                );
+            } catch (Throwable $exception) {
+                $tasks->markFailed(
+                    $task,
+                    $exception->getMessage() ?: $exception::class,
+                    $this->elapsedMilliseconds($startedAt),
+                );
 
-            throw $exception;
-        }
+                throw $exception;
+            }
+        });
     }
 
     abstract protected function execute(AiTask $task): AiTaskResult;

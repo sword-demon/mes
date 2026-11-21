@@ -18,9 +18,12 @@ abstract class AiQueuedJob extends QueuedJob
 
     public int $timeout = 180;
 
-    public function __construct()
-    {
-        parent::__construct();
+    public function __construct(
+        ?int $auditActorId = null,
+        ?string $auditActorIp = null,
+        ?string $auditTraceId = null,
+    ) {
+        parent::__construct($auditActorId, $auditActorIp, $auditTraceId);
 
         $this->onQueue('ai');
     }

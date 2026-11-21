@@ -18,15 +18,15 @@ class AiTaskService
     public function dispatch(
         string $jobClass,
         string $type,
-        ?User $actor = null,
-        ?string $actorIp = null,
+        User $actor,
+        string $actorIp,
         ?string $model = null,
         array $input = [],
         ?string $traceId = null,
     ): AiTask {
         $task = $this->createPending($type, $actor, $actorIp, $model, $input, $traceId);
 
-        dispatch(new $jobClass($task->id));
+        dispatch(new $jobClass($task->id, $task->actor_id, $task->actor_ip, $task->trace_id));
 
         return $task;
     }
