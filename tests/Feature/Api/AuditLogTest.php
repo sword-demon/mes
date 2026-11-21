@@ -21,6 +21,7 @@ use App\Modules\Production\Service\ProcessRecordService;
 use App\Modules\Production\Service\ProductionTaskService;
 use App\Modules\Quality\Model\DefectCode;
 use App\Modules\Quality\Model\InspectionItem;
+use App\Modules\System\Model\Department;
 use App\Modules\System\Model\LoginLog;
 use App\Modules\System\Model\OperationLog;
 use App\Modules\System\Model\Permission;
@@ -290,6 +291,74 @@ it('records operation logs for user creation, update and password reset', functi
         'system.user.updated',
         'system.user.password-reset',
     ]);
+});
+
+it('records operation logs for department creation, update and deletion', function () {
+    $actor = userWithPermissions([
+        'system.departments.create',
+        'system.departments.update',
+        'system.departments.delete',
+    ]);
+    $parent = Department::factory()->create(['code' => 'parent', 'name' => '生产部']);
+
+    $departmentId = bearer($actor)->postJson('/api/v1/system/departments', [
+        'parent_id' => $parent->id,
+        'code' => 'workshop-audit',
+        'name' => '审计车间',
+    ])->assertOk()->json('data.id');
+
+    bearer($actor)->putJson("/api/v1/system/departments/{$departmentId}", ['name' => '审计车间改'])
+        ->assertOk();
+
+    bearer($actor)->deleteJson("/api/v1/system/departments/{$departmentId}")->assertOk();
+
+    $logs = OperationLog::query()->orderBy('id')->get();
+
+    expect($logs->pluck('action')->all())->toBe([
+        'system.department.create',
+        'system.department.update',
+        'system.department.delete',
+    ])
+        ->and($logs[0]->object_type)->toBe('部门')
+        ->and($logs[0]->object_name)->toBe('审计车间')
+        ->and($logs[1]->changes['名称'])->toBe(['before' => '审计车间', 'after' => '审计车间改'])
+        ->and($logs[2]->object_name)->toBe('审计车间改');
+});
+
+it('records operation logs for menu creation, update and deletion', function () {
+    $actor = userWithPermissions([
+        'system.menus.create',
+        'system.menus.update',
+        'system.menus.delete',
+    ]);
+    $permission = Permission::factory()->create(['code' => 'menu.audit', 'type' => 'menu']);
+
+    $menuId = bearer($actor)->postJson('/api/v1/system/menus', [
+        'name' => '审计菜单',
+        'path' => '/audit-menu',
+        'sort' => 77,
+    ])->assertOk()->json('data.id');
+
+    bearer($actor)->putJson("/api/v1/system/menus/{$menuId}", [
+        'name' => '审计菜单改',
+        'permission_id' => $permission->id,
+    ])
+        ->assertOk();
+
+    bearer($actor)->deleteJson("/api/v1/system/menus/{$menuId}")->assertOk();
+
+    $logs = OperationLog::query()->orderBy('id')->get();
+
+    expect($logs->pluck('action')->all())->toBe([
+        'system.menu.create',
+        'system.menu.update',
+        'system.menu.delete',
+    ])
+        ->and($logs[0]->object_type)->toBe('菜单')
+        ->and($logs[0]->object_name)->toBe('审计菜单')
+        ->and($logs[1]->changes['名称'])->toBe(['before' => '审计菜单', 'after' => '审计菜单改'])
+        ->and($logs[1]->changes['权限'])->toBe(['before' => null, 'after' => 'menu.audit'])
+        ->and($logs[2]->object_name)->toBe('审计菜单改');
 });
 
 it('records operation logs for outbound and adjustment inventory movements', function () {
