@@ -15,21 +15,11 @@ trait ScopesThroughProductionOrder
      */
     public function scopeInDataScope(Builder $query, DataScope $scope): void
     {
-        if ($scope->isAll()) {
-            return;
-        }
-
-        $lineIds = DataScopeQuery::scopedProductionLineIds($scope);
-
-        if ($lineIds === []) {
-            $query->whereRaw('1 = 0');
-
-            return;
-        }
-
-        $query->whereIn(
-            $this->getTable().'.production_order_id',
-            ProductionOrder::query()->whereIn('production_line_id', $lineIds)->select('id'),
-        );
+        DataScopeQuery::applyLineScope($query, $scope, function (array $lineIds) use ($query): void {
+            $query->whereIn(
+                $this->getTable().'.production_order_id',
+                ProductionOrder::query()->whereIn('production_line_id', $lineIds)->select('id'),
+            );
+        });
     }
 }

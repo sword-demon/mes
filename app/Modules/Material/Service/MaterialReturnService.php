@@ -67,7 +67,7 @@ class MaterialReturnService
                 ->whereKey($data['requisition_id'])
                 ->firstOrFail();
             $this->dataScope->ensure($requisition);
-            $items = $requisition->items()->lockForUpdate()->get()->keyBy('id');
+            $items = $requisition->items()->with('material')->lockForUpdate()->get()->keyBy('id');
             $returned = $this->returnedByItem($items->keys()->all());
 
             $return = MaterialReturn::query()->create([
@@ -267,11 +267,10 @@ class MaterialReturnService
         foreach ($rows as $row) {
             $item = $requisitionItems->get($row['requisition_item_id']);
 
-            $summary[] = ($item !== null ? $item->material->code : '').
-                '×'.Quantity::toDecimal(Quantity::toMilli($row['quantity']));
+            $summary[] = [($item !== null ? $item->material->code : ''), $row['quantity']];
         }
 
-        return implode('、', $summary);
+        return MaterialSummary::format($summary);
     }
 
     /**
@@ -292,11 +291,10 @@ class MaterialReturnService
             // The return item carries the quantity; the request rows only
             // address the return location. requisitionItem is non-nullable,
             // so the material always resolves.
-            $summary[] = $item->requisitionItem->material->code.
-                '×'.Quantity::toDecimal(Quantity::toMilli($item->quantity));
+            $summary[] = [$item->requisitionItem->material->code, $item->quantity];
         }
 
-        return implode('、', $summary);
+        return MaterialSummary::format($summary);
     }
 
     private function loadReturn(MaterialReturn $materialReturn): MaterialReturn
