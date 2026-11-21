@@ -1,5 +1,6 @@
 <?php
 
+use App\Core\Audit\AuditContext;
 use App\Core\Queue\AiTaskJob;
 use App\Core\Queue\AiTaskResult;
 use App\Core\Queue\Jobs\ExampleAiTaskJob;
@@ -70,10 +71,13 @@ it('creates a pending ai task with actor, model and input snapshots', function (
 
 it('creates the pending record before dispatching the example task', function () {
     Queue::fake();
+    $actor = User::factory()->create();
 
     $task = app(AiTaskService::class)->dispatch(
         jobClass: ExampleAiTaskJob::class,
         type: AiTask::TYPE_EXAMPLE,
+        actor: $actor,
+        actorIp: '203.0.113.10',
         input: ['message' => 'hi'],
     );
 
@@ -98,10 +102,13 @@ it('marks a task running before the work starts', function () {
 
 it('runs the example task through the worker and stores the result', function () {
     config(['queue.default' => 'database']);
+    $actor = User::factory()->create();
 
     $task = app(AiTaskService::class)->dispatch(
         jobClass: ExampleAiTaskJob::class,
         type: AiTask::TYPE_EXAMPLE,
+        actor: $actor,
+        actorIp: '203.0.113.11',
         input: ['message' => 'hello'],
         traceId: 'trace-e2e',
     );
@@ -120,10 +127,13 @@ it('runs the example task through the worker and stores the result', function ()
 
 it('marks a failed task with the error and latency', function () {
     config(['queue.default' => 'database']);
+    $actor = User::factory()->create();
 
     $task = app(AiTaskService::class)->dispatch(
         jobClass: FailingAiTaskJob::class,
         type: AiTask::TYPE_EXAMPLE,
+        actor: $actor,
+        actorIp: '203.0.113.12',
     );
 
     Artisan::call('queue:work', ['--once' => true, '--queue' => 'ai']);
@@ -184,7 +194,7 @@ it('skips jobs whose task is already terminal', function (string $status) {
     ]);
     $service = app(AiTaskService::class);
 
-    (new ExampleAiTaskJob($task->id))->handle($service);
+    (new ExampleAiTaskJob($task->id))->handle($service, app(AuditContext::class));
     (new FailingAiTaskJob($task->id))->failed(new RuntimeException('迟到的失败'));
 
     expect($task->fresh()->status)->toBe($status)
@@ -192,7 +202,10 @@ it('skips jobs whose task is already terminal', function (string $status) {
 })->with([AiTask::STATUS_SUCCEEDED, AiTask::STATUS_CANCELLED]);
 
 it('fails when the ai task record is missing', function () {
-    expect(fn () => (new ExampleAiTaskJob(9999))->handle(app(AiTaskService::class)))
+    expect(fn () => (new ExampleAiTaskJob(9999))->handle(
+        app(AiTaskService::class),
+        app(AuditContext::class),
+    ))
         ->toThrow(RuntimeException::class, 'AI 任务记录 9999 不存在');
 });
 
@@ -202,13 +215,13 @@ it('reuses the same record when a task retries', function () {
     $task = $service->createPending(type: AiTask::TYPE_EXAMPLE);
 
     try {
-        (new FlakyAiTaskJob($task->id))->handle($service);
+        (new FlakyAiTaskJob($task->id))->handle($service, app(AuditContext::class));
     } catch (RuntimeException) {
     }
 
     expect($task->fresh()->status)->toBe(AiTask::STATUS_FAILED);
 
-    (new FlakyAiTaskJob($task->id))->handle($service);
+    (new FlakyAiTaskJob($task->id))->handle($service, app(AuditContext::class));
 
     expect($task->fresh()->status)->toBe(AiTask::STATUS_SUCCEEDED)
         ->and($task->fresh()->output)->toBe(['attempt' => 2])
