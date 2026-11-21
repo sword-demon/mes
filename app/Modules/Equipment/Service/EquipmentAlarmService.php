@@ -12,7 +12,6 @@ use App\Modules\System\ValueObject\OperationLogEntry;
 use Closure;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 
 class EquipmentAlarmService
@@ -256,7 +255,6 @@ class EquipmentAlarmService
     ): EquipmentAlarm {
         return DB::transaction(function () use ($alarm, $requiredStatus, $error, $changes, $action, $actionName): EquipmentAlarm {
             $locked = EquipmentAlarm::query()->lockForUpdate()->findOrFail($alarm->id);
-            Log::debug('alarm-transition', ['alarm' => $locked->id, 'line' => $locked->dataScopeProductionLineId(), 'user_line' => $this->dataScope->scope()->productionLineIds, 'level' => $this->dataScope->scope()->level]);
             $this->dataScope->ensure($locked);
             $before = $locked->statusLabel();
 

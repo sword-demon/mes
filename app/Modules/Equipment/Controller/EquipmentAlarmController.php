@@ -69,6 +69,7 @@ class EquipmentAlarmController extends Controller
     {
         // shortcut: one page covers a demo factory's devices; add paging when it grows.
         $equipments = Equipment::query()
+            ->inDataScope($this->dataScope->scope())
             ->orderBy('id')
             ->limit(200)
             ->get(['id', 'code', 'name', 'status']);

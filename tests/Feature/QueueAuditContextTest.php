@@ -1,9 +1,14 @@
 <?php
 
 use App\Core\Audit\AuditContext;
+use App\Core\DataScope\DataScopeGuard;
+use App\Core\Exceptions\ApiException;
 use App\Core\Queue\AiTaskJob;
 use App\Core\Queue\AiTaskResult;
 use App\Core\Queue\Jobs\ExampleAiTaskJob;
+use App\Modules\Organization\Model\Factory;
+use App\Modules\Organization\Model\ProductionLine;
+use App\Modules\Organization\Model\Workshop;
 use App\Modules\System\Model\AiTask;
 use App\Modules\System\Model\OperationLog;
 use App\Modules\System\Model\User;
@@ -61,6 +66,26 @@ it('carries the actor, ip and trace in the queued job payload', function () {
             && $job->auditActorIp === '203.0.113.7'
             && $job->auditTraceId === 'trace-payload',
     );
+});
+
+it('uses the queued actor for data scope checks', function () {
+    [$factoryA, $lineA] = factoryWithLines();
+    $factoryB = Factory::factory()->create();
+    $workshopB = Workshop::factory()->create(['factory_id' => $factoryB->id]);
+    $lineB = ProductionLine::factory()->create(['workshop_id' => $workshopB->id]);
+
+    $actor = userWithPermissions(['data.scope.line'], 'workshop_director');
+    $actor->update(['factory_id' => $factoryA->id]);
+    $actor->productionLines()->sync([$lineA->id]);
+
+    app(AuditContext::class)->set(AuditContext::SOURCE_AI, $actor, '198.51.100.20', 'trace-scope');
+
+    $guard = app(DataScopeGuard::class);
+
+    expect(fn () => $guard->ensureLine($lineB->id))
+        ->toThrow(ApiException::class, '生产产线不在您的数据范围内');
+
+    $guard->ensureLine($lineA->id);
 });
 
 it('writes queue operation logs with the payload actor, ip, ai source and trace', function () {

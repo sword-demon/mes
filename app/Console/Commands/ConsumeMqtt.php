@@ -19,8 +19,12 @@ use Throwable;
 #[Description('订阅设备 MQTT 消息，保存历史并更新设备状态')]
 class ConsumeMqtt extends Command
 {
-    public function handle(MqttClient $mqtt, Repository $subscriptions, EquipmentMessageService $messages): int
-    {
+    public function handle(
+        MqttClient $mqtt,
+        Repository $subscriptions,
+        EquipmentMessageService $messages,
+        AuditContext $context,
+    ): int {
         $limit = filter_var($this->option('max-messages'), FILTER_VALIDATE_INT, ['options' => ['min_range' => 0]]);
 
         if ($limit === false) {
@@ -38,7 +42,7 @@ class ConsumeMqtt extends Command
         }
 
         // 设备消息消费属于系统行为：由它触发的告警日志记 source=system。
-        app(AuditContext::class)->set(AuditContext::SOURCE_SYSTEM);
+        $context->set(AuditContext::SOURCE_SYSTEM);
 
         $stopping = false;
         $this->trap([SIGINT, SIGTERM], function () use ($mqtt, &$stopping): void {

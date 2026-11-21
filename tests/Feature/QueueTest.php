@@ -28,6 +28,15 @@ it('defines the redis queue with a retry window longer than the longest timeout'
         ->and($redis['block_for'])->toBe(5);
 });
 
+it('keeps fallback queue reservation windows longer than the ai timeout', function () {
+    foreach (['database', 'beanstalkd'] as $connection) {
+        $config = config("queue.connections.{$connection}");
+
+        expect($config['retry_after'])->toBeGreaterThan(180)
+            ->and($config['after_commit'])->toBeTrue();
+    }
+});
+
 it('ships a base job with retry, timeout, backoff and after-commit defaults', function () {
     $job = new QueueProbe('test');
 

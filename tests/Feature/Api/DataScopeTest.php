@@ -434,6 +434,87 @@ it('scopes the order list to the whole factory', function () {
     expect($codes)->toBe(['PO-A-001', 'PO-A-002']);
 });
 
+it('scopes order option lists to the actor line', function () {
+    [, $lineA1, , $lineB, $lineUser] = productionScopeFixture();
+    $orderA = createScopedOrder($lineA1, 'PO-OPT-A');
+    $orderB = createScopedOrder($lineB, 'PO-OPT-B');
+    ProductionTask::factory()->create(['production_order_id' => $orderA->id, 'code' => 'PT-OPT-A']);
+    ProductionTask::factory()->create(['production_order_id' => $orderB->id, 'code' => 'PT-OPT-B']);
+
+    $endpoints = [
+        '/api/v1/production/sns/options',
+        '/api/v1/production/reports/options',
+        '/api/v1/production/exceptions/options',
+        '/api/v1/quality/inspection-tasks/options',
+        '/api/v1/quality/defective-products/options',
+    ];
+
+    foreach ($endpoints as $endpoint) {
+        $response = bearer($lineUser)->getJson($endpoint)->assertOk();
+
+        expect($response->getContent())->not->toContain('PO-OPT-B');
+    }
+});
+
+it('scopes equipment option lists to the actor line', function () {
+    [, $lineA1, , $lineB, $lineUser] = productionScopeFixture();
+    Equipment::factory()->create([
+        'code' => 'EQ-OPT-A',
+        'production_line_id' => $lineA1->id,
+        'workshop_id' => $lineA1->workshop_id,
+    ]);
+    Equipment::factory()->create([
+        'code' => 'EQ-OPT-B',
+        'production_line_id' => $lineB->id,
+        'workshop_id' => $lineB->workshop_id,
+    ]);
+
+    foreach (['/api/v1/equipments/options', '/api/v1/equipments/alarms/options'] as $endpoint) {
+        $response = bearer($lineUser)->getJson($endpoint)->assertOk();
+
+        expect($response->getContent())->not->toContain('EQ-OPT-B');
+    }
+});
+
+it('rejects material suggestions for orders outside the actor line', function () {
+    [, $lineA1, , $lineB, $lineUser] = productionScopeFixture();
+    createScopedOrder($lineA1, 'PO-SUG-A');
+    $orderB = createScopedOrder($lineB, 'PO-SUG-B');
+
+    bearer($lineUser)->getJson('/api/v1/materials/requisitions/suggestions?production_order_id='.$orderB->id)
+        ->assertNotFound();
+
+    $requisition = MaterialRequisition::query()->create([
+        'code' => 'MR-SUG-B',
+        'production_order_id' => $orderB->id,
+        'created_by_id' => $lineUser->id,
+    ]);
+
+    bearer($lineUser)->getJson('/api/v1/materials/returns/suggestions?requisition_id='.$requisition->id)
+        ->assertNotFound();
+});
+
+it('rejects binding a sn to equipment outside the actor line', function () {
+    [$factoryA, $lineA1, , $lineB] = productionScopeFixture();
+    $order = createScopedOrder($lineA1, 'PO-SN-A', ProductionOrder::IN_PROGRESS);
+    $sn = ProductSn::factory()->create(['production_order_id' => $order->id]);
+    $equipment = Equipment::factory()->create([
+        'production_line_id' => $lineB->id,
+        'workshop_id' => $lineB->workshop_id,
+    ]);
+
+    $actor = userWithPermissions(['data.scope.line', 'production.sns.bind'], 'sn_binder');
+    $actor->update(['factory_id' => $factoryA->id]);
+    $actor->productionLines()->sync([$lineA1->id]);
+
+    bearer($actor)->putJson("/api/v1/production/sns/{$sn->sn}/bind", [
+        'equipment_id' => $equipment->id,
+    ])->assertForbidden()
+        ->assertJsonPath('message', '该数据不在您的数据范围内');
+
+    expect($sn->fresh()->equipment_id)->toBeNull();
+});
+
 it('shows unassigned tasks through the line of their order', function () {
     [, $lineA1, , $lineB, $lineUser] = productionScopeFixture();
     $orderA = createScopedOrder($lineA1, 'PO-A-001');

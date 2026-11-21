@@ -1,6 +1,8 @@
 <?php
 
+use App\Modules\Equipment\Model\Equipment;
 use App\Modules\Inventory\Model\Inventory;
+use App\Modules\Inventory\Model\InventoryAlert;
 use App\Modules\Inventory\Model\StorageLocation;
 use App\Modules\Inventory\Model\Warehouse;
 use App\Modules\Material\Model\Material;
@@ -394,6 +396,48 @@ it('records operation logs for outbound and adjustment inventory movements', fun
         ->and($logs[1]->action)->toBe('inventory.adjustment')
         ->and($logs[1]->action_name)->toBe('库存调整')
         ->and($logs[1]->changes['当前库存'])->toBe(['before' => '15.000', 'after' => '12.000']);
+});
+
+it('records operation logs for inventory alert confirmation and closing', function () {
+    $alert = InventoryAlert::factory()->create(['status' => InventoryAlert::PENDING]);
+    $actor = userWithPermissions(['inventory.alerts.confirm', 'inventory.alerts.close']);
+
+    bearer($actor)->postJson("/api/v1/inventory/alerts/{$alert->id}/confirm")->assertOk();
+    bearer($actor)->postJson("/api/v1/inventory/alerts/{$alert->id}/close")->assertOk();
+
+    $logs = OperationLog::query()->orderBy('id')->get();
+
+    expect($logs->pluck('action')->all())->toBe([
+        'inventory.alert.confirm',
+        'inventory.alert.close',
+    ])
+        ->and($logs[0]->object_type)->toBe('库存预警')
+        ->and($logs[0]->object_name)->toBe($alert->material->code)
+        ->and($logs[0]->changes['状态'])->toBe(['before' => '待确认', 'after' => '已确认'])
+        ->and($logs[1]->changes['状态'])->toBe(['before' => '已确认', 'after' => '已关闭']);
+});
+
+it('rolls back equipment creation when the audit log fails', function () {
+    [, $line] = factoryWithLines();
+    $employee = Employee::factory()->create();
+
+    $this->mock(OperationLogService::class, function ($mock): void {
+        $mock->shouldReceive('record')->once()->andThrow(new RuntimeException('audit unavailable'));
+    });
+
+    $this->withoutExceptionHandling();
+
+    expect(fn () => bearer(userWithPermissions(['equipment.ledger.create']))->postJson('/api/v1/equipments', [
+        'code' => 'EQ-ROLLBACK',
+        'name' => '回滚设备',
+        'type' => Equipment::TYPES[0],
+        'workshop_id' => $line->workshop_id,
+        'production_line_id' => $line->id,
+        'model' => 'MDL-ROLLBACK',
+        'owner_id' => $employee->id,
+    ]))->toThrow(RuntimeException::class);
+
+    expect(Equipment::query()->where('code', 'EQ-ROLLBACK')->exists())->toBeFalse();
 });
 
 it('lists login logs and filters by account, result and date', function () {

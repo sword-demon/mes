@@ -82,6 +82,7 @@ class ProductionExceptionController extends Controller
 
         // shortcut: one page of matches covers a demo factory; add server paging when order volume grows.
         $orders = $include === 'process_records' ? [] : ProductionOrder::query()
+            ->inDataScope($this->dataScope->scope())
             ->with('product:id,code,name')
             ->when(
                 $keyword !== null && $keyword !== '',
@@ -110,6 +111,7 @@ class ProductionExceptionController extends Controller
 
         // shortcut: one order's execution records fit in 200; add paging for very large tasks.
         $records = $include === 'orders' ? [] : ProcessRecord::query()
+            ->inDataScope($this->dataScope->scope())
             ->with([
                 'routeOperation:id,sequence,process_id',
                 'routeOperation.process:id,code,name',

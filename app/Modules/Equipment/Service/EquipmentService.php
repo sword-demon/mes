@@ -26,13 +26,13 @@ class EquipmentService
      *
      * @return array<string, int>
      */
-    public function statusCounts(?DataScope $scope = null): array
+    public function statusCounts(DataScope $scope): array
     {
         $counts = array_fill_keys(Equipment::STATUSES, 0);
 
         Equipment::query()
             ->enabled()
-            ->when($scope !== null && ! $scope->isAll(), fn ($query) => $query->inDataScope($scope))
+            ->when(! $scope->isAll(), fn ($query) => $query->inDataScope($scope))
             ->selectRaw('status, COUNT(*) as aggregate')
             ->groupBy('status')
             ->pluck('aggregate', 'status')
@@ -59,6 +59,8 @@ class EquipmentService
             throw new ApiException($unavailableMessage, 422);
         }
 
+        $this->dataScope->ensure($equipment);
+
         if ($productionLineId !== null && $equipment->production_line_id !== $productionLineId) {
             throw new ApiException('设备不属于该生产任务的产线', 422);
         }
@@ -76,17 +78,19 @@ class EquipmentService
         $this->dataScope->ensureLine((int) $data['production_line_id']);
         $this->ensureLineBelongsToWorkshop((int) $data['workshop_id'], (int) $data['production_line_id']);
 
-        $equipment = Equipment::query()->create($data);
+        return DB::transaction(function () use ($data): Equipment {
+            $equipment = Equipment::query()->create($data);
 
-        $this->operationLogs->record(new OperationLogEntry(
-            action: 'equipment.ledger.create',
-            actionName: '新增设备',
-            objectType: '设备',
-            objectId: $equipment->id,
-            objectName: $equipment->code,
-        ));
+            $this->operationLogs->record(new OperationLogEntry(
+                action: 'equipment.ledger.create',
+                actionName: '新增设备',
+                objectType: '设备',
+                objectId: $equipment->id,
+                objectName: $equipment->code,
+            ));
 
-        return $equipment;
+            return $equipment;
+        });
     }
 
     /**
@@ -105,21 +109,23 @@ class EquipmentService
             $this->dataScope->ensureLine($lineId);
         }
 
-        $before = ['产线' => $equipment->productionLine?->name, '状态' => $equipment->statusLabel()];
-        $equipment->update($data);
-        $equipment->load('productionLine');
+        return DB::transaction(function () use ($equipment, $data): Equipment {
+            $before = ['产线' => $equipment->productionLine?->name, '状态' => $equipment->statusLabel()];
+            $equipment->update($data);
+            $equipment->load('productionLine');
 
-        $this->operationLogs->record(new OperationLogEntry(
-            action: 'equipment.ledger.update',
-            actionName: '编辑设备',
-            objectType: '设备',
-            objectId: $equipment->id,
-            objectName: $equipment->code,
-            before: $before,
-            after: ['产线' => $equipment->productionLine?->name, '状态' => $equipment->statusLabel()],
-        ));
+            $this->operationLogs->record(new OperationLogEntry(
+                action: 'equipment.ledger.update',
+                actionName: '编辑设备',
+                objectType: '设备',
+                objectId: $equipment->id,
+                objectName: $equipment->code,
+                before: $before,
+                after: ['产线' => $equipment->productionLine?->name, '状态' => $equipment->statusLabel()],
+            ));
 
-        return $equipment;
+            return $equipment;
+        });
     }
 
     /**

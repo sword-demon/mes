@@ -82,6 +82,7 @@ class EquipmentController extends Controller
             ->map(fn (OrganizationEmployee $employee): array => $employee->only(['id', 'employee_no', 'name']));
 
         $equipments = Equipment::query()
+            ->inDataScope($this->dataScope->scope())
             ->with(self::RELATIONS)
             ->available()
             ->orderBy('id')

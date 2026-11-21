@@ -22,4 +22,5 @@
 - 「示例任务派发后接口立即返回」：本次没有新增 HTTP 触发点，改为验证 派发入队 → 真实 `queue:work` 执行 → 日志落库；同步接口的响应时间不受队列影响。
 - 失败重试与耗尽已用真实 worker 验证（单次尝试耗尽后进入 `failed_jobs`）。
 - AI 队列的超时由 `AiQueuedJob`（180 秒 / 2 次）保证；Laravel 以任务属性优先，命令行 `--timeout` 只是兜底，因此不能只靠 worker 参数。
+- 复核修复：`database` / `beanstalkd` 的 `retry_after` 提升到 240、`after_commit` 改为 true；AI 执行异常在 `handle` 内补写失败日志。超时终止测试仍未补。
 

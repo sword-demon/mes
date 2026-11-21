@@ -57,6 +57,11 @@ abstract class AiTaskJob extends AiQueuedJob
                     $result->completionTokens,
                 );
             } catch (Throwable $exception) {
+                Log::error('ai.task.failed', [
+                    'ai_task_id' => $this->aiTaskId,
+                    'error' => $exception->getMessage() ?: $exception::class,
+                ]);
+
                 $tasks->markFailed(
                     $task,
                     $exception->getMessage() ?: $exception::class,

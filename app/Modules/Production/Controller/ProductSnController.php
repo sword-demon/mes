@@ -86,6 +86,7 @@ class ProductSnController extends Controller
     {
         // shortcut: one page covers a demo factory's open orders; add paging when it does not.
         $orders = ProductionOrder::query()
+            ->inDataScope($this->dataScope->scope())
             ->generatableSn()
             ->with('product:id,code,name')
             ->orderByDesc('id')
