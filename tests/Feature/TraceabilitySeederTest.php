@@ -1,5 +1,6 @@
 <?php
 
+use App\Core\DataScope\DataScope;
 use App\Modules\Inventory\Model\InventoryTransaction;
 use App\Modules\Material\Model\MaterialRequisition;
 use App\Modules\Production\Model\ProductSn;
@@ -37,7 +38,10 @@ it('returns the backward trace with affected SNs for a seeded material batch', f
 
     expect($outbound)->not->toBeNull();
 
-    $backward = app(BackwardTraceService::class)->trace((string) $outbound->inventory->batch_no);
+    $backward = app(BackwardTraceService::class)->trace(
+        (string) $outbound->inventory->batch_no,
+        DataScope::all(),
+    );
 
     expect($backward->rows)->not->toBeEmpty()
         ->and($backward->rows->flatMap(fn ($row) => $row->productSns))->not->toBeEmpty();

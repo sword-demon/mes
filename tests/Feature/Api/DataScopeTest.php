@@ -5,6 +5,7 @@ use App\Core\Exceptions\ApiException;
 use App\Modules\Equipment\Model\Equipment;
 use App\Modules\Equipment\Model\EquipmentAlarm;
 use App\Modules\Inventory\Model\Inventory;
+use App\Modules\Inventory\Model\InventoryTransaction;
 use App\Modules\Inventory\Model\StorageLocation;
 use App\Modules\Inventory\Model\Warehouse;
 use App\Modules\Material\Model\Material;
@@ -128,6 +129,53 @@ function productionScopeFixture(): array
     $factoryUser->update(['factory_id' => $factoryA->id]);
 
     return [$factoryA, $lineA1, $lineA2, $lineB, $lineUser, $factoryUser];
+}
+
+/**
+ * A material batch issued to two orders on different lines, each with one
+ * serial number, plus outbound transactions and requisitions.
+ *
+ * @return array{factoryA: Factory, orderA: ProductionOrder, orderB: ProductionOrder, snA: ProductSn, snB: ProductSn}
+ */
+function backwardTraceScopeFixture(): array
+{
+    [$factoryA, $lineA1, , $lineB, , $factoryUser] = productionScopeFixture();
+    $material = Material::factory()->create(['batch_managed' => true]);
+    $warehouseA = Warehouse::factory()->create(['factory_id' => $factoryA->id]);
+    $locationA = StorageLocation::factory()->create(['warehouse_id' => $warehouseA->id]);
+    $inventory = Inventory::factory()->create([
+        'material_id' => $material->id,
+        'location_id' => $locationA->id,
+        'batch_no' => 'LOT-SCOPE-001',
+    ]);
+    $orderA = createScopedOrder($lineA1, 'PO-A-TRACE', ProductionOrder::IN_PROGRESS);
+    $orderB = createScopedOrder($lineB, 'PO-B-TRACE', ProductionOrder::IN_PROGRESS);
+
+    foreach ([$orderA, $orderB] as $order) {
+        $requisition = MaterialRequisition::query()->create([
+            'code' => 'MR-'.str_replace('PO-', '', $order->code),
+            'production_order_id' => $order->id,
+            'status' => MaterialRequisition::ISSUED,
+            'created_by_id' => $factoryUser->id,
+        ]);
+        InventoryTransaction::query()->create([
+            'inventory_id' => $inventory->id,
+            'material_id' => $material->id,
+            'business_type' => InventoryTransaction::OUTBOUND,
+            'quantity' => -5,
+            'before_quantity' => 100,
+            'after_quantity' => 95,
+            'reference_no' => $requisition->code,
+            'created_by_id' => $factoryUser->id,
+        ]);
+    }
+
+    $batchA = ProductionBatch::factory()->create(['production_order_id' => $orderA->id, 'code' => 'PB-A-TRACE']);
+    $batchB = ProductionBatch::factory()->create(['production_order_id' => $orderB->id, 'code' => 'PB-B-TRACE']);
+    $snA = ProductSn::factory()->create(['sn' => 'SN-A-TRACE', 'production_order_id' => $orderA->id, 'production_batch_id' => $batchA->id]);
+    $snB = ProductSn::factory()->create(['sn' => 'SN-B-TRACE', 'production_order_id' => $orderB->id, 'production_batch_id' => $batchB->id]);
+
+    return compact('factoryA', 'orderA', 'orderB', 'snA', 'snB');
 }
 
 it('returns the line scope with the bound production lines', function () {
@@ -1041,4 +1089,145 @@ it('narrows every dashboard statistic to the scoped lines', function () {
     // Lines are ordered by code in the response; scope is what must hold.
     expect($lineIds)->toBe(collect([$lineA1->id, $lineA2->id])->sort()->values()->all())
         ->and($lineIds)->not->toContain($lineB->id);
+});
+
+it('returns 404 when a forward trace hits a serial number outside the scope', function () {
+    [, $lineA1, , $lineB] = productionScopeFixture();
+    $snA = ProductSn::factory()->create(['production_order_id' => createScopedOrder($lineA1, 'PO-A-SN', ProductionOrder::IN_PROGRESS)->id]);
+    $snB = ProductSn::factory()->create(['production_order_id' => createScopedOrder($lineB, 'PO-B-SN', ProductionOrder::IN_PROGRESS)->id]);
+    $lineUser = userWithPermissions(['data.scope.line', 'traceability.forward.show'], 'scope_forward_line');
+    $lineUser->update(['factory_id' => Factory::query()->orderBy('id')->firstOrFail()->id]);
+    $lineUser->productionLines()->sync([$lineA1->id]);
+
+    bearer($lineUser)->getJson("/api/v1/traceability/sn/{$snA->sn}")
+        ->assertOk()
+        ->assertJsonPath('data.sn.sn', $snA->sn);
+
+    // Out-of-scope SN reads as missing, not forbidden.
+    bearer($lineUser)->getJson("/api/v1/traceability/sn/{$snB->sn}")
+        ->assertNotFound()
+        ->assertJsonPath('code', 404)
+        ->assertJsonPath('message', 'SN 不存在');
+
+    bearer(superAdmin())->getJson("/api/v1/traceability/sn/{$snB->sn}")
+        ->assertOk()
+        ->assertJsonPath('data.sn.sn', $snB->sn);
+});
+
+it('filters backward trace results by the order line', function () {
+    ['factoryA' => $factoryA, 'orderA' => $orderA, 'orderB' => $orderB, 'snA' => $snA, 'snB' => $snB] = backwardTraceScopeFixture();
+    $lineUser = userWithPermissions(['data.scope.line', 'traceability.backward.show'], 'scope_trace_line');
+    $lineUser->update(['factory_id' => $factoryA->id]);
+    $lineUser->productionLines()->sync([$orderA->production_line_id]);
+
+    // The out-of-scope order, batch and SN are absent; only the in-scope row stays.
+    bearer($lineUser)->getJson('/api/v1/traceability/material/LOT-SCOPE-001')
+        ->assertOk()
+        ->assertJsonPath('data.summary.production_order_count', 1)
+        ->assertJsonPath('data.summary.production_batch_count', 1)
+        ->assertJsonPath('data.summary.sn_count', 1)
+        ->assertJsonPath('data.production_batches.0.production_order.code', $orderA->code)
+        ->assertJsonPath('data.production_batches.0.product_sns.0.sn', $snA->sn)
+        ->assertJsonMissing(['code' => $orderB->code])
+        ->assertJsonMissing(['sn' => $snB->sn]);
+});
+
+it('returns 404 when the batch movements sit in another factory', function () {
+    [$factoryA, $lineA1, , , , $factoryUser] = productionScopeFixture();
+    $actor = userWithPermissions(['data.scope.factory', 'traceability.backward.show'], 'scope_trace_factory');
+    $actor->update(['factory_id' => $factoryA->id]);
+
+    $material = Material::factory()->create(['batch_managed' => true]);
+    $order = createScopedOrder($lineA1, 'PO-A-TRACE-OUT', ProductionOrder::IN_PROGRESS);
+    $requisition = MaterialRequisition::query()->create([
+        'code' => 'MR-A-TRACE-OUT',
+        'production_order_id' => $order->id,
+        'status' => MaterialRequisition::ISSUED,
+        'created_by_id' => $factoryUser->id,
+    ]);
+    $warehouseB = Warehouse::factory()->create(['factory_id' => Factory::factory()->create()->id]);
+    $locationB = StorageLocation::factory()->create(['warehouse_id' => $warehouseB->id]);
+    $inventoryB = Inventory::factory()->create([
+        'material_id' => $material->id,
+        'location_id' => $locationB->id,
+        'batch_no' => 'LOT-SCOPE-FACTORY',
+    ]);
+    $transaction = InventoryTransaction::query()->create([
+        'inventory_id' => $inventoryB->id,
+        'material_id' => $material->id,
+        'business_type' => InventoryTransaction::OUTBOUND,
+        'quantity' => -5,
+        'before_quantity' => 100,
+        'after_quantity' => 95,
+        'reference_no' => $requisition->code,
+        'created_by_id' => $factoryUser->id,
+    ]);
+
+    // The order and requisition are in range, only the warehouse is not.
+    bearer($actor)->getJson('/api/v1/traceability/material/LOT-SCOPE-FACTORY')
+        ->assertNotFound()
+        ->assertJsonPath('message', '物料批次不存在');
+
+    $warehouseA = Warehouse::factory()->create(['factory_id' => $factoryA->id]);
+    $locationA = StorageLocation::factory()->create(['warehouse_id' => $warehouseA->id]);
+    $inventoryA = Inventory::factory()->create([
+        'material_id' => $material->id,
+        'location_id' => $locationA->id,
+        'batch_no' => 'LOT-SCOPE-FACTORY',
+    ]);
+    $transaction->update(['inventory_id' => $inventoryA->id]);
+    $batch = ProductionBatch::factory()->create(['production_order_id' => $order->id]);
+    ProductSn::factory()->create(['production_order_id' => $order->id, 'production_batch_id' => $batch->id]);
+
+    bearer($actor)->getJson('/api/v1/traceability/material/LOT-SCOPE-FACTORY')
+        ->assertOk()
+        ->assertJsonPath('data.summary.sn_count', 1);
+});
+
+it('hides serial numbers whose order is outside the scope', function () {
+    [$factoryA, $lineA1, , $lineB] = productionScopeFixture();
+    $lineUser = userWithPermissions(['data.scope.line', 'traceability.backward.show'], 'scope_trace_sn');
+    $lineUser->update(['factory_id' => $factoryA->id]);
+    $lineUser->productionLines()->sync([$lineA1->id]);
+
+    $material = Material::factory()->create(['batch_managed' => true]);
+    $order = createScopedOrder($lineA1, 'PO-A-TRACE-SN', ProductionOrder::IN_PROGRESS);
+    $requisition = MaterialRequisition::query()->create([
+        'code' => 'MR-A-TRACE-SN',
+        'production_order_id' => $order->id,
+        'status' => MaterialRequisition::ISSUED,
+        'created_by_id' => $lineUser->id,
+    ]);
+    $warehouse = Warehouse::factory()->create(['factory_id' => $factoryA->id]);
+    $location = StorageLocation::factory()->create(['warehouse_id' => $warehouse->id]);
+    $inventory = Inventory::factory()->create([
+        'material_id' => $material->id,
+        'location_id' => $location->id,
+        'batch_no' => 'LOT-SCOPE-SN',
+    ]);
+    InventoryTransaction::query()->create([
+        'inventory_id' => $inventory->id,
+        'material_id' => $material->id,
+        'business_type' => InventoryTransaction::OUTBOUND,
+        'quantity' => -5,
+        'before_quantity' => 100,
+        'after_quantity' => 95,
+        'reference_no' => $requisition->code,
+        'created_by_id' => $lineUser->id,
+    ]);
+    $batch = ProductionBatch::factory()->create(['production_order_id' => $order->id]);
+    $outOfScopeOrder = createScopedOrder($lineB, 'PO-B-TRACE-SN', ProductionOrder::IN_PROGRESS);
+    $sn = ProductSn::factory()->create([
+        'production_order_id' => $outOfScopeOrder->id,
+        'production_batch_id' => $batch->id,
+    ]);
+
+    // The batch belongs to an in-scope order; the SN row does not.
+    bearer($lineUser)->getJson('/api/v1/traceability/material/LOT-SCOPE-SN')
+        ->assertNotFound();
+
+    bearer(superAdmin())->getJson('/api/v1/traceability/material/LOT-SCOPE-SN')
+        ->assertOk()
+        ->assertJsonPath('data.summary.sn_count', 1)
+        ->assertJsonPath('data.production_batches.0.product_sns.0.sn', $sn->sn);
 });
