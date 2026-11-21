@@ -33,38 +33,28 @@ trait ScopedThroughTask
      */
     public function scopeInDataScope(Builder $query, DataScope $scope): void
     {
-        if ($scope->isAll()) {
-            return;
-        }
-
-        $lineIds = DataScopeQuery::scopedProductionLineIds($scope);
-
-        if ($lineIds === []) {
-            $query->whereRaw('1 = 0');
-
-            return;
-        }
-
-        $query->whereIn(
-            $this->getTable().'.production_task_id',
-            ProductionTask::query()
-                ->where(function (Builder $task) use ($lineIds): void {
-                    $task->whereIn('mes_production_tasks.production_line_id', $lineIds)
-                        ->orWhere(function (Builder $fallback) use ($lineIds): void {
-                            // Once a task has its own line, that line wins over
-                            // the order's: an assignment to an out-of-scope
-                            // line must hide the row, not leak it.
-                            $fallback->whereNull('mes_production_tasks.production_line_id')
-                                ->whereIn(
-                                    'mes_production_tasks.production_order_id',
-                                    ProductionOrder::query()
-                                        ->whereIn('production_line_id', $lineIds)
-                                        ->select('id'),
-                                );
-                        });
-                })
-                ->select('id'),
-        );
+        DataScopeQuery::applyLineScope($query, $scope, function (array $lineIds) use ($query): void {
+            $query->whereIn(
+                $this->getTable().'.production_task_id',
+                ProductionTask::query()
+                    ->where(function (Builder $task) use ($lineIds): void {
+                        $task->whereIn('mes_production_tasks.production_line_id', $lineIds)
+                            ->orWhere(function (Builder $fallback) use ($lineIds): void {
+                                // Once a task has its own line, that line wins over
+                                // the order's: an assignment to an out-of-scope
+                                // line must hide the row, not leak it.
+                                $fallback->whereNull('mes_production_tasks.production_line_id')
+                                    ->whereIn(
+                                        'mes_production_tasks.production_order_id',
+                                        ProductionOrder::query()
+                                            ->whereIn('production_line_id', $lineIds)
+                                            ->select('id'),
+                                    );
+                            });
+                    })
+                    ->select('id'),
+            );
+        });
     }
 
     public function dataScopeProductionLineId(): ?int

@@ -38,6 +38,47 @@ final class DataScopeQuery
     }
 
     /**
+     * Apply the common line-scope preamble and delegate the line-id filter.
+     *
+     * @param  Builder<*>  $query
+     * @param  callable(array<int, int>): void  $applyLineIds
+     */
+    public static function applyLineScope(Builder $query, DataScope $scope, callable $applyLineIds): void
+    {
+        if ($scope->isAll()) {
+            return;
+        }
+
+        $lineIds = self::scopedProductionLineIds($scope);
+
+        if ($lineIds === []) {
+            $query->whereRaw('1 = 0');
+
+            return;
+        }
+
+        $applyLineIds($lineIds);
+    }
+
+    /**
+     * Apply a factory filter through the given warehouse relation.
+     *
+     * @param  Builder<*>  $query
+     */
+    public static function applyFactoryScope(Builder $query, string $warehouseRelation, DataScope $scope): void
+    {
+        if ($scope->isAll()) {
+            return;
+        }
+
+        $query->whereHas($warehouseRelation, fn (Builder $warehouse) => $warehouse->when(
+            $scope->factoryId !== null,
+            fn (Builder $warehouse) => $warehouse->where('factory_id', $scope->factoryId),
+            fn (Builder $warehouse) => $warehouse->whereRaw('1 = 0'),
+        ));
+    }
+
+    /**
      * Factory-dimension rows (inventory) know no production line: a `line`
      * user sees the inventory of the factory their lines belong to.
      */

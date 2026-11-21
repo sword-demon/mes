@@ -3,6 +3,7 @@
 namespace App\Modules\Inventory\Model;
 
 use App\Core\DataScope\DataScope;
+use App\Core\DataScope\DataScopeQuery;
 use App\Core\DataScope\HasFactoryScope;
 use App\Modules\Material\Model\Material;
 use Database\Factories\InventoryFactory;
@@ -68,17 +69,7 @@ class Inventory extends Model implements HasFactoryScope
      */
     public function scopeInDataScope(Builder $query, DataScope $scope): void
     {
-        if ($scope->isAll()) {
-            return;
-        }
-
-        $query->whereHas('location.warehouse', function (Builder $warehouse) use ($scope): void {
-            $warehouse->when(
-                $scope->factoryId !== null,
-                fn (Builder $warehouse) => $warehouse->where('factory_id', $scope->factoryId),
-                fn (Builder $warehouse) => $warehouse->whereRaw('1 = 0'),
-            );
-        });
+        DataScopeQuery::applyFactoryScope($query, 'location.warehouse', $scope);
     }
 
     public function dataScopeFactoryId(): ?int

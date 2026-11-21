@@ -128,19 +128,9 @@ class Equipment extends Model implements HasDataScope
      */
     public function scopeInDataScope(Builder $query, DataScope $scope): void
     {
-        if ($scope->isAll()) {
-            return;
-        }
-
-        $lineIds = DataScopeQuery::scopedProductionLineIds($scope);
-
-        if ($lineIds === []) {
-            $query->whereRaw('1 = 0');
-
-            return;
-        }
-
-        $query->whereIn($this->getTable().'.production_line_id', $lineIds);
+        DataScopeQuery::applyLineScope($query, $scope, function (array $lineIds) use ($query): void {
+            $query->whereIn($this->getTable().'.production_line_id', $lineIds);
+        });
     }
 
     public function dataScopeProductionLineId(): ?int

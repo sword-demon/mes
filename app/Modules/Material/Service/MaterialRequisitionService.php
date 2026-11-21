@@ -62,7 +62,7 @@ class MaterialRequisitionService
                 after: ['所属订单' => $order->code, '物料明细' => $this->itemSummary($requisition)],
             ));
 
-            return $requisition->load('items');
+            return $requisition->load('items.material');
         });
     }
 
@@ -81,7 +81,7 @@ class MaterialRequisitionService
                 throw new ApiException('领料单已发料', 422);
             }
 
-            $items = $requisition->items()->lockForUpdate()->get()->keyBy('id');
+            $items = $requisition->items()->with('material')->lockForUpdate()->get()->keyBy('id');
 
             foreach ($data['items'] as $row) {
                 $item = $items->get($row['id']);
@@ -137,13 +137,9 @@ class MaterialRequisitionService
      */
     private function itemSummary(MaterialRequisition $requisition): string
     {
-        $summary = [];
-
-        foreach ($requisition->items as $item) {
-            $summary[] = $item->material->code.'×'.Quantity::toDecimal(Quantity::toMilli($item->requested_quantity));
-        }
-
-        return implode('、', $summary);
+        return MaterialSummary::format($requisition->items->map(
+            fn (MaterialRequisitionItem $item): array => [$item->material->code, $item->requested_quantity],
+        ));
     }
 
     /**
@@ -163,10 +159,10 @@ class MaterialRequisitionService
                 continue;
             }
 
-            $summary[] = $item->material->code.'×'.Quantity::toDecimal(Quantity::toMilli($row['quantity']));
+            $summary[] = [$item->material->code, $row['quantity']];
         }
 
-        return implode('、', $summary);
+        return MaterialSummary::format($summary);
     }
 
     /**
