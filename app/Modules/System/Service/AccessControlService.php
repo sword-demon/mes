@@ -52,7 +52,29 @@ class AccessControlService
 
     public function isSuperAdmin(User $user): bool
     {
+        if ($user->relationLoaded('activeRoles')) {
+            return $user->activeRoles->contains('code', Role::SUPER_ADMIN);
+        }
+
         return $user->activeRoles()->where('code', Role::SUPER_ADMIN)->exists();
+    }
+
+    /**
+     * Permission codes from the roles already loaded on the model.
+     *
+     * Callers resolving many users can eager load `activeRoles.permissions`
+     * and pass the result to `dataScope()` to avoid a query per user.
+     *
+     * @return array<int, string>
+     */
+    public function grantedCodes(User $user): array
+    {
+        return $user->activeRoles
+            ->flatMap(fn (Role $role) => $role->permissions)
+            ->pluck('code')
+            ->unique()
+            ->values()
+            ->all();
     }
 
     /**

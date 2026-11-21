@@ -138,6 +138,19 @@ class User extends Authenticatable implements HasFactoryScope
         );
     }
 
+    /**
+     * Users whose enabled roles grant the given permission code.
+     *
+     * @param  Builder<self>  $query
+     */
+    public function scopeWithPermission(Builder $query, string $code): void
+    {
+        $query->whereHas(
+            'activeRoles.permissions',
+            fn (Builder $permissions) => $permissions->where('code', $code),
+        );
+    }
+
     public function dataScopeFactoryId(): ?int
     {
         return $this->factory_id === null ? null : (int) $this->factory_id;
