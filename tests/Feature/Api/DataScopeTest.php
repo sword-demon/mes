@@ -91,6 +91,10 @@ function productionScopeFixture(): array
         'inventory.outbound',
         'inventory.adjust',
         'inventory.options',
+        'dashboard.overview',
+        'dashboard.trend',
+        'dashboard.quality',
+        'dashboard.equipment',
         'equipment.ledger.index',
         'equipment.ledger.create',
         'equipment.ledger.update',
@@ -116,6 +120,10 @@ function productionScopeFixture(): array
         'inventory.inbound',
         'inventory.outbound',
         'inventory.adjust',
+        'dashboard.overview',
+        'dashboard.trend',
+        'dashboard.quality',
+        'dashboard.equipment',
     ], 'scope_factory_admin');
     $factoryUser->update(['factory_id' => $factoryA->id]);
 
@@ -955,4 +963,82 @@ it('fails closed when the guard receives a model without a scope declaration', f
 
     expect(fn () => $guard->ensure($department))
         ->toThrow(ApiException::class, '该数据不在您的数据范围内');
+});
+
+it('narrows every dashboard statistic to the scoped lines', function () {
+    [, $lineA1, $lineA2, $lineB, $lineUser, $factoryUser] = productionScopeFixture();
+
+    $orderA = ProductionOrder::factory()->create([
+        'production_line_id' => $lineA1->id,
+        'planned_quantity' => 10,
+        'status' => ProductionOrder::RELEASED,
+    ]);
+    $reportA = ProductionReport::factory()->create([
+        'production_task_id' => ProductionTask::factory()->create([
+            'production_order_id' => $orderA->id,
+            'production_line_id' => $lineA1->id,
+        ])->id,
+        'quantity' => 6,
+        'qualified_quantity' => 5,
+        'defective_quantity' => 1,
+        'reported_at' => now()->startOfDay()->utc()->addHours(12),
+    ]);
+    Equipment::factory()->create(['production_line_id' => $lineA1->id, 'status' => Equipment::RUNNING]);
+
+    $orderB = ProductionOrder::factory()->create([
+        'production_line_id' => $lineB->id,
+        'planned_quantity' => 10,
+        'status' => ProductionOrder::RELEASED,
+    ]);
+    ProductionReport::factory()->create([
+        'production_task_id' => ProductionTask::factory()->create([
+            'production_order_id' => $orderB->id,
+            'production_line_id' => $lineB->id,
+        ])->id,
+        'quantity' => 99,
+        'qualified_quantity' => 99,
+        'defective_quantity' => 0,
+        'reported_at' => now()->startOfDay()->utc()->addHours(12),
+    ]);
+    Equipment::factory()->create(['production_line_id' => $lineB->id, 'status' => Equipment::RUNNING]);
+
+    $today = bearer($lineUser)->getJson('/api/v1/dashboard/today')->assertOk()->json('data');
+
+    expect($today['order_count'])->toBe(1)
+        ->and($today['produced_quantity'])->toBe('6.000')
+        ->and($today['running_equipment_count'])->toBe(1);
+
+    bearer($lineUser)->getJson('/api/v1/dashboard/production-trend')
+        ->assertOk()
+        ->assertJsonPath('data.items.6.quantity', '6.000');
+
+    bearer($lineUser)->getJson('/api/v1/dashboard/latest-orders')
+        ->assertOk()
+        ->assertJsonCount(1, 'data.items')
+        ->assertJsonPath('data.items.0.id', $orderA->id);
+
+    bearer($lineUser)->getJson('/api/v1/dashboard/latest-reports')
+        ->assertOk()
+        ->assertJsonCount(1, 'data.items')
+        ->assertJsonPath('data.items.0.id', $reportA->id);
+
+    bearer($lineUser)->getJson('/api/v1/dashboard/latest-exceptions')
+        ->assertOk()
+        ->assertJsonCount(0, 'data.items');
+
+    $statuses = collect(bearer($lineUser)->getJson('/api/v1/dashboard/equipment-status')
+        ->assertOk()
+        ->json('data.items'));
+
+    expect($statuses->where('status', 'running')->sole()['count'])->toBe(1)
+        ->and($statuses->sum('count'))->toBe(1);
+
+    // 工厂范围用户看本工厂两条产线（A1 与 A2 空产量），不含工厂 B。
+    $response = bearer($factoryUser)->getJson('/api/v1/dashboard/production-lines');
+    $lineIds = collect($response->assertOk()
+        ->json('data.items'))->pluck('production_line_id')->values()->sort()->values()->all();
+
+    // Lines are ordered by code in the response; scope is what must hold.
+    expect($lineIds)->toBe(collect([$lineA1->id, $lineA2->id])->sort()->values()->all())
+        ->and($lineIds)->not->toContain($lineB->id);
 });

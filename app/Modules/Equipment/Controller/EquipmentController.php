@@ -115,7 +115,7 @@ class EquipmentController extends Controller
         ];
 
         if ($canMonitor) {
-            $data['status_counts'] = $this->equipments->statusCounts();
+            $data['status_counts'] = $this->equipments->statusCounts($this->dataScope->scope());
         }
 
         return ApiResponse::success($data);

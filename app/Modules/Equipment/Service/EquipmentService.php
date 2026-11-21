@@ -2,6 +2,7 @@
 
 namespace App\Modules\Equipment\Service;
 
+use App\Core\DataScope\DataScope;
 use App\Core\DataScope\DataScopeGuard;
 use App\Core\Exceptions\ApiException;
 use App\Modules\Equipment\Model\Equipment;
@@ -25,12 +26,13 @@ class EquipmentService
      *
      * @return array<string, int>
      */
-    public function statusCounts(): array
+    public function statusCounts(?DataScope $scope = null): array
     {
         $counts = array_fill_keys(Equipment::STATUSES, 0);
 
         Equipment::query()
             ->enabled()
+            ->when($scope !== null && ! $scope->isAll(), fn ($query) => $query->inDataScope($scope))
             ->selectRaw('status, COUNT(*) as aggregate')
             ->groupBy('status')
             ->pluck('aggregate', 'status')
