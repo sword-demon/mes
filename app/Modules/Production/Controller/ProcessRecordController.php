@@ -2,6 +2,7 @@
 
 namespace App\Modules\Production\Controller;
 
+use App\Core\DataScope\DataScopeGuard;
 use App\Core\Services\EntityService;
 use App\Http\Controllers\Controller;
 use App\Http\Responses\ApiResponse;
@@ -27,6 +28,7 @@ class ProcessRecordController extends Controller
     public function __construct(
         private readonly ProcessRecordService $records,
         private readonly EntityService $entities,
+        private readonly DataScopeGuard $dataScope,
     ) {}
 
     public function index(Request $request): JsonResponse
@@ -37,6 +39,7 @@ class ProcessRecordController extends Controller
 
         $query = ProcessRecord::query()
             ->with(self::RELATIONS)
+            ->inDataScope($this->dataScope->scope())
             ->when(
                 is_string($orderId) && $orderId !== '',
                 fn (Builder $query) => $query->whereHas(

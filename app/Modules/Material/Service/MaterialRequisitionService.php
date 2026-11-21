@@ -2,6 +2,7 @@
 
 namespace App\Modules\Material\Service;
 
+use App\Core\DataScope\DataScopeGuard;
 use App\Core\Exceptions\ApiException;
 use App\Modules\Bom\Model\BomItem;
 use App\Modules\Inventory\Service\InventoryService;
@@ -9,11 +10,18 @@ use App\Modules\Material\Model\Material;
 use App\Modules\Material\Model\MaterialRequisition;
 use App\Modules\Material\Model\MaterialRequisitionItem;
 use App\Modules\Production\Model\ProductionOrder;
+use App\Modules\System\Service\OperationLogService;
+use App\Modules\System\ValueObject\OperationLogEntry;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 
 class MaterialRequisitionService
 {
-    public function __construct(private readonly InventoryService $inventory) {}
+    public function __construct(
+        private readonly InventoryService $inventory,
+        private readonly DataScopeGuard $dataScope,
+        private readonly OperationLogService $operationLogs,
+    ) {}
 
     /**
      * @param  array<string, mixed>  $data
@@ -22,6 +30,7 @@ class MaterialRequisitionService
     {
         return DB::transaction(function () use ($data, $userId): MaterialRequisition {
             $order = ProductionOrder::query()->whereKey($data['production_order_id'])->firstOrFail();
+            $this->dataScope->ensure($order);
             $this->ensureOrderCanRequisition($order);
 
             $requisition = MaterialRequisition::query()->create([
@@ -44,6 +53,15 @@ class MaterialRequisitionService
                 ]);
             }
 
+            $this->operationLogs->record(new OperationLogEntry(
+                action: 'material.requisition.create',
+                actionName: '创建领料单',
+                objectType: '领料单',
+                objectId: $requisition->id,
+                objectName: $requisition->code,
+                after: ['所属订单' => $order->code, '物料明细' => $this->itemSummary($requisition)],
+            ));
+
             return $requisition->load('items');
         });
     }
@@ -57,6 +75,7 @@ class MaterialRequisitionService
     {
         return DB::transaction(function () use ($requisition, $data, $userId): MaterialRequisition {
             $requisition = MaterialRequisition::query()->lockForUpdate()->findOrFail($requisition->id);
+            $this->dataScope->ensure($requisition);
 
             if ($requisition->status !== MaterialRequisition::PENDING) {
                 throw new ApiException('领料单已发料', 422);
@@ -96,8 +115,58 @@ class MaterialRequisitionService
             );
             $requisition->update(['status' => $complete ? MaterialRequisition::ISSUED : MaterialRequisition::PENDING]);
 
+            $this->operationLogs->record(new OperationLogEntry(
+                action: 'material.requisition.issue',
+                actionName: '领料发料',
+                objectType: '领料单',
+                objectId: $requisition->id,
+                objectName: $requisition->code,
+                after: [
+                    '发料明细' => $this->issueSummary($data['items'], $items),
+                    '发料状态' => $complete ? '全部发完' : '部分发料',
+                ],
+            ));
+
             return $this->markOverRequirement($requisition);
         });
+    }
+
+    /**
+     * Material codes with requested quantities, as one line per movement —
+     * a multi-row requisition logs once, not per row.
+     */
+    private function itemSummary(MaterialRequisition $requisition): string
+    {
+        $summary = [];
+
+        foreach ($requisition->items as $item) {
+            $summary[] = $item->material->code.'×'.Quantity::toDecimal(Quantity::toMilli($item->requested_quantity));
+        }
+
+        return implode('、', $summary);
+    }
+
+    /**
+     * One summary line per issued row; a multi-row issue logs once.
+     *
+     * @param  array<int, array<string, mixed>>  $rows
+     * @param  Collection<int, MaterialRequisitionItem>  $items
+     */
+    private function issueSummary(array $rows, Collection $items): string
+    {
+        $summary = [];
+
+        foreach ($rows as $row) {
+            $item = $items->get($row['id']);
+
+            if ($item === null) {
+                continue;
+            }
+
+            $summary[] = $item->material->code.'×'.Quantity::toDecimal(Quantity::toMilli($row['quantity']));
+        }
+
+        return implode('、', $summary);
     }
 
     /**

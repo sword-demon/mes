@@ -25,12 +25,25 @@ class UserResource extends JsonResource
             'email' => $this->email,
             'phone' => $this->phone,
             'department_id' => $this->department_id,
+            'factory_id' => $this->factory_id,
             'employee_id' => $this->employee_id,
             'position' => $this->position,
             'status' => $this->status,
             'email_verified_at' => $this->email_verified_at,
             'roles' => RoleResource::collection($this->whenLoaded('roles')),
             'department' => $this->whenLoaded('department'),
+            'factory' => $this->whenLoaded('organizationFactory', fn () => $this->organizationFactory === null ? null : [
+                'id' => $this->organizationFactory->id,
+                'code' => $this->organizationFactory->code,
+                'name' => $this->organizationFactory->name,
+            ]),
+            'production_lines' => $this->whenLoaded('productionLines', fn () => $this->productionLines
+                ->map(fn ($line): array => [
+                    'id' => $line->id,
+                    'code' => $line->code,
+                    'name' => $line->name,
+                ])
+                ->values()),
             'employee' => $this->whenLoaded('employee', fn () => $this->employee === null ? null : [
                 'id' => $this->employee->id,
                 'employee_no' => $this->employee->employee_no,

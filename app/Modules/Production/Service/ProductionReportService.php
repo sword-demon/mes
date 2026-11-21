@@ -2,6 +2,7 @@
 
 namespace App\Modules\Production\Service;
 
+use App\Core\DataScope\DataScopeGuard;
 use App\Core\Exceptions\ApiException;
 use App\Modules\Equipment\Service\EquipmentService;
 use App\Modules\Organization\Model\Employee;
@@ -18,6 +19,7 @@ class ProductionReportService
     public function __construct(
         private readonly EquipmentService $equipments,
         private readonly OperationLogService $operationLogs,
+        private readonly DataScopeGuard $dataScope,
     ) {}
 
     /**
@@ -35,6 +37,7 @@ class ProductionReportService
                 ->lockForUpdate()
                 ->whereKey($data['production_task_id'])
                 ->firstOrFail();
+            $this->dataScope->ensure($task);
             $order = ProductionOrder::query()
                 ->lockForUpdate()
                 ->whereKey($task->production_order_id)
@@ -107,7 +110,12 @@ class ProductionReportService
                 objectId: $report->id,
                 objectName: $report->code,
                 before: ['任务累计产量' => $producedBefore],
-                after: ['任务累计产量' => $task->produced_quantity],
+                after: [
+                    '任务累计产量' => $task->produced_quantity,
+                    '报工数量' => $report->quantity,
+                    '合格数量' => $report->qualified_quantity,
+                    '不良数量' => $report->defective_quantity,
+                ],
             ));
 
             return $report;
@@ -120,13 +128,14 @@ class ProductionReportService
      *
      * @throws ApiException
      */
-    public function reverse(ProductionReport $report): ProductionReport
+    public function reverse(ProductionReport $report, string $reason): ProductionReport
     {
-        return DB::transaction(function () use ($report): ProductionReport {
+        return DB::transaction(function () use ($report, $reason): ProductionReport {
             $locked = ProductionReport::query()
                 ->lockForUpdate()
                 ->whereKey($report->getKey())
                 ->firstOrFail();
+            $this->dataScope->ensure($locked);
 
             if ($locked->type === ProductionReport::REVERSED) {
                 throw new ApiException('报工已冲销，不能重复冲销', 422);
@@ -163,7 +172,11 @@ class ProductionReportService
                 objectId: $locked->id,
                 objectName: $locked->code,
                 before: ['报工状态' => $typeBefore, '任务累计产量' => $producedBefore],
-                after: ['报工状态' => $locked->typeLabel(), '任务累计产量' => $task->produced_quantity],
+                after: [
+                    '报工状态' => $locked->typeLabel(),
+                    '任务累计产量' => $task->produced_quantity,
+                    '冲销原因' => $reason,
+                ],
             ));
 
             return $locked;

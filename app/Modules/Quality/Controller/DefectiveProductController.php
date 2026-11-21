@@ -2,6 +2,7 @@
 
 namespace App\Modules\Quality\Controller;
 
+use App\Core\DataScope\DataScopeGuard;
 use App\Core\Services\EntityService;
 use App\Http\Controllers\Controller;
 use App\Http\Responses\ApiResponse;
@@ -25,11 +26,14 @@ class DefectiveProductController extends Controller
     public function __construct(
         private readonly EntityService $entities,
         private readonly DefectiveProductService $defects,
+        private readonly DataScopeGuard $dataScope,
     ) {}
 
     public function index(Request $request): JsonResponse
     {
-        $query = DefectiveProduct::query()->with(DefectiveProductService::RELATIONS);
+        $query = DefectiveProduct::query()
+            ->with(DefectiveProductService::RELATIONS)
+            ->inDataScope($this->dataScope->scope());
         $status = $request->query('status');
         $orderId = $request->query('production_order_id');
 

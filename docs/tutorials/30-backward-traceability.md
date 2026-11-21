@@ -25,6 +25,9 @@ traceability.backward.show
 5. 按订单聚合实际发料物料；
 6. 返回生产批次 → SN 的层级结果。
 
+每一层都按调用者的数据范围过滤：库存流水看仓库所属工厂，领料单与订单看产线，
+生产批次与 SN 只保留范围内订单的数据。
+
 关键点：
 
 ```text
@@ -35,14 +38,13 @@ traceability.backward.show
 
 ## 3. 空结果
 
-如果批次没有出库流水，返回空结果而不是 500：
+如果批次没有可见的出库流水，或流水关联的订单没有带 SN 的生产批次，
+返回 404，而不是带总数的空结构：
 
 ```json
 {
-  "batch_no": "B20261101",
-  "has_data": false,
-  "materials": [],
-  "production_batches": []
+  "code": 404,
+  "message": "物料批次不存在"
 }
 ```
 
@@ -64,7 +66,7 @@ php artisan test --compact tests/Feature/TraceabilitySeederTest.php
 验收：
 
 - 批次能反查到受影响订单和 SN；
-- 无关联时返回空结果；
+- 无关联时返回 404；
 - 物料用量来自出库流水；
 - 生产批次与 SN 层级正确；
 - 未登录/无权限返回 401/403。

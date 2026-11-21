@@ -2,6 +2,7 @@
 
 namespace App\Modules\Production\Service;
 
+use App\Core\DataScope\DataScopeGuard;
 use App\Core\Exceptions\ApiException;
 use App\Modules\Bom\Model\Bom;
 use App\Modules\Organization\Model\ProductionLine;
@@ -16,7 +17,10 @@ use Illuminate\Support\Facades\DB;
 
 class ProductionOrderService
 {
-    public function __construct(private readonly OperationLogService $operationLogs) {}
+    public function __construct(
+        private readonly OperationLogService $operationLogs,
+        private readonly DataScopeGuard $dataScope,
+    ) {}
 
     /**
      * Pinning the BOM and route inside the same transaction keeps an order
@@ -26,18 +30,30 @@ class ProductionOrderService
      */
     public function create(array $data): ProductionOrder
     {
+        $this->dataScope->ensureLine((int) $data['production_line_id']);
+
         return DB::transaction(function () use ($data): ProductionOrder {
             $product = $this->activeProduct((int) $data['product_id']);
             $bom = $this->usableBom((int) $data['bom_id'], $product);
             $route = $this->usableRoute((int) $data['route_id'], $product);
             $this->ensureActiveLine((int) $data['production_line_id']);
 
-            return ProductionOrder::query()->create([
+            $order = ProductionOrder::query()->create([
                 ...$data,
                 'product_version_id' => $bom->product_version_id,
                 'bom_version' => $bom->version,
                 'route_version' => $route->version,
             ]);
+
+            $this->operationLogs->record(new OperationLogEntry(
+                action: 'production.order.create',
+                actionName: '新增生产订单',
+                objectType: '生产订单',
+                objectId: $order->id,
+                objectName: $order->code,
+            ));
+
+            return $order;
         });
     }
 
@@ -56,6 +72,7 @@ class ProductionOrderService
                 ->lockForUpdate()
                 ->whereKey($order->getKey())
                 ->firstOrFail();
+            $this->dataScope->ensure($order);
             $order->ensureEditable();
 
             $effective = [
@@ -74,6 +91,7 @@ class ProductionOrderService
             if (array_key_exists('production_line_id', $data)
                 && (int) $data['production_line_id'] !== $order->production_line_id) {
                 $this->ensureActiveLine((int) $effective['production_line_id']);
+                $this->dataScope->ensureLine((int) $effective['production_line_id']);
             }
 
             $pinningChanged = collect(['product_id', 'bom_id', 'route_id'])
@@ -100,7 +118,20 @@ class ProductionOrderService
                 throw new ApiException('计划结束时间不能早于计划开始时间', 422);
             }
 
+            $order->load(['product', 'productionLine']);
+            $before = $this->snapshot($order);
             $order->update($data);
+            $order->refresh()->load(['product', 'productionLine']);
+
+            $this->operationLogs->record(new OperationLogEntry(
+                action: 'production.order.update',
+                actionName: '编辑生产订单',
+                objectType: '生产订单',
+                objectId: $order->id,
+                objectName: $order->code,
+                before: $before,
+                after: $this->snapshot($order),
+            ));
 
             return $order;
         });
@@ -116,6 +147,7 @@ class ProductionOrderService
                 ->lockForUpdate()
                 ->whereKey($order->getKey())
                 ->firstOrFail();
+            $this->dataScope->ensure($locked);
             $before = $locked->statusLabel();
             $locked->applyAction($action);
 
@@ -215,5 +247,23 @@ class ProductionOrderService
         if (! ProductionLine::query()->whereKey($lineId)->where('status', true)->exists()) {
             throw new ApiException('产线不存在或已停用，不能用于生产订单', 422);
         }
+    }
+
+    /**
+     * Human-readable labels for the audit diff; only the fields an edit may
+     * change are listed.
+     *
+     * @return array<string, mixed>
+     */
+    private function snapshot(ProductionOrder $order): array
+    {
+        return [
+            '产品' => $order->product?->name,
+            '产线' => $order->productionLine?->name,
+            '计划数量' => (string) $order->planned_quantity,
+            '计划开始' => $order->planned_start_at->format('Y-m-d H:i'),
+            '计划结束' => $order->planned_end_at?->format('Y-m-d H:i'),
+            '备注' => $order->remark,
+        ];
     }
 }

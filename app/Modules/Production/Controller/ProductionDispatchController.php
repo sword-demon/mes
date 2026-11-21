@@ -2,6 +2,7 @@
 
 namespace App\Modules\Production\Controller;
 
+use App\Core\DataScope\DataScopeGuard;
 use App\Core\Services\BusinessDay;
 use App\Core\Services\EntityService;
 use App\Http\Controllers\Controller;
@@ -30,6 +31,7 @@ class ProductionDispatchController extends Controller
     public function __construct(
         private readonly ProductionDispatchService $dispatches,
         private readonly EntityService $entities,
+        private readonly DataScopeGuard $dataScope,
     ) {}
 
     public function index(Request $request): JsonResponse
@@ -41,6 +43,7 @@ class ProductionDispatchController extends Controller
 
         $query = ProductionDispatch::query()
             ->with(self::RELATIONS)
+            ->inDataScope($this->dataScope->scope())
             ->when(
                 is_string($orderId) && $orderId !== '',
                 fn (Builder $query) => $query->whereHas(
@@ -92,6 +95,7 @@ class ProductionDispatchController extends Controller
 
         $query = ProductionDispatch::query()
             ->with(self::RELATIONS)
+            ->inDataScope($this->dataScope->scope())
             ->where('employee_id', $employeeId)
             ->whereHas(
                 'productionTask',

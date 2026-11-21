@@ -2,6 +2,8 @@
 
 namespace App\Modules\Production\Controller;
 
+use App\Core\DataScope\DataScopeGuard;
+use App\Core\Exceptions\ApiException;
 use App\Core\Services\EntityService;
 use App\Http\Controllers\Controller;
 use App\Http\Responses\ApiResponse;
@@ -38,6 +40,7 @@ class ProductSnController extends Controller
     public function __construct(
         private readonly ProductSnService $sns,
         private readonly EntityService $entities,
+        private readonly DataScopeGuard $dataScope,
     ) {}
 
     public function index(Request $request): JsonResponse
@@ -47,6 +50,7 @@ class ProductSnController extends Controller
 
         $query = ProductSn::query()
             ->with(self::RELATIONS)
+            ->inDataScope($this->dataScope->scope())
             ->when(
                 is_string($status) && $status !== '',
                 fn (Builder $query) => $query->where('status', $status),
@@ -122,10 +126,26 @@ class ProductSnController extends Controller
         ]);
     }
 
-    public function show(ProductSn $productSn): JsonResponse
+    /**
+     * A missing SN and an SN outside the caller's scope are indistinguishable
+     * here: both answer 404, so probing codes cannot discover other plants'
+     * units.
+     */
+    public function show(Request $request, string $productSn): JsonResponse
     {
+        // Route model binding keys by `sn`, so the lookup must too; whereKey
+        // would compare against the numeric id and always miss.
+        $sn = ProductSn::query()
+            ->inDataScope($this->dataScope->scope())
+            ->where('sn', $productSn)
+            ->first();
+
+        if ($sn === null) {
+            throw new ApiException('SN 不存在', 404, status: 404);
+        }
+
         return ApiResponse::success(
-            ProductSnResource::make($productSn->load(self::DETAIL_RELATIONS)),
+            ProductSnResource::make($sn->load(self::DETAIL_RELATIONS)),
         );
     }
 

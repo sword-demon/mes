@@ -2,6 +2,9 @@
 
 namespace App\Modules\Quality\Model;
 
+use App\Core\DataScope\DataScope;
+use App\Core\DataScope\DataScopeQuery;
+use App\Core\DataScope\HasDataScope;
 use App\Core\Models\Concerns\HasStatusLabels;
 use App\Modules\Process\Model\RouteOperation;
 use App\Modules\Production\Model\ProductionBatch;
@@ -11,6 +14,7 @@ use Database\Factories\DefectiveProductFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\Table;
 use Illuminate\Database\Eloquent\Attributes\UseFactory;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -48,7 +52,7 @@ use Illuminate\Support\Carbon;
 ])]
 #[Table('mes_defective_products')]
 #[UseFactory(DefectiveProductFactory::class)]
-class DefectiveProduct extends Model
+class DefectiveProduct extends Model implements HasDataScope
 {
     /** @use HasFactory<DefectiveProductFactory> */
     use HasFactory, HasStatusLabels;
@@ -72,6 +76,37 @@ class DefectiveProduct extends Model
     public function productionOrder(): BelongsTo
     {
         return $this->belongsTo(ProductionOrder::class, 'production_order_id');
+    }
+
+    /**
+     * A defect is registered against an order, so the order's line decides
+     * visibility.
+     *
+     * @param  Builder<self>  $query
+     */
+    public function scopeInDataScope(Builder $query, DataScope $scope): void
+    {
+        if ($scope->isAll()) {
+            return;
+        }
+
+        $lineIds = DataScopeQuery::scopedProductionLineIds($scope);
+
+        if ($lineIds === []) {
+            $query->whereRaw('1 = 0');
+
+            return;
+        }
+
+        $query->whereIn(
+            $this->getTable().'.production_order_id',
+            ProductionOrder::query()->whereIn('production_line_id', $lineIds)->select('id'),
+        );
+    }
+
+    public function dataScopeProductionLineId(): ?int
+    {
+        return $this->productionOrder?->dataScopeProductionLineId();
     }
 
     /** @return BelongsTo<RouteOperation, $this> */

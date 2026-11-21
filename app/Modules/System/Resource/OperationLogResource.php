@@ -27,6 +27,8 @@ class OperationLogResource extends JsonResource
             'object_name' => $this->object_name,
             'summary' => $this->summary,
             'changes' => $this->changes,
+            'source' => $this->source,
+            'trace_id' => $this->trace_id,
             'ip' => $this->ip,
             'created_at' => $this->created_at,
         ];

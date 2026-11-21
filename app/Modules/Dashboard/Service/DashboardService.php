@@ -2,6 +2,8 @@
 
 namespace App\Modules\Dashboard\Service;
 
+use App\Core\DataScope\DataScopeGuard;
+use App\Core\DataScope\DataScopeQuery;
 use App\Core\Services\BusinessDay;
 use App\Modules\Equipment\Model\Equipment;
 use App\Modules\Equipment\Model\EquipmentAlarm;
@@ -14,6 +16,7 @@ use App\Modules\Quality\Model\DefectiveProduct;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection as EloquentCollection;
+use Illuminate\Support\Facades\DB;
 
 class DashboardService
 {
@@ -21,7 +24,10 @@ class DashboardService
 
     private const int LATEST_LIMIT = 5;
 
-    public function __construct(private readonly EquipmentService $equipments) {}
+    public function __construct(
+        private readonly EquipmentService $equipments,
+        private readonly DataScopeGuard $dataScope,
+    ) {}
 
     /**
      * @return array<string, mixed>
@@ -32,8 +38,11 @@ class DashboardService
         $start = BusinessDay::startUtc($today);
         $end = BusinessDay::endUtc($today);
 
+        $scope = $this->dataScope->scope();
+
         $orders = ProductionOrder::query()
             ->countable()
+            ->inDataScope($scope)
             ->where('created_at', '>=', $start)
             ->where('created_at', '<', $end)
             ->selectRaw('COUNT(*) as order_count, COALESCE(SUM(planned_quantity), 0) as planned_quantity')
@@ -41,6 +50,7 @@ class DashboardService
 
         $reports = ProductionReport::query()
             ->effective()
+            ->inDataScope($scope)
             ->where('reported_at', '>=', $start)
             ->where('reported_at', '<', $end)
             ->selectRaw(
@@ -59,6 +69,7 @@ class DashboardService
             'defective_quantity' => $this->decimal($reports->getAttribute('defective_quantity')),
             'running_equipment_count' => Equipment::query()
                 ->enabled()
+                ->inDataScope($scope)
                 ->where('status', Equipment::RUNNING)
                 ->count(),
         ];
@@ -77,6 +88,7 @@ class DashboardService
         // shortcut: a bounded 7-day range is aggregated in PHP; move to a SQL rollup if daily volume grows.
         ProductionReport::query()
             ->effective()
+            ->inDataScope($this->dataScope->scope())
             ->where('reported_at', '>=', $start->utc())
             ->where('reported_at', '<', $end->addDay()->utc())
             ->get(['reported_at', 'quantity'])
@@ -102,10 +114,25 @@ class DashboardService
     {
         [$start, $end] = $this->recentDaysRange();
 
+        $scope = $this->dataScope->scope();
+        // `all` sees every line; scoped users only the lines inside their scope.
+        $visibleLineIds = DataScopeQuery::scopedProductionLineIds($scope);
+
         $totals = ProductionReport::query()
             ->join('mes_production_tasks as tasks', 'tasks.id', '=', 'mes_production_reports.production_task_id')
             ->join('mes_production_orders as orders', 'orders.id', '=', 'tasks.production_order_id')
             ->effective()
+            ->when(
+                ! $scope->isAll(),
+                fn ($query) => $query->when(
+                    $visibleLineIds !== [],
+                    fn ($inner) => $inner->whereIn(
+                        DB::raw('COALESCE(tasks.production_line_id, orders.production_line_id)'),
+                        $visibleLineIds,
+                    ),
+                    fn ($inner) => $inner->whereRaw('1 = 0'),
+                ),
+            )
             ->where('mes_production_reports.reported_at', '>=', $start->utc())
             ->where('mes_production_reports.reported_at', '<', $end->addDay()->utc())
             ->selectRaw(
@@ -117,6 +144,14 @@ class DashboardService
 
         return [
             'items' => ProductionLine::query()
+                ->when(
+                    ! $scope->isAll(),
+                    fn ($query) => $query->when(
+                        $visibleLineIds !== [],
+                        fn ($inner) => $inner->whereIn('id', $visibleLineIds),
+                        fn ($inner) => $inner->whereRaw('1 = 0'),
+                    ),
+                )
                 ->where('status', true)
                 ->orderBy('code')
                 ->get(['id', 'code', 'name'])
@@ -138,6 +173,7 @@ class DashboardService
     {
         $reports = ProductionReport::query()
             ->effective()
+            ->inDataScope($this->dataScope->scope())
             ->selectRaw(
                 'COALESCE(SUM(qualified_quantity), 0) as qualified_quantity, '
                 .'COALESCE(SUM(defective_quantity), 0) as defective_quantity',
@@ -150,6 +186,7 @@ class DashboardService
 
         // Quality registrations are a distribution on their own; they do not reconcile report quantities.
         $defectReasons = DefectiveProduct::query()
+            ->inDataScope($this->dataScope->scope())
             ->whereHas(
                 'productionOrder',
                 fn (Builder $order) => $order->countable(),
@@ -189,7 +226,7 @@ class DashboardService
      */
     public function equipmentStatus(): array
     {
-        $counts = $this->equipments->statusCounts();
+        $counts = $this->equipments->statusCounts($this->dataScope->scope());
 
         return [
             'items' => array_map(
@@ -210,6 +247,7 @@ class DashboardService
     {
         return ProductionOrder::query()
             ->countable()
+            ->inDataScope($this->dataScope->scope())
             ->with(['product:id,code,name', 'productionLine:id,code,name'])
             ->orderByDesc('created_at')
             ->orderByDesc('id')
@@ -224,6 +262,7 @@ class DashboardService
     {
         return ProductionReport::query()
             ->effective()
+            ->inDataScope($this->dataScope->scope())
             ->with([
                 'productionTask:id,code,production_order_id,product_id,planned_quantity,produced_quantity,status',
                 'productionTask.productionOrder:id,code',
@@ -242,6 +281,7 @@ class DashboardService
     public function latestExceptions(): EloquentCollection
     {
         return ProductionException::query()
+            ->inDataScope($this->dataScope->scope())
             ->with(['productionOrder:id,code,product_id', 'productionOrder.product:id,code,name'])
             ->orderByDesc('reported_at')
             ->orderByDesc('id')
@@ -255,6 +295,7 @@ class DashboardService
     public function latestAlarms(): EloquentCollection
     {
         return EquipmentAlarm::query()
+            ->inDataScope($this->dataScope->scope())
             ->with('equipment:id,code,name,type,status')
             ->orderByDesc('triggered_at')
             ->orderByDesc('id')

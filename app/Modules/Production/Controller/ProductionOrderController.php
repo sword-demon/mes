@@ -2,6 +2,7 @@
 
 namespace App\Modules\Production\Controller;
 
+use App\Core\DataScope\DataScopeGuard;
 use App\Core\Services\BusinessDay;
 use App\Core\Services\EntityService;
 use App\Http\Controllers\Controller;
@@ -28,6 +29,7 @@ class ProductionOrderController extends Controller
     public function __construct(
         private readonly ProductionOrderService $orders,
         private readonly EntityService $entities,
+        private readonly DataScopeGuard $dataScope,
     ) {}
 
     public function index(Request $request): JsonResponse
@@ -38,6 +40,7 @@ class ProductionOrderController extends Controller
 
         $query = ProductionOrder::query()
             ->with(self::RELATIONS)
+            ->inDataScope($this->dataScope->scope())
             ->when(
                 is_string($status) && $status !== '',
                 fn (Builder $query) => $query->where('status', $status),

@@ -2,11 +2,13 @@
 
 namespace App\Modules\Production\Model;
 
+use App\Core\DataScope\HasDataScope;
 use App\Core\Models\Concerns\HasStatusLabels;
 use App\Modules\Equipment\Model\Equipment;
 use App\Modules\Organization\Model\Employee;
 use App\Modules\Organization\Model\Team;
 use App\Modules\Process\Model\RouteOperation;
+use App\Modules\Production\Model\Concerns\ScopedThroughTask;
 use App\Modules\Quality\Model\InspectionTask;
 use Database\Factories\ProcessRecordFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
@@ -65,10 +67,10 @@ use Illuminate\Support\Carbon;
 ])]
 #[Table('mes_process_records')]
 #[UseFactory(ProcessRecordFactory::class)]
-class ProcessRecord extends Model
+class ProcessRecord extends Model implements HasDataScope
 {
     /** @use HasFactory<ProcessRecordFactory> */
-    use HasFactory, HasStatusLabels;
+    use HasFactory, HasStatusLabels, ScopedThroughTask;
 
     public const string PENDING = 'pending';
 

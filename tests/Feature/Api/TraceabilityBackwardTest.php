@@ -316,17 +316,48 @@ it('deduplicates summary counts when one batch number spans multiple materials',
         ->assertJsonCount(2, 'data.production_batches.0.product_sns');
 });
 
-it('returns 200 with an empty result when the material batch has no products', function () {
+it('returns 404 when the material batch has no products', function () {
     $actor = userWithPermissions(backwardTracePermissions());
 
     bearer($actor)
         ->getJson('/api/v1/traceability/material/UNKNOWN-BATCH')
-        ->assertOk()
-        ->assertJsonPath('data.batch_no', 'UNKNOWN-BATCH')
-        ->assertJsonPath('data.has_data', false)
-        ->assertJsonPath('data.message', '该物料批次未关联任何产品 SN')
-        ->assertJsonPath('data.summary.sn_count', 0)
-        ->assertJsonCount(0, 'data.production_batches');
+        ->assertNotFound()
+        ->assertJsonPath('code', 404)
+        ->assertJsonPath('message', '物料批次不存在');
+});
+
+it('returns 404 when the material batch links to no serial-number bearing batch', function () {
+    [, $location] = inventoryLocation('WH-NOSN', 'N-01');
+    $userId = User::factory()->create()->id;
+    $material = Material::factory()->create(['batch_managed' => true]);
+    $order = ProductionOrder::factory()->create(['status' => ProductionOrder::IN_PROGRESS]);
+    $requisition = MaterialRequisition::query()->create([
+        'code' => 'MR-NOSN-01',
+        'production_order_id' => $order->id,
+        'status' => MaterialRequisition::ISSUED,
+        'created_by_id' => $userId,
+    ]);
+    $inventory = Inventory::factory()->create([
+        'material_id' => $material->id,
+        'location_id' => $location->id,
+        'batch_no' => 'LOT-NO-SN',
+        'current_quantity' => 95,
+    ]);
+    InventoryTransaction::query()->create([
+        'inventory_id' => $inventory->id,
+        'material_id' => $material->id,
+        'business_type' => InventoryTransaction::OUTBOUND,
+        'quantity' => -5,
+        'before_quantity' => 100,
+        'after_quantity' => 95,
+        'reference_no' => $requisition->code,
+        'created_by_id' => $userId,
+    ]);
+
+    bearer(userWithPermissions(backwardTracePermissions()))
+        ->getJson('/api/v1/traceability/material/LOT-NO-SN')
+        ->assertNotFound()
+        ->assertJsonPath('message', '物料批次不存在');
 });
 
 it('rejects a material batch number longer than the inventory column', function () {

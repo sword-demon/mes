@@ -519,8 +519,8 @@ export function createReport(payload: ProductionReportPayload) {
     return api.post<ProductionReport>('/production/reports', payload);
 }
 
-export function reverseReport(id: number) {
-    return api.post<ProductionReport>(`/production/reports/${id}/reverse`);
+export function reverseReport(id: number, reason: string) {
+    return api.post<ProductionReport>(`/production/reports/${id}/reverse`, { reason });
 }
 
 export function getReportOptions() {

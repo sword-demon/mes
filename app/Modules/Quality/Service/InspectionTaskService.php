@@ -2,6 +2,7 @@
 
 namespace App\Modules\Quality\Service;
 
+use App\Core\DataScope\DataScopeGuard;
 use App\Core\Exceptions\ApiException;
 use App\Modules\Process\Model\RouteOperation;
 use App\Modules\Production\Model\ProcessRecord;
@@ -11,6 +12,8 @@ use App\Modules\Quality\Model\InspectionImage;
 use App\Modules\Quality\Model\InspectionItem;
 use App\Modules\Quality\Model\InspectionTask;
 use App\Modules\System\Model\User;
+use App\Modules\System\Service\OperationLogService;
+use App\Modules\System\ValueObject\OperationLogEntry;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
@@ -19,7 +22,11 @@ use Throwable;
 
 class InspectionTaskService
 {
-    public function __construct(private readonly ProcessRecordService $processRecords) {}
+    public function __construct(
+        private readonly ProcessRecordService $processRecords,
+        private readonly DataScopeGuard $dataScope,
+        private readonly OperationLogService $operationLogs,
+    ) {}
 
     /**
      * @param  array<string, mixed>  $data
@@ -31,6 +38,7 @@ class InspectionTaskService
         return DB::transaction(function () use ($data): InspectionTask {
             $type = (string) $data['inspection_type'];
             $order = ProductionOrder::query()->findOrFail((int) $data['production_order_id']);
+            $this->dataScope->ensure($order);
             $record = null;
             $operation = null;
 
@@ -104,6 +112,15 @@ class InspectionTaskService
             ]);
             $task->requiredItems()->sync($requiredItems->modelKeys());
 
+            $this->operationLogs->record(new OperationLogEntry(
+                action: 'quality.inspection.create',
+                actionName: '新建检验任务',
+                objectType: '检验任务',
+                objectId: $task->id,
+                objectName: $this->taskLabel($task),
+                after: ['检验类型' => InspectionTask::TYPE_LABELS[$type] ?? $type],
+            ));
+
             return $task;
         });
     }
@@ -120,6 +137,7 @@ class InspectionTaskService
     {
         return DB::transaction(function () use ($task, $data, $inspector): InspectionTask {
             $locked = InspectionTask::query()->lockForUpdate()->whereKey($task->getKey())->firstOrFail();
+            $this->dataScope->ensure($locked);
 
             if ($locked->result !== null) {
                 throw new ApiException('检验任务已判定，不能重复提交', 422);
@@ -225,8 +243,33 @@ class InspectionTaskService
                 );
             }
 
+            $this->operationLogs->record(new OperationLogEntry(
+                action: 'quality.inspection.record',
+                actionName: '录入检验结果',
+                objectType: '检验任务',
+                objectId: $locked->id,
+                objectName: $this->taskLabel($locked),
+                after: [
+                    '检验结果' => $allPassed ? '合格' : '不合格',
+                    '不合格项数量' => count($failures),
+                    '检验轮次' => $locked->inspection_cycle,
+                ],
+            ));
+
             return $locked->load(self::RELATIONS);
         });
+    }
+
+    /**
+     * Executions have no own code; tasks are identified by order and type.
+     */
+    private function taskLabel(InspectionTask $task): string
+    {
+        $orderCode = $task->productionOrder?->code;
+
+        return ($orderCode === null ? '' : $orderCode.' ')
+            .($task->inspection_type === InspectionTask::IPQC ? 'IPQC' : 'OQC')
+            .'#'.$task->id;
     }
 
     /**
@@ -235,24 +278,41 @@ class InspectionTaskService
      */
     public function addImages(InspectionTask $task, array $files): Collection
     {
-        return collect($files)->map(function (UploadedFile $file) use ($task): InspectionImage {
-            $path = $file->store("inspection-images/{$task->id}", 'public');
+        $this->dataScope->ensure($task);
 
-            if ($path === false) {
-                throw new ApiException('检验图片保存失败', 500);
-            }
+        $images = DB::transaction(function () use ($task, $files): Collection {
+            $created = collect($files)->map(function (UploadedFile $file) use ($task): InspectionImage {
+                $path = $file->store("inspection-images/{$task->id}", 'public');
 
-            try {
-                return $task->images()->create([
-                    'path' => $path,
-                    'original_name' => $file->getClientOriginalName(),
-                ]);
-            } catch (Throwable $exception) {
-                Storage::disk('public')->delete($path);
+                if ($path === false) {
+                    throw new ApiException('检验图片保存失败', 500);
+                }
 
-                throw $exception;
-            }
+                try {
+                    return $task->images()->create([
+                        'path' => $path,
+                        'original_name' => $file->getClientOriginalName(),
+                    ]);
+                } catch (Throwable $exception) {
+                    Storage::disk('public')->delete($path);
+
+                    throw $exception;
+                }
+            });
+
+            $this->operationLogs->record(new OperationLogEntry(
+                action: 'quality.inspection.add-images',
+                actionName: '上传检验图片',
+                objectType: '检验任务',
+                objectId: $task->id,
+                objectName: $this->taskLabel($task),
+                after: ['图片数量' => $created->count()],
+            ));
+
+            return $created;
         });
+
+        return $images;
     }
 
     public const array RELATIONS = [

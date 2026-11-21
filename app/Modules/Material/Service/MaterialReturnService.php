@@ -2,17 +2,25 @@
 
 namespace App\Modules\Material\Service;
 
+use App\Core\DataScope\DataScopeGuard;
 use App\Core\Exceptions\ApiException;
 use App\Modules\Inventory\Service\InventoryService;
 use App\Modules\Material\Model\MaterialRequisition;
 use App\Modules\Material\Model\MaterialRequisitionItem;
 use App\Modules\Material\Model\MaterialReturn;
 use App\Modules\Material\Model\MaterialReturnItem;
+use App\Modules\System\Service\OperationLogService;
+use App\Modules\System\ValueObject\OperationLogEntry;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 
 class MaterialReturnService
 {
-    public function __construct(private readonly InventoryService $inventory) {}
+    public function __construct(
+        private readonly InventoryService $inventory,
+        private readonly DataScopeGuard $dataScope,
+        private readonly OperationLogService $operationLogs,
+    ) {}
 
     /**
      * @return array<int, array<string, mixed>>
@@ -58,6 +66,7 @@ class MaterialReturnService
                 ->lockForUpdate()
                 ->whereKey($data['requisition_id'])
                 ->firstOrFail();
+            $this->dataScope->ensure($requisition);
             $items = $requisition->items()->lockForUpdate()->get()->keyBy('id');
             $returned = $this->returnedByItem($items->keys()->all());
 
@@ -90,6 +99,18 @@ class MaterialReturnService
                 ]);
             }
 
+            $this->operationLogs->record(new OperationLogEntry(
+                action: 'material.return.create',
+                actionName: '创建退料单',
+                objectType: '退料单',
+                objectId: $return->id,
+                objectName: $return->code,
+                after: [
+                    '关联领料单' => $requisition->code,
+                    '物料明细' => $this->createSummary($data['items'], $items),
+                ],
+            ));
+
             return $this->loadReturn($return);
         });
     }
@@ -103,12 +124,13 @@ class MaterialReturnService
     {
         return DB::transaction(function () use ($materialReturn, $data, $userId): MaterialReturn {
             $materialReturn = MaterialReturn::query()->lockForUpdate()->findOrFail($materialReturn->id);
+            $this->dataScope->ensure($materialReturn);
 
             if ($materialReturn->status !== MaterialReturn::PENDING) {
                 throw new ApiException('退料单已审核', 422);
             }
 
-            $items = $materialReturn->items()->with('requisitionItem')->lockForUpdate()->get()->keyBy('id');
+            $items = $materialReturn->items()->with('requisitionItem.material')->lockForUpdate()->get()->keyBy('id');
             $requisitionItems = MaterialRequisitionItem::query()
                 ->whereIn('id', $items->pluck('requisition_item_id'))
                 ->lockForUpdate()
@@ -153,6 +175,18 @@ class MaterialReturnService
                 'approved_at' => now(),
             ]);
 
+            $this->operationLogs->record(new OperationLogEntry(
+                action: 'material.return.approve',
+                actionName: '审核退料',
+                objectType: '退料单',
+                objectId: $materialReturn->id,
+                objectName: $materialReturn->code,
+                after: [
+                    '审核状态' => '已审核',
+                    '物料明细' => $this->approveSummary($data['items'], $items),
+                ],
+            ));
+
             return $this->loadReturn($materialReturn);
         });
     }
@@ -164,6 +198,7 @@ class MaterialReturnService
     {
         return DB::transaction(function () use ($materialReturn, $userId): MaterialReturn {
             $materialReturn = MaterialReturn::query()->lockForUpdate()->findOrFail($materialReturn->id);
+            $this->dataScope->ensure($materialReturn);
 
             if ($materialReturn->status !== MaterialReturn::PENDING) {
                 throw new ApiException('退料单不是待审核状态，不能撤销', 422);
@@ -174,6 +209,16 @@ class MaterialReturnService
             }
 
             $materialReturn->update(['status' => MaterialReturn::CANCELLED]);
+
+            $this->operationLogs->record(new OperationLogEntry(
+                action: 'material.return.cancel',
+                actionName: '撤销退料',
+                objectType: '退料单',
+                objectId: $materialReturn->id,
+                objectName: $materialReturn->code,
+                before: ['审核状态' => '待审核'],
+                after: ['审核状态' => '已撤销'],
+            ));
 
             return $this->loadReturn($materialReturn);
         });
@@ -207,6 +252,51 @@ class MaterialReturnService
         }
 
         return $totals;
+    }
+
+    /**
+     * One summary line per row; a multi-row return logs once.
+     *
+     * @param  array<int, array<string, mixed>>  $rows
+     * @param  Collection<int, MaterialRequisitionItem>  $requisitionItems
+     */
+    private function createSummary(array $rows, Collection $requisitionItems): string
+    {
+        $summary = [];
+
+        foreach ($rows as $row) {
+            $item = $requisitionItems->get($row['requisition_item_id']);
+
+            $summary[] = ($item !== null ? $item->material->code : '').
+                '×'.Quantity::toDecimal(Quantity::toMilli($row['quantity']));
+        }
+
+        return implode('、', $summary);
+    }
+
+    /**
+     * @param  array<int, array<string, mixed>>  $rows
+     * @param  Collection<int, MaterialReturnItem>  $returnItems
+     */
+    private function approveSummary(array $rows, Collection $returnItems): string
+    {
+        $summary = [];
+
+        foreach ($rows as $row) {
+            $item = $returnItems->get($row['id']);
+
+            if ($item === null) {
+                continue;
+            }
+
+            // The return item carries the quantity; the request rows only
+            // address the return location. requisitionItem is non-nullable,
+            // so the material always resolves.
+            $summary[] = $item->requisitionItem->material->code.
+                '×'.Quantity::toDecimal(Quantity::toMilli($item->quantity));
+        }
+
+        return implode('、', $summary);
     }
 
     private function loadReturn(MaterialReturn $materialReturn): MaterialReturn

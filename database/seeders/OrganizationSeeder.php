@@ -133,15 +133,31 @@ class OrganizationSeeder extends Seeder
         ];
         $employees = Employee::query()->whereIn('employee_no', array_values($links))->get()->keyBy('employee_no');
 
+        // Existing demo accounts default to the demo factory; only accounts
+        // linked to an employee get production lines, derived from that
+        // employee's workshop.
+        User::query()->whereNull('factory_id')->update(['factory_id' => $factory->id]);
+
         foreach ($links as $email => $employeeNo) {
             $employee = $employees->get($employeeNo);
+            $user = User::query()->where('email', $email)->first();
 
-            if ($employee !== null) {
-                User::query()->where('email', $email)->update([
-                    'employee_id' => $employee->id,
-                    'name' => $employee->name,
-                ]);
+            if ($employee === null || $user === null) {
+                continue;
             }
+
+            $user->update([
+                'employee_id' => $employee->id,
+                'name' => $employee->name,
+                'factory_id' => $factory->id,
+            ]);
+
+            $user->productionLines()->sync(
+                ProductionLine::query()
+                    ->where('workshop_id', $employee->team?->workshop_id)
+                    ->pluck('id')
+                    ->all(),
+            );
         }
     }
 }

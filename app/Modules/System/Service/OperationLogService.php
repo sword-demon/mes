@@ -2,6 +2,7 @@
 
 namespace App\Modules\System\Service;
 
+use App\Core\Audit\AuditContext;
 use App\Modules\System\Model\OperationLog;
 use App\Modules\System\Model\User;
 use App\Modules\System\ValueObject\OperationLogEntry;
@@ -10,17 +11,24 @@ use Illuminate\Support\Str;
 
 class OperationLogService
 {
-    public function __construct(private readonly Request $request) {}
+    public function __construct(
+        private readonly Request $request,
+        private readonly AuditContext $context,
+    ) {}
 
     /**
      * Record one key write with its actor, target and before/after snapshot.
      *
      * Snapshot keys are human-readable labels; the service keeps only the
      * fields whose values changed and builds the summary from them.
+     *
+     * An explicit actor or ip always wins; otherwise the audit context is
+     * consulted before the HTTP request, so queue workers can attribute the
+     * write to the person who triggered it.
      */
     public function record(OperationLogEntry $entry, ?User $actor = null, ?string $ip = null): OperationLog
     {
-        $actor ??= $this->request->user();
+        $actor ??= $this->context->actor() ?? $this->request->user();
         $actor = $actor instanceof User ? $actor : null;
         $changes = $this->changes($entry->before, $entry->after);
         $objectName = Str::substr($entry->objectName, 0, 255);
@@ -35,7 +43,9 @@ class OperationLogService
             'object_name' => $objectName,
             'summary' => $this->summary($entry->actionName, $entry->objectType, $objectName, $changes),
             'changes' => $changes === [] ? null : $changes,
-            'ip' => $ip ?? (string) $this->request->ip(),
+            'source' => $this->context->source(),
+            'trace_id' => $this->context->traceId(),
+            'ip' => $ip ?? $this->context->ip() ?? (string) $this->request->ip(),
         ]);
     }
 

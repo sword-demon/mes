@@ -2,6 +2,7 @@
 
 namespace App\Modules\Equipment\Controller;
 
+use App\Core\DataScope\DataScopeGuard;
 use App\Core\Services\BusinessDay;
 use App\Http\Controllers\Controller;
 use App\Http\Responses\ApiResponse;
@@ -18,6 +19,7 @@ class EquipmentAlarmController extends Controller
 {
     public function __construct(
         private readonly EquipmentAlarmService $alarms,
+        private readonly DataScopeGuard $dataScope,
     ) {}
 
     public function index(Request $request): JsonResponse
@@ -33,6 +35,7 @@ class EquipmentAlarmController extends Controller
 
         $query = EquipmentAlarm::query()
             ->with(EquipmentAlarm::RELATIONS)
+            ->inDataScope($this->dataScope->scope())
             ->when(
                 $data['equipment_id'] ?? null,
                 fn ($query, int $equipmentId) => $query->where('equipment_id', $equipmentId),

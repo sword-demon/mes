@@ -2,10 +2,14 @@
 
 namespace App\Modules\Equipment\Model;
 
+use App\Core\DataScope\DataScope;
+use App\Core\DataScope\DataScopeQuery;
+use App\Core\DataScope\HasDataScope;
 use Database\Factories\EquipmentDataFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\Table;
 use Illuminate\Database\Eloquent\Attributes\UseFactory;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -29,7 +33,7 @@ use Illuminate\Support\Carbon;
 #[Fillable(['equipment_id', 'message_type', 'recorded_at', 'status', 'temperature', 'speed', 'pressure', 'output', 'runtime_seconds', 'alarm'])]
 #[Table('mes_equipment_data', dateFormat: 'Y-m-d H:i:s.u')]
 #[UseFactory(EquipmentDataFactory::class)]
-class EquipmentData extends Model
+class EquipmentData extends Model implements HasDataScope
 {
     /** @use HasFactory<EquipmentDataFactory> */
     use HasFactory;
@@ -54,6 +58,39 @@ class EquipmentData extends Model
     public function equipment(): BelongsTo
     {
         return $this->belongsTo(Equipment::class, 'equipment_id');
+    }
+
+    /**
+     * A data point inherits the line of the equipment it belongs to. The
+     * device-history SQL is hand-written, so this scope is not used there —
+     * the equipment-level guard covers access; keep the scope for uniformity
+     * with alarm rows.
+     *
+     * @param  Builder<self>  $query
+     */
+    public function scopeInDataScope(Builder $query, DataScope $scope): void
+    {
+        if ($scope->isAll()) {
+            return;
+        }
+
+        $lineIds = DataScopeQuery::scopedProductionLineIds($scope);
+
+        if ($lineIds === []) {
+            $query->whereRaw('1 = 0');
+
+            return;
+        }
+
+        $query->whereIn(
+            $this->getTable().'.equipment_id',
+            Equipment::query()->whereIn('production_line_id', $lineIds)->select('id'),
+        );
+    }
+
+    public function dataScopeProductionLineId(): ?int
+    {
+        return $this->equipment?->dataScopeProductionLineId();
     }
 
     /**

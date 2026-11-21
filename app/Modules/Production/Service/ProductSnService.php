@@ -2,6 +2,7 @@
 
 namespace App\Modules\Production\Service;
 
+use App\Core\DataScope\DataScopeGuard;
 use App\Core\Exceptions\ApiException;
 use App\Core\Services\BusinessDay;
 use App\Modules\Equipment\Service\EquipmentService;
@@ -9,13 +10,19 @@ use App\Modules\Organization\Model\Employee;
 use App\Modules\Production\Model\ProductionBatch;
 use App\Modules\Production\Model\ProductionOrder;
 use App\Modules\Production\Model\ProductSn;
+use App\Modules\System\Service\OperationLogService;
+use App\Modules\System\ValueObject\OperationLogEntry;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Support\Facades\DB;
 
 class ProductSnService
 {
-    public function __construct(private readonly EquipmentService $equipments) {}
+    public function __construct(
+        private readonly EquipmentService $equipments,
+        private readonly DataScopeGuard $dataScope,
+        private readonly OperationLogService $operationLogs,
+    ) {}
 
     /**
      * Serial numbers are unique per day, so two concurrent batches can compute
@@ -49,6 +56,7 @@ class ProductSnService
     {
         return DB::transaction(function () use ($sn, $data): ProductSn {
             $locked = ProductSn::query()->lockForUpdate()->whereKey($sn->getKey())->firstOrFail();
+            $this->dataScope->ensure($locked);
             $this->ensureActive($locked, '绑定');
 
             $materialBatchNo = $data['material_batch_no'] ?? null;
@@ -83,6 +91,19 @@ class ProductSnService
                 'employee_id' => $employeeId,
             ], static fn (mixed $value): bool => $value !== null));
 
+            $this->operationLogs->record(new OperationLogEntry(
+                action: 'production.sn.bind',
+                actionName: '绑定产品 SN',
+                objectType: '产品 SN',
+                objectId: $locked->id,
+                objectName: $locked->sn,
+                after: array_filter([
+                    '物料批次' => $materialBatchNo,
+                    '设备' => $equipmentId !== null ? (string) $equipmentId : null,
+                    '操作人员' => $employeeId !== null ? (string) $employeeId : null,
+                ], static fn (mixed $value): bool => $value !== null),
+            ));
+
             return $locked;
         });
     }
@@ -94,8 +115,17 @@ class ProductSnService
     {
         return DB::transaction(function () use ($sn): ProductSn {
             $locked = ProductSn::query()->lockForUpdate()->whereKey($sn->getKey())->firstOrFail();
+            $this->dataScope->ensure($locked);
             $this->ensureActive($locked, '打印标签');
             $locked->update(['printed_at' => now()]);
+
+            $this->operationLogs->record(new OperationLogEntry(
+                action: 'production.sn.print',
+                actionName: '打印产品 SN',
+                objectType: '产品 SN',
+                objectId: $locked->id,
+                objectName: $locked->sn,
+            ));
 
             return $locked;
         });
@@ -109,6 +139,7 @@ class ProductSnService
      */
     public function prepareLabel(ProductSn $sn): ProductSn
     {
+        $this->dataScope->ensure($sn);
         $this->ensureActive($sn, '打印标签');
 
         return $sn->load(['productionOrder.product', 'productionBatch']);
@@ -121,6 +152,7 @@ class ProductSnService
     {
         return DB::transaction(function () use ($sn, $reason): ProductSn {
             $locked = ProductSn::query()->lockForUpdate()->whereKey($sn->getKey())->firstOrFail();
+            $this->dataScope->ensure($locked);
 
             if ($locked->isVoided()) {
                 throw new ApiException('SN 已作废，不能重复作废', 422);
@@ -131,6 +163,15 @@ class ProductSnService
                 'voided_at' => now(),
                 'void_reason' => $reason,
             ]);
+
+            $this->operationLogs->record(new OperationLogEntry(
+                action: 'production.sn.void',
+                actionName: '作废产品 SN',
+                objectType: '产品 SN',
+                objectId: $locked->id,
+                objectName: $locked->sn,
+                after: ['作废原因' => $reason],
+            ));
 
             return $locked;
         });
@@ -145,6 +186,7 @@ class ProductSnService
     private function createBatch(array $data): array
     {
         $order = ProductionOrder::query()->lockForUpdate()->whereKey($data['production_order_id'])->firstOrFail();
+        $this->dataScope->ensure($order);
         $quantity = (int) $data['quantity'];
 
         if (! $order->canGenerateSn()) {
@@ -196,6 +238,15 @@ class ProductSnService
                 'employee_id' => $employeeId,
             ]));
         }
+
+        $this->operationLogs->record(new OperationLogEntry(
+            action: 'production.sn.generate',
+            actionName: '生成产品 SN',
+            objectType: '产品 SN 批次',
+            objectId: $batch->id,
+            objectName: $batch->code,
+            after: ['所属订单' => $order->code, '数量' => $quantity],
+        ));
 
         return ['batch' => $batch, 'sns' => $sns];
     }

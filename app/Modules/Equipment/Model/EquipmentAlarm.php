@@ -2,12 +2,16 @@
 
 namespace App\Modules\Equipment\Model;
 
+use App\Core\DataScope\DataScope;
+use App\Core\DataScope\DataScopeQuery;
+use App\Core\DataScope\HasDataScope;
 use App\Core\Models\Concerns\HasStatusLabels;
 use App\Modules\System\Model\User;
 use Database\Factories\EquipmentAlarmFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\Table;
 use Illuminate\Database\Eloquent\Attributes\UseFactory;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -56,7 +60,7 @@ use Illuminate\Support\Carbon;
 ])]
 #[Table('mes_equipment_alarms', dateFormat: 'Y-m-d H:i:s.u')]
 #[UseFactory(EquipmentAlarmFactory::class)]
-class EquipmentAlarm extends Model
+class EquipmentAlarm extends Model implements HasDataScope
 {
     /** @use HasFactory<EquipmentAlarmFactory> */
     use HasFactory, HasStatusLabels;
@@ -222,6 +226,36 @@ class EquipmentAlarm extends Model
     public function equipment(): BelongsTo
     {
         return $this->belongsTo(Equipment::class, 'equipment_id');
+    }
+
+    /**
+     * An alarm inherits the line of the equipment it belongs to.
+     *
+     * @param  Builder<self>  $query
+     */
+    public function scopeInDataScope(Builder $query, DataScope $scope): void
+    {
+        if ($scope->isAll()) {
+            return;
+        }
+
+        $lineIds = DataScopeQuery::scopedProductionLineIds($scope);
+
+        if ($lineIds === []) {
+            $query->whereRaw('1 = 0');
+
+            return;
+        }
+
+        $query->whereIn(
+            $this->getTable().'.equipment_id',
+            Equipment::query()->whereIn('production_line_id', $lineIds)->select('id'),
+        );
+    }
+
+    public function dataScopeProductionLineId(): ?int
+    {
+        return $this->equipment?->dataScopeProductionLineId();
     }
 
     /**

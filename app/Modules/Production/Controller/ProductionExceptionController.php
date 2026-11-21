@@ -2,6 +2,7 @@
 
 namespace App\Modules\Production\Controller;
 
+use App\Core\DataScope\DataScopeGuard;
 use App\Core\Services\BusinessDay;
 use App\Http\Controllers\Controller;
 use App\Http\Responses\ApiResponse;
@@ -19,7 +20,10 @@ use Illuminate\Validation\Rule;
 
 class ProductionExceptionController extends Controller
 {
-    public function __construct(private readonly ProductionExceptionService $exceptions) {}
+    public function __construct(
+        private readonly ProductionExceptionService $exceptions,
+        private readonly DataScopeGuard $dataScope,
+    ) {}
 
     public function index(Request $request): JsonResponse
     {
@@ -34,6 +38,7 @@ class ProductionExceptionController extends Controller
 
         $query = ProductionException::query()
             ->with(ProductionException::RELATIONS)
+            ->inDataScope($this->dataScope->scope())
             ->when(
                 $data['type'] ?? null,
                 fn (Builder $query, string $type) => $query->where('type', $type),

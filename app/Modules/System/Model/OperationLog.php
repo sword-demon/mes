@@ -22,6 +22,8 @@ use Illuminate\Support\Carbon;
  * @property string $object_name
  * @property string $summary
  * @property array<string, array{before: mixed, after: mixed}>|null $changes
+ * @property string $source
+ * @property string|null $trace_id
  * @property string $ip
  * @property Carbon|null $created_at
  */
@@ -35,6 +37,8 @@ use Illuminate\Support\Carbon;
     'object_name',
     'summary',
     'changes',
+    'source',
+    'trace_id',
     'ip',
 ])]
 #[Table('sys_operation_logs')]

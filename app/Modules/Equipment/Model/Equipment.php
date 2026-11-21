@@ -2,6 +2,9 @@
 
 namespace App\Modules\Equipment\Model;
 
+use App\Core\DataScope\DataScope;
+use App\Core\DataScope\DataScopeQuery;
+use App\Core\DataScope\HasDataScope;
 use App\Core\Models\Concerns\HasStatusLabels;
 use App\Modules\Organization\Model\Employee;
 use App\Modules\Organization\Model\ProductionLine;
@@ -34,7 +37,7 @@ use Illuminate\Support\Carbon;
 #[Fillable(['code', 'name', 'type', 'workshop_id', 'production_line_id', 'model', 'status', 'enabled', 'owner_id'])]
 #[Table('mes_equipments')]
 #[UseFactory(EquipmentFactory::class)]
-class Equipment extends Model
+class Equipment extends Model implements HasDataScope
 {
     /** @use HasFactory<EquipmentFactory> */
     use HasFactory, HasStatusLabels;
@@ -115,6 +118,34 @@ class Equipment extends Model
     public function productionLine(): BelongsTo
     {
         return $this->belongsTo(ProductionLine::class, 'production_line_id');
+    }
+
+    /**
+     * Equipment sits on exactly one production line (required column), so the
+     * row filter is direct.
+     *
+     * @param  Builder<self>  $query
+     */
+    public function scopeInDataScope(Builder $query, DataScope $scope): void
+    {
+        if ($scope->isAll()) {
+            return;
+        }
+
+        $lineIds = DataScopeQuery::scopedProductionLineIds($scope);
+
+        if ($lineIds === []) {
+            $query->whereRaw('1 = 0');
+
+            return;
+        }
+
+        $query->whereIn($this->getTable().'.production_line_id', $lineIds);
+    }
+
+    public function dataScopeProductionLineId(): ?int
+    {
+        return $this->production_line_id;
     }
 
     /**

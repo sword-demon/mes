@@ -2,6 +2,7 @@
 
 namespace App\Modules\Equipment\Controller;
 
+use App\Core\DataScope\DataScopeGuard;
 use App\Core\Exceptions\ApiException;
 use App\Core\Services\EntityService;
 use App\Http\Controllers\Controller;
@@ -33,11 +34,14 @@ class EquipmentController extends Controller
         private readonly EquipmentService $equipments,
         private readonly EntityService $entities,
         private readonly AccessControlService $access,
+        private readonly DataScopeGuard $dataScope,
     ) {}
 
     public function index(Request $request): JsonResponse
     {
-        $query = Equipment::query()->with(self::RELATIONS);
+        $query = Equipment::query()
+            ->with(self::RELATIONS)
+            ->inDataScope($this->dataScope->scope());
 
         return ApiResponse::paginated(
             $this->entities->paginateQuery(
@@ -101,6 +105,7 @@ class EquipmentController extends Controller
         $equipments = Equipment::query()
             ->enabled()
             ->with([...self::RELATIONS, ...($canMonitor ? ['latestData'] : [])])
+            ->inDataScope($this->dataScope->scope())
             ->orderBy('id')
             ->get();
 
@@ -110,7 +115,7 @@ class EquipmentController extends Controller
         ];
 
         if ($canMonitor) {
-            $data['status_counts'] = $this->equipments->statusCounts();
+            $data['status_counts'] = $this->equipments->statusCounts($this->dataScope->scope());
         }
 
         return ApiResponse::success($data);
@@ -118,6 +123,8 @@ class EquipmentController extends Controller
 
     public function history(Request $request, Equipment $equipment): JsonResponse
     {
+        $this->dataScope->ensure($equipment);
+
         $data = $request->validate([
             'start_at' => ['required', 'date'],
             'end_at' => ['required', 'date', 'after:start_at'],

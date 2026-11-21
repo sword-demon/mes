@@ -2,9 +2,11 @@
 
 namespace App\Modules\Production\Model;
 
+use App\Core\DataScope\HasDataScope;
 use App\Modules\Organization\Model\Employee;
 use App\Modules\Organization\Model\Team;
 use App\Modules\Process\Model\RouteOperation;
+use App\Modules\Production\Model\Concerns\ScopedThroughTask;
 use Database\Factories\ProductionDispatchFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\Table;
@@ -35,10 +37,10 @@ use Illuminate\Support\Carbon;
 ])]
 #[Table('mes_dispatch_orders')]
 #[UseFactory(ProductionDispatchFactory::class)]
-class ProductionDispatch extends Model
+class ProductionDispatch extends Model implements HasDataScope
 {
     /** @use HasFactory<ProductionDispatchFactory> */
-    use HasFactory;
+    use HasFactory, ScopedThroughTask;
 
     public static function codeFor(string $taskCode, int $sequence): string
     {

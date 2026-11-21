@@ -2,6 +2,8 @@
 
 namespace App\Modules\Traceability\Service;
 
+use App\Core\DataScope\DataScope;
+use App\Core\Exceptions\ApiException;
 use App\Modules\Inventory\Model\InventoryTransaction;
 use App\Modules\Material\Model\Material;
 use App\Modules\Material\Model\MaterialRequisition;
@@ -22,23 +24,26 @@ use Illuminate\Support\Collection;
  */
 class BackwardTraceService
 {
-    public function trace(string $batchNo): BackwardTraceData
+    public function trace(string $batchNo, DataScope $scope): BackwardTraceData
     {
         $transactions = InventoryTransaction::query()
             ->with('material')
             ->where('business_type', InventoryTransaction::OUTBOUND)
             ->whereNotNull('reference_no')
-            ->whereHas('inventory', fn (Builder $query): Builder => $query->where('batch_no', $batchNo))
+            ->whereHas('inventory', fn (Builder $query): Builder => $query
+                ->where('batch_no', $batchNo)
+                ->inDataScope($scope))
             ->orderBy('id')
             ->get();
 
         if ($transactions->isEmpty()) {
-            return new BackwardTraceData($batchNo, [], collect());
+            throw new ApiException('物料批次不存在', 404, status: 404);
         }
 
         $requisitions = MaterialRequisition::query()
             ->with('productionOrder.product')
             ->whereIn('code', $transactions->pluck('reference_no')->unique()->values())
+            ->inDataScope($scope)
             ->get()
             ->keyBy('code');
 
@@ -65,11 +70,11 @@ class BackwardTraceService
         }
 
         if ($usage === []) {
-            return new BackwardTraceData($batchNo, [], collect());
+            throw new ApiException('物料批次不存在', 404, status: 404);
         }
 
         $batchesByOrder = ProductionBatch::query()
-            ->with(['productSns' => fn (HasMany $query) => $query->orderBy('id')])
+            ->with(['productSns' => fn (HasMany $query) => $query->inDataScope($scope)->orderBy('id')])
             ->whereIn('production_order_id', array_keys($usage))
             ->orderBy('id')
             ->get()
@@ -101,6 +106,10 @@ class BackwardTraceService
 
         /** @var Collection<int, BackwardTraceBatchData> $rows */
         $rows = collect($rows);
+
+        if ($rows->isEmpty()) {
+            throw new ApiException('物料批次不存在', 404, status: 404);
+        }
 
         return new BackwardTraceData(
             $batchNo,

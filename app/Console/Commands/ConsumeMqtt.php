@@ -2,6 +2,7 @@
 
 namespace App\Console\Commands;
 
+use App\Core\Audit\AuditContext;
 use App\Modules\Equipment\Model\EquipmentData;
 use App\Modules\Equipment\Service\EquipmentMessageService;
 use Illuminate\Console\Attributes\Description;
@@ -35,6 +36,9 @@ class ConsumeMqtt extends Command
 
             return self::INVALID;
         }
+
+        // 设备消息消费属于系统行为：由它触发的告警日志记 source=system。
+        app(AuditContext::class)->set(AuditContext::SOURCE_SYSTEM);
 
         $stopping = false;
         $this->trap([SIGINT, SIGTERM], function () use ($mqtt, &$stopping): void {
