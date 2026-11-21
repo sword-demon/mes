@@ -2,12 +2,15 @@
 
 namespace App\Modules\Inventory\Model;
 
+use App\Core\DataScope\DataScope;
+use App\Core\DataScope\HasFactoryScope;
 use App\Modules\Material\Model\Material;
 use App\Modules\System\Model\User;
 use Database\Factories\InventoryTransactionFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\Table;
 use Illuminate\Database\Eloquent\Attributes\UseFactory;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -40,10 +43,35 @@ use Illuminate\Support\Carbon;
 ])]
 #[Table('mes_inventory_transactions')]
 #[UseFactory(InventoryTransactionFactory::class)]
-class InventoryTransaction extends Model
+class InventoryTransaction extends Model implements HasFactoryScope
 {
     /** @use HasFactory<InventoryTransactionFactory> */
     use HasFactory;
+
+    /**
+     * A movement is visible through the warehouse factory of its balance.
+     *
+     * @param  Builder<self>  $query
+     */
+    public function scopeInDataScope(Builder $query, DataScope $scope): void
+    {
+        if ($scope->isAll()) {
+            return;
+        }
+
+        $query->whereHas('inventory', fn (Builder $inventory) => $inventory->inDataScope($scope));
+    }
+
+    public function dataScopeFactoryId(): ?int
+    {
+        return $this->inventory?->dataScopeFactoryId();
+    }
+
+    /** @return BelongsTo<Inventory, $this> */
+    public function inventory(): BelongsTo
+    {
+        return $this->belongsTo(Inventory::class, 'inventory_id');
+    }
 
     public const string INBOUND = 'inbound';
 
@@ -61,14 +89,6 @@ class InventoryTransaction extends Model
             self::OUTBOUND => '出库',
             self::ADJUSTMENT => '库存调整',
         ];
-    }
-
-    /**
-     * @return BelongsTo<Inventory, $this>
-     */
-    public function inventory(): BelongsTo
-    {
-        return $this->belongsTo(Inventory::class, 'inventory_id');
     }
 
     /**

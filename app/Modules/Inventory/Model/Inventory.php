@@ -2,11 +2,14 @@
 
 namespace App\Modules\Inventory\Model;
 
+use App\Core\DataScope\DataScope;
+use App\Core\DataScope\HasFactoryScope;
 use App\Modules\Material\Model\Material;
 use Database\Factories\InventoryFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\Table;
 use Illuminate\Database\Eloquent\Attributes\UseFactory;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -36,7 +39,7 @@ use Illuminate\Support\Carbon;
 ])]
 #[Table('mes_inventories')]
 #[UseFactory(InventoryFactory::class)]
-class Inventory extends Model
+class Inventory extends Model implements HasFactoryScope
 {
     /** @use HasFactory<InventoryFactory> */
     use HasFactory;
@@ -55,6 +58,32 @@ class Inventory extends Model
     public function location(): BelongsTo
     {
         return $this->belongsTo(StorageLocation::class, 'location_id');
+    }
+
+    /**
+     * Inventory lives in a warehouse; the factory of that warehouse decides
+     * visibility.
+     *
+     * @param  Builder<self>  $query
+     */
+    public function scopeInDataScope(Builder $query, DataScope $scope): void
+    {
+        if ($scope->isAll()) {
+            return;
+        }
+
+        $query->whereHas('location.warehouse', function (Builder $warehouse) use ($scope): void {
+            $warehouse->when(
+                $scope->factoryId !== null,
+                fn (Builder $warehouse) => $warehouse->where('factory_id', $scope->factoryId),
+                fn (Builder $warehouse) => $warehouse->whereRaw('1 = 0'),
+            );
+        });
+    }
+
+    public function dataScopeFactoryId(): ?int
+    {
+        return $this->location?->warehouse?->factory_id;
     }
 
     /**

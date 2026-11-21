@@ -2,6 +2,7 @@
 
 namespace App\Modules\Inventory\Service;
 
+use App\Core\DataScope\DataScopeGuard;
 use App\Core\Exceptions\ApiException;
 use App\Modules\Inventory\Model\Inventory;
 use App\Modules\Inventory\Model\InventoryTransaction;
@@ -13,7 +14,10 @@ use Illuminate\Support\Facades\DB;
 
 class InventoryService
 {
-    public function __construct(private readonly OperationLogService $operationLogs) {}
+    public function __construct(
+        private readonly OperationLogService $operationLogs,
+        private readonly DataScopeGuard $dataScope,
+    ) {}
 
     private const int MAX_MILLI = 999_999_999_999;
 
@@ -80,6 +84,10 @@ class InventoryService
                 || ! $location->warehouse->status) {
                 throw new ApiException('库位不存在、已停用或不属于所选仓库', 422);
             }
+
+            // The warehouse's factory decides visibility: a cross-factory
+            // movement is rejected before any quantity is touched.
+            $this->dataScope->ensure($location);
 
             $batchNo = trim((string) ($data['batch_no'] ?? ''));
 

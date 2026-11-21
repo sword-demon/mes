@@ -14,10 +14,10 @@ use Illuminate\Http\Request;
  * Artisan) goes through, so the check cannot be bypassed at the controller.
  * Processes without a user context resolve to `all` and are never restricted.
  *
- * A model that does not implement `HasDataScope` is passed through on
- * purpose: scoping is opt-in per model (basic data like products is shared
- * across factories), so the interface marks the models that are in scope,
- * not the ones that are exempt.
+ * Scoping is opt-in per model: line-scoped models implement `HasDataScope`,
+ * factory-scoped ones (inventory) implement `HasFactoryScope`. A model with
+ * neither is passed through, because basic data like products is shared
+ * across factories by design.
  */
 class DataScopeGuard
 {
@@ -66,12 +66,18 @@ class DataScopeGuard
             return;
         }
 
-        if (! $model instanceof HasDataScope) {
+        if ($model instanceof HasDataScope) {
+            if ($this->isOutsideScope($model->dataScopeProductionLineId())) {
+                throw new ApiException('该数据不在您的数据范围内', 403, status: 403);
+            }
+
             return;
         }
 
-        if ($this->isOutsideScope($model->dataScopeProductionLineId())) {
-            throw new ApiException('该数据不在您的数据范围内', 403, status: 403);
+        if ($model instanceof HasFactoryScope) {
+            if (! DataScopeQuery::factoryInScope($model->dataScopeFactoryId(), $scope)) {
+                throw new ApiException('该数据不在您的数据范围内', 403, status: 403);
+            }
         }
     }
 

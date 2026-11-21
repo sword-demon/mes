@@ -49,4 +49,22 @@ final class DataScopeQuery
         return $productionLineId !== null
             && in_array($productionLineId, self::scopedProductionLineIds($scope), true);
     }
+
+    /**
+     * Factory-dimension rows (inventory) know no production line: a `line`
+     * user sees the inventory of the factory their lines belong to.
+     */
+    public static function factoryInScope(?int $factoryId, DataScope $scope): bool
+    {
+        if ($scope->isAll()) {
+            return true;
+        }
+
+        if ($factoryId === null) {
+            return false;
+        }
+
+        return in_array($scope->level, [DataScope::FACTORY, DataScope::LINE], true)
+            && $factoryId === $scope->factoryId;
+    }
 }

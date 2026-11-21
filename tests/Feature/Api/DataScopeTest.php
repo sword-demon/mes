@@ -1,6 +1,10 @@
 <?php
 
 use App\Core\Exceptions\ApiException;
+use App\Modules\Inventory\Model\Inventory;
+use App\Modules\Inventory\Model\StorageLocation;
+use App\Modules\Inventory\Model\Warehouse;
+use App\Modules\Material\Model\Material;
 use App\Modules\Organization\Model\Employee;
 use App\Modules\Organization\Model\Factory;
 use App\Modules\Organization\Model\ProductionLine;
@@ -74,6 +78,11 @@ function productionScopeFixture(): array
         'quality.defects.create',
         'quality.defects.process',
         'quality.defects.scrap',
+        'inventory.index',
+        'inventory.inbound',
+        'inventory.outbound',
+        'inventory.adjust',
+        'inventory.options',
     ], 'scope_director_a');
     $lineUser->update(['factory_id' => $factoryA->id]);
     $lineUser->productionLines()->sync([$lineA1->id]);
@@ -82,6 +91,10 @@ function productionScopeFixture(): array
         'data.scope.factory',
         'production.orders.index',
         'production.tasks.index',
+        'inventory.index',
+        'inventory.inbound',
+        'inventory.outbound',
+        'inventory.adjust',
     ], 'scope_factory_admin');
     $factoryUser->update(['factory_id' => $factoryA->id]);
 
@@ -723,6 +736,88 @@ it('rejects registering and handling defects outside the scope', function () {
     bearer($lineUser)->postJson("/api/v1/quality/defective-products/{$defect->id}/scrap", [
         'reason' => '无法返修',
         'quantity' => 5,
+    ])
+        ->assertForbidden()
+        ->assertJsonPath('message', '该数据不在您的数据范围内');
+});
+
+/**
+ * Two factories, one warehouse per factory with a location, plus the
+ * line- and factory-scoped users of the first factory.
+ *
+ * @return array{0: Warehouse, 1: StorageLocation, 2: Warehouse, 3: StorageLocation, 4: User, 5: User}
+ */
+function inventoryScopeFixture(): array
+{
+    [, , , , $lineUser, $factoryUser] = productionScopeFixture();
+    $factoryA = Factory::query()->orderBy('id')->firstOrFail();
+    $warehouseA = Warehouse::factory()->create(['factory_id' => $factoryA->id]);
+    $locationA = StorageLocation::factory()->create(['warehouse_id' => $warehouseA->id]);
+
+    $factoryB = Factory::factory()->create();
+    $warehouseB = Warehouse::factory()->create(['factory_id' => $factoryB->id]);
+    $locationB = StorageLocation::factory()->create(['warehouse_id' => $warehouseB->id]);
+
+    return [$warehouseA, $locationA, $warehouseB, $locationB, $lineUser, $factoryUser];
+}
+
+it('scopes the inventory list, movements and options by warehouse factory', function () {
+    [$warehouseA, $locationA, , , $lineUser, $factoryUser] = inventoryScopeFixture();
+    $material = Material::factory()->create(['batch_managed' => false]);
+    $inventoryA = Inventory::factory()->create([
+        'material_id' => $material->id,
+        'location_id' => $locationA->id,
+        'current_quantity' => 5,
+    ]);
+    $factoryUnassigned = Factory::factory()->create();
+    $warehouseUnassigned = Warehouse::factory()->create();
+    $locationUnassigned = StorageLocation::factory()->create(['warehouse_id' => $warehouseUnassigned->id]);
+    Inventory::factory()->create([
+        'material_id' => $material->id,
+        'location_id' => $locationUnassigned->id,
+        'current_quantity' => 7,
+    ]);
+
+    $ids = collect(bearer($factoryUser)->getJson('/api/v1/inventory')
+        ->assertOk()
+        ->json('data.items'))->pluck('id')->values()->all();
+
+    expect($ids)->toBe([$inventoryA->id]);
+
+    $warehouseCodes = collect(bearer($lineUser)->getJson('/api/v1/inventory/options')
+        ->assertOk()
+        ->json('data.warehouses'))->pluck('code')->values()->all();
+
+    expect($warehouseCodes)->toBe([$warehouseA->code]);
+});
+
+it('rejects inventory movements across factories', function () {
+    [, , $warehouseB, $locationB, $lineUser, $factoryUser] = inventoryScopeFixture();
+    $material = Material::factory()->create(['batch_managed' => false]);
+
+    bearer($factoryUser)->postJson('/api/v1/inventory/inbound', [
+        'material_id' => $material->id,
+        'warehouse_id' => $warehouseB->id,
+        'location_id' => $locationB->id,
+        'quantity' => 1,
+    ])
+        ->assertForbidden()
+        ->assertJsonPath('message', '该数据不在您的数据范围内');
+
+    bearer($factoryUser)->postJson('/api/v1/inventory/outbound', [
+        'material_id' => $material->id,
+        'warehouse_id' => $warehouseB->id,
+        'location_id' => $locationB->id,
+        'quantity' => 1,
+    ])
+        ->assertForbidden()
+        ->assertJsonPath('message', '该数据不在您的数据范围内');
+
+    bearer($factoryUser)->postJson('/api/v1/inventory/adjust', [
+        'material_id' => $material->id,
+        'warehouse_id' => $warehouseB->id,
+        'location_id' => $locationB->id,
+        'current_quantity' => 3,
     ])
         ->assertForbidden()
         ->assertJsonPath('message', '该数据不在您的数据范围内');

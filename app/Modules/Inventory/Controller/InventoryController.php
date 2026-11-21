@@ -2,6 +2,7 @@
 
 namespace App\Modules\Inventory\Controller;
 
+use App\Core\DataScope\DataScopeGuard;
 use App\Core\Services\EntityService;
 use App\Http\Controllers\Controller;
 use App\Http\Responses\ApiResponse;
@@ -24,6 +25,7 @@ class InventoryController extends Controller
     public function __construct(
         private readonly InventoryService $inventory,
         private readonly EntityService $entities,
+        private readonly DataScopeGuard $dataScope,
     ) {}
 
     public function index(Request $request): JsonResponse
@@ -35,6 +37,7 @@ class InventoryController extends Controller
 
         $query = Inventory::query()
             ->with(['material', 'location.warehouse'])
+            ->inDataScope($this->dataScope->scope())
             ->when(is_scalar($warehouseId), fn (Builder $query) => $query->whereHas(
                 'location',
                 fn (Builder $location) => $location->where('warehouse_id', $warehouseId),
@@ -77,6 +80,7 @@ class InventoryController extends Controller
 
         $query = InventoryTransaction::query()
             ->with(['material', 'createdBy', 'inventory.location.warehouse'])
+            ->inDataScope($this->dataScope->scope())
             ->when(is_scalar($warehouseId), fn (Builder $query) => $query->whereHas(
                 'inventory.location',
                 fn (Builder $location) => $location->where('warehouse_id', $warehouseId),
@@ -120,9 +124,20 @@ class InventoryController extends Controller
                 'batch_managed' => $material->batch_managed,
             ]);
 
+        // Inventory options are factory-scoped: a line/factory user only
+        // sees the warehouses of their own factory, `none` sees none.
+        $scope = $this->dataScope->scope();
         $warehouses = Warehouse::query()
             ->with('locations')
             ->where('status', true)
+            ->when(
+                ! $scope->isAll(),
+                fn (Builder $query) => $query->when(
+                    $scope->factoryId !== null,
+                    fn (Builder $query) => $query->where('factory_id', $scope->factoryId),
+                    fn (Builder $query) => $query->whereRaw('1 = 0'),
+                ),
+            )
             ->orderBy('id')
             ->get()
             ->map(fn (Warehouse $warehouse) => [
