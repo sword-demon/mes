@@ -34,6 +34,8 @@ APP_DEBUG=false
 APP_URL=https://mes.example.com
 FRONTEND_URL=https://mes.example.com
 APP_BUSINESS_TIMEZONE=Asia/Shanghai
+API_RATE_LIMIT=120
+LOGIN_IP_RATE_LIMIT=60
 LOG_CHANNEL=stack
 LOG_LEVEL=warning
 
@@ -80,6 +82,7 @@ EMQX_DASHBOARD_HOST_PORT=18083
 
 - `APP_ENV=production` 与 `APP_DEBUG=false` 必须同时成立；生产环境禁止开启调试。
 - `APP_BUSINESS_TIMEZONE=Asia/Shanghai` 决定业务自然日与接口日期筛选口径；数据库时间与应用运行时保持 UTC，不要修改 `config/app.php` 的 `timezone`。
+- `API_RATE_LIMIT` 是单个已登录用户每分钟的 API 请求额度（按用户分桶，互不影响）；触发时返回「请求过于频繁，请稍后再试」。登录接口另有更严格的限制：同一邮箱与来源 IP 组合每分钟 5 次、同一 IP 每分钟 60 次（`LOGIN_IP_RATE_LIMIT`）。未认证请求不占用 `API_RATE_LIMIT`；如需给公网未认证流量再加一层限制，在 Nginx 层按 IP 限速即可。
 - `APP_KEY` 用 `php artisan key:generate --force` 生成，之后不要更换，否则已加密数据与登录态失效。
 - `DB_PASSWORD`、`MYSQL_ROOT_PASSWORD`、`EMQX_DASHBOARD_PASSWORD` 缺失时，生产 Compose 会直接报错拒绝启动。
 - `MQTT_CLEAN_SESSION=false` 让 EMQX 保留消费者离线期间的 QoS 1 消息；运行多个消费者时，每个实例必须配置唯一的 `MQTT_CLIENT_ID`。

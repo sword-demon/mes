@@ -78,8 +78,18 @@ class AppServiceProvider extends ServiceProvider
      */
     protected function configureRateLimiting(): void
     {
-        RateLimiter::for('api', fn (Request $request) => Limit::perMinute(60)
-            ->by($request->ip()));
+        RateLimiter::for('api', function (Request $request) {
+            $user = $request->user();
+
+            // Bucketing per user keeps one busy browser from exhausting the
+            // budget of every other client sharing the same address. The IP
+            // fallback only applies if this limiter is reused on a public route.
+            return Limit::perMinute((int) config('app.api_rate_limit'))
+                ->by($user === null ? 'ip:'.$request->ip() : 'user:'.$user->getAuthIdentifier());
+        });
+
+        RateLimiter::for('login-ip', fn (Request $request) => Limit::perMinute((int) config('app.login_ip_rate_limit'))
+            ->by('ip:'.$request->ip()));
 
         RateLimiter::for('login', fn (Request $request) => Limit::perMinute(5)
             ->by(Str::transliterate(Str::lower($request->string('email')).'|'.$request->ip())));

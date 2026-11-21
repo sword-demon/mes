@@ -22,7 +22,6 @@ return Application::configure(basePath: dirname(__DIR__))
         },
     )
     ->withMiddleware(function (Middleware $middleware): void {
-        $middleware->throttleApi();
         $middleware->redirectGuestsTo(null);
         $middleware->alias([
             'active' => EnsureUserIsActive::class,

@@ -71,6 +71,11 @@ return [
 
     'business_timezone' => env('APP_BUSINESS_TIMEZONE', 'Asia/Shanghai'),
 
+    // Unusable values fall back to the default so an empty .env never throttles every request.
+    'api_rate_limit' => (int) (filter_var(env('API_RATE_LIMIT'), FILTER_VALIDATE_INT, ['options' => ['min_range' => 1]]) ?: 120),
+
+    'login_ip_rate_limit' => (int) (filter_var(env('LOGIN_IP_RATE_LIMIT'), FILTER_VALIDATE_INT, ['options' => ['min_range' => 1]]) ?: 60),
+
     /*
     |--------------------------------------------------------------------------
     | Application Locale Configuration
