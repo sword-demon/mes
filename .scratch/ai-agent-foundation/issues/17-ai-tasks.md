@@ -21,3 +21,4 @@
 - 任务结果支持 `output` 与 token 用量（`AiTaskResult`）；失败回调写 `Log::error` 并落 `failed`、错误信息与耗时。错误文本按 16000 字符截断，避免中文撑爆 MySQL `TEXT`。
 - 示例 `ExampleAiTaskJob` 不调用模型，已用真实 `queue:work --queue=ai` 验证 `pending → running → succeeded` 与失败路径。
 - 审计上下文（actor/ip/trace 写入 `AuditContext`）留给 #18；本期未新增 HTTP 查询接口，结果通过 `AiTask` 记录查询。
+- 复核修复：执行异常时在 `handle` 内立即写 `ai.task.failed`，不再依赖会被终态判断跳过的 `failed()` 回调。

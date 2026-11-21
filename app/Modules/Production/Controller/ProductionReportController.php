@@ -94,6 +94,7 @@ class ProductionReportController extends Controller
     {
         // shortcut: one page covers a demo factory's open tasks; add paging when it does not.
         $tasks = ProductionTask::query()
+            ->inDataScope($this->dataScope->scope())
             ->with(['product:id,code,name', 'productionOrder:id,code,production_line_id'])
             ->whereHas('productionOrder', fn (Builder $order) => $order->reportable())
             ->where('status', '!=', ProductionTask::COMPLETED)
@@ -118,6 +119,7 @@ class ProductionReportController extends Controller
             ->get(['id', 'employee_no', 'name']);
 
         $equipments = Equipment::query()
+            ->inDataScope($this->dataScope->scope())
             ->available()
             ->orderBy('id')
             ->limit(200)

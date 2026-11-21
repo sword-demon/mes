@@ -2,6 +2,7 @@
 
 namespace App\Core\DataScope;
 
+use App\Core\Audit\AuditContext;
 use App\Core\Exceptions\ApiException;
 use App\Modules\System\Service\AccessControlService;
 use Illuminate\Database\Eloquent\Model;
@@ -34,6 +35,7 @@ class DataScopeGuard
     public function __construct(
         private readonly AccessControlService $access,
         private readonly Request $request,
+        private readonly AuditContext $context,
     ) {}
 
     /**
@@ -43,7 +45,7 @@ class DataScopeGuard
      */
     public function scope(): DataScope
     {
-        $user = $this->request->user();
+        $user = $this->request->user() ?? $this->context->actor();
 
         if ($this->scope === null || $this->scopeUserId !== $user?->id) {
             $this->scopeUserId = $user?->id;

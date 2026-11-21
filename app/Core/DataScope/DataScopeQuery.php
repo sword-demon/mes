@@ -38,19 +38,6 @@ final class DataScopeQuery
     }
 
     /**
-     * Row-level counterpart of the query filter.
-     */
-    public static function lineInScope(?int $productionLineId, DataScope $scope): bool
-    {
-        if ($scope->isAll()) {
-            return true;
-        }
-
-        return $productionLineId !== null
-            && in_array($productionLineId, self::scopedProductionLineIds($scope), true);
-    }
-
-    /**
      * Factory-dimension rows (inventory) know no production line: a `line`
      * user sees the inventory of the factory their lines belong to.
      */

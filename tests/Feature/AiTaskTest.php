@@ -127,6 +127,7 @@ it('runs the example task through the worker and stores the result', function ()
 
 it('marks a failed task with the error and latency', function () {
     config(['queue.default' => 'database']);
+    Log::spy();
     $actor = User::factory()->create();
 
     $task = app(AiTaskService::class)->dispatch(
@@ -147,6 +148,12 @@ it('marks a failed task with the error and latency', function () {
         ->and($task->latency_ms)->toBeInt();
 
     expect(DB::table('failed_jobs')->count())->toBe(1);
+
+    Log::shouldHaveReceived('error')
+        ->withArgs(fn (string $event, array $context): bool => $event === 'ai.task.failed'
+            && $context['ai_task_id'] === $task->id
+            && str_contains($context['error'], '示例任务失败'))
+        ->once();
 });
 
 it('stores token usage and explicit latency when a task succeeds', function () {

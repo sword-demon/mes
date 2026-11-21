@@ -20,3 +20,4 @@
 - 设备历史曲线用 ensure（范围外 403）而非 404：路由键是设备 id（内部标识），与 SN 详情按公开编码查 404 的场景不同。
 - **Guard 已改 fail-closed 并有测试**：未实现任何 scope 接口的模型进入 `ensure()` 会抛错（对外通用 403 文案、内部类名进日志）——这是两轮审查（ticket 07/07+09）点名后本张踩实的行为变更，EquipmentAlarm 首次接入时漏 implements 的缺陷正是被它暴露的。
 - DataScopeTest 的设备用例曾出现假覆盖（告警夹具只有范围内数据），已补范围外告警；DataScopeQuery 对 EquipmentAlarm/EquipmentData 的重复行归属实现保留（两处仅设备子查询，下沉收益低）。
+- 复核修复：设备台账 `create/update` 的日志与业务写入放入同一事务；设备可用性校验补数据范围 `ensure()`，SN 绑定不能使用范围外设备。

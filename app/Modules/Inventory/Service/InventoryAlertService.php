@@ -7,11 +7,15 @@ use App\Modules\Inventory\Model\Inventory;
 use App\Modules\Inventory\Model\InventoryAlert;
 use App\Modules\Material\Model\Material;
 use App\Modules\System\Model\User;
+use App\Modules\System\Service\OperationLogService;
+use App\Modules\System\ValueObject\OperationLogEntry;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Facades\DB;
 
 class InventoryAlertService
 {
+    public function __construct(private readonly OperationLogService $operationLogs) {}
+
     /**
      * Reconcile low-stock alerts against material-wide stock totals.
      *
@@ -118,13 +122,26 @@ class InventoryAlertService
                 throw new ApiException('只有待确认的库存预警可以确认', 422);
             }
 
+            $before = $locked->statusLabel();
             $locked->update([
                 'status' => InventoryAlert::CONFIRMED,
                 'handled_by_id' => $handler->id,
                 'handled_at' => now(),
             ]);
 
-            return $locked->load(['material', 'handledBy']);
+            $locked->load(['material', 'handledBy']);
+
+            $this->operationLogs->record(new OperationLogEntry(
+                action: 'inventory.alert.confirm',
+                actionName: '确认库存预警',
+                objectType: '库存预警',
+                objectId: $locked->id,
+                objectName: $locked->material->code,
+                before: ['状态' => $before],
+                after: ['状态' => $locked->statusLabel()],
+            ));
+
+            return $locked;
         });
     }
 
@@ -146,6 +163,7 @@ class InventoryAlertService
             );
             $minimumQuantity = number_format((float) $material->min_stock, 3, '.', '');
 
+            $before = $locked->statusLabel();
             $locked->update([
                 'status' => InventoryAlert::CLOSED,
                 'min_stock' => $minimumQuantity,
@@ -158,7 +176,19 @@ class InventoryAlertService
                     : null,
             ]);
 
-            return $locked->load(['material', 'handledBy']);
+            $locked->load(['material', 'handledBy']);
+
+            $this->operationLogs->record(new OperationLogEntry(
+                action: 'inventory.alert.close',
+                actionName: '关闭库存预警',
+                objectType: '库存预警',
+                objectId: $locked->id,
+                objectName: $locked->material->code,
+                before: ['状态' => $before],
+                after: ['状态' => $locked->statusLabel()],
+            ));
+
+            return $locked;
         });
     }
 

@@ -58,7 +58,9 @@ class MaterialReturnController extends Controller
 
     public function suggestions(Request $request): JsonResponse
     {
-        $requisition = MaterialRequisition::query()->findOrFail($request->integer('requisition_id'));
+        $requisition = MaterialRequisition::query()
+            ->inDataScope($this->dataScope->scope())
+            ->findOrFail($request->integer('requisition_id'));
 
         return ApiResponse::success($this->returns->suggestions($requisition));
     }

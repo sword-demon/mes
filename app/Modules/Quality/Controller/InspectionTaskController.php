@@ -86,6 +86,7 @@ class InspectionTaskController extends Controller
         $orderId = $request->query('production_order_id');
         $keyword = $request->query('keyword');
         $orders = ProductionOrder::query()
+            ->inDataScope($this->dataScope->scope())
             ->with('product')
             ->when(is_string($keyword) && $keyword !== '', fn (Builder $query) => $query->where('code', 'like', "%{$keyword}%"))
             ->orderByDesc('id')
@@ -97,7 +98,9 @@ class InspectionTaskController extends Controller
                 'product' => ['id' => $order->product->id, 'code' => $order->product->code, 'name' => $order->product->name],
             ]);
         $hasOrder = is_string($orderId) && $orderId !== '';
-        $order = $hasOrder ? ProductionOrder::query()->find($orderId) : null;
+        $order = $hasOrder
+            ? ProductionOrder::query()->inDataScope($this->dataScope->scope())->find($orderId)
+            : null;
         $operations = RouteOperation::query()
             ->when($order !== null, fn (Builder $query) => $query->where('route_id', $order->route_id))
             ->when($order === null, fn (Builder $query) => $query->whereRaw('1 = 0'))
@@ -110,6 +113,7 @@ class InspectionTaskController extends Controller
                 'process' => ['id' => $operation->process->id, 'name' => $operation->process->name],
             ]);
         $records = ProcessRecord::query()
+            ->inDataScope($this->dataScope->scope())
             ->with([
                 'routeOperation.process',
                 'inspectionTasks' => fn ($query) => $query->whereNull('result'),

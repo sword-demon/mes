@@ -2,9 +2,8 @@
 
 namespace App\Modules\Quality\Model;
 
-use App\Core\DataScope\DataScope;
-use App\Core\DataScope\DataScopeQuery;
 use App\Core\DataScope\HasDataScope;
+use App\Core\DataScope\ScopesThroughProductionOrder;
 use App\Modules\Process\Model\RouteOperation;
 use App\Modules\Production\Model\ProcessRecord;
 use App\Modules\Production\Model\ProductionOrder;
@@ -13,7 +12,6 @@ use Database\Factories\InspectionTaskFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\Table;
 use Illuminate\Database\Eloquent\Attributes\UseFactory;
-use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -51,7 +49,7 @@ use Illuminate\Support\Carbon;
 class InspectionTask extends Model implements HasDataScope
 {
     /** @use HasFactory<InspectionTaskFactory> */
-    use HasFactory;
+    use HasFactory, ScopesThroughProductionOrder;
 
     public const string IPQC = 'ipqc';
 
@@ -91,32 +89,6 @@ class InspectionTask extends Model implements HasDataScope
     public function productionOrder(): BelongsTo
     {
         return $this->belongsTo(ProductionOrder::class, 'production_order_id');
-    }
-
-    /**
-     * An inspection task is anchored on its order; the execution only ties
-     * the IPQC cycle to a step, so the order's line decides visibility.
-     *
-     * @param  Builder<self>  $query
-     */
-    public function scopeInDataScope(Builder $query, DataScope $scope): void
-    {
-        if ($scope->isAll()) {
-            return;
-        }
-
-        $lineIds = DataScopeQuery::scopedProductionLineIds($scope);
-
-        if ($lineIds === []) {
-            $query->whereRaw('1 = 0');
-
-            return;
-        }
-
-        $query->whereIn(
-            $this->getTable().'.production_order_id',
-            ProductionOrder::query()->whereIn('production_line_id', $lineIds)->select('id'),
-        );
     }
 
     public function dataScopeProductionLineId(): ?int

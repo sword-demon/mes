@@ -58,7 +58,9 @@ class MaterialRequisitionController extends Controller
 
     public function suggestions(Request $request): JsonResponse
     {
-        $order = ProductionOrder::query()->findOrFail($request->integer('production_order_id'));
+        $order = ProductionOrder::query()
+            ->inDataScope($this->dataScope->scope())
+            ->findOrFail($request->integer('production_order_id'));
 
         return ApiResponse::success($this->requisitions->suggestions($order));
     }
