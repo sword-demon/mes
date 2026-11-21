@@ -296,6 +296,120 @@ it('replaces the production lines when the user is updated', function () {
     expect($user->fresh()->productionLines()->pluck('mes_production_lines.id')->all())->toBe([$second->id]);
 });
 
+it('limits the user list to the actor factory', function () {
+    [$factoryA] = factoryWithLines();
+    $factoryB = Factory::factory()->create();
+
+    $actor = userWithPermissions(['data.scope.factory', 'system.users.index'], 'factory_admin');
+    $actor->update(['factory_id' => $factoryA->id]);
+    $peer = User::factory()->create(['factory_id' => $factoryA->id]);
+    $outsider = User::factory()->create(['factory_id' => $factoryB->id]);
+
+    $ids = collect(bearer($actor)->getJson('/api/v1/system/users')
+        ->assertOk()
+        ->assertJsonPath('data.meta.total', 2)
+        ->json('data.items'))->pluck('id');
+
+    expect($ids)->toContain($actor->id, $peer->id)->not->toContain($outsider->id);
+});
+
+it('filters the user list by factory for an all-scope actor', function () {
+    [$factoryA] = factoryWithLines();
+    $factoryB = Factory::factory()->create();
+
+    $actor = userWithPermissions(['system.users.index']);
+    User::factory()->create(['factory_id' => $factoryA->id]);
+    $target = User::factory()->create(['factory_id' => $factoryB->id]);
+
+    bearer($actor)->getJson("/api/v1/system/users?factory_id={$factoryB->id}")
+        ->assertOk()
+        ->assertJsonPath('data.meta.total', 1)
+        ->assertJsonPath('data.items.0.id', $target->id);
+});
+
+it('rejects modifying a user from another factory', function () {
+    [$factoryA] = factoryWithLines();
+    $factoryB = Factory::factory()->create();
+
+    $actor = userWithPermissions(['data.scope.factory', 'system.users.update', 'system.users.reset-password'], 'factory_admin');
+    $actor->update(['factory_id' => $factoryA->id]);
+    $target = User::factory()->create(['factory_id' => $factoryB->id, 'name' => '外厂用户']);
+
+    bearer($actor)->putJson("/api/v1/system/users/{$target->id}", ['name' => '被篡改'])
+        ->assertForbidden()
+        ->assertJsonPath('message', '该数据不在您的数据范围内');
+
+    bearer($actor)->putJson("/api/v1/system/users/{$target->id}/password", ['password' => 'replacement-password'])
+        ->assertForbidden()
+        ->assertJsonPath('message', '该数据不在您的数据范围内');
+
+    expect($target->fresh()->name)->toBe('外厂用户');
+});
+
+it('rejects moving a user or binding lines outside the actor factory', function () {
+    [$factoryA] = factoryWithLines();
+    $factoryB = Factory::factory()->create();
+    $workshopB = Workshop::factory()->create(['factory_id' => $factoryB->id]);
+    $lineB = ProductionLine::factory()->create(['workshop_id' => $workshopB->id]);
+
+    $actor = userWithPermissions(['data.scope.factory', 'system.users.update'], 'factory_admin');
+    $actor->update(['factory_id' => $factoryA->id]);
+    $target = User::factory()->create(['factory_id' => $factoryA->id]);
+
+    bearer($actor)->putJson("/api/v1/system/users/{$target->id}", ['factory_id' => $factoryB->id])
+        ->assertForbidden();
+
+    bearer($actor)->putJson("/api/v1/system/users/{$target->id}", ['factory_id' => null])
+        ->assertForbidden();
+
+    bearer($actor)->putJson("/api/v1/system/users/{$target->id}", ['production_line_ids' => [$lineB->id]])
+        ->assertForbidden();
+
+    expect($target->fresh()->factory_id)->toBe($factoryA->id)
+        ->and($target->productionLines()->count())->toBe(0);
+});
+
+it('creates users in the actor factory and rejects another factory', function () {
+    [$factoryA] = factoryWithLines();
+    $factoryB = Factory::factory()->create();
+
+    $actor = userWithPermissions(['data.scope.factory', 'system.users.create'], 'factory_admin');
+    $actor->update(['factory_id' => $factoryA->id]);
+
+    bearer($actor)->postJson('/api/v1/system/users', [
+        'name' => '本厂新用户',
+        'email' => 'own-factory@mes.test',
+        'password' => 'password-123',
+    ])->assertOk()
+        ->assertJsonPath('data.factory_id', $factoryA->id);
+
+    bearer($actor)->postJson('/api/v1/system/users', [
+        'name' => '外厂新用户',
+        'email' => 'other-factory@mes.test',
+        'password' => 'password-123',
+        'factory_id' => $factoryB->id,
+    ])->assertForbidden()
+        ->assertJsonPath('message', '该数据不在您的数据范围内');
+
+    expect(User::query()->where('email', 'other-factory@mes.test')->exists())->toBeFalse();
+});
+
+it('rejects assigning roles to a user from another factory', function () {
+    [$factoryA] = factoryWithLines();
+    $factoryB = Factory::factory()->create();
+
+    $actor = userWithPermissions(['data.scope.factory', 'system.users.assign-roles'], 'factory_admin');
+    $actor->update(['factory_id' => $factoryA->id]);
+    $target = User::factory()->create(['factory_id' => $factoryB->id]);
+    $role = Role::factory()->create();
+
+    bearer($actor)->putJson("/api/v1/system/users/{$target->id}/roles", ['role_ids' => [$role->id]])
+        ->assertForbidden()
+        ->assertJsonPath('message', '该数据不在您的数据范围内');
+
+    expect($target->roles()->count())->toBe(0);
+});
+
 it('scopes the order list to the bound production line', function () {
     [, $lineA1, , $lineB, $lineUser] = productionScopeFixture();
     createScopedOrder($lineA1, 'PO-A-001');

@@ -5,10 +5,14 @@ namespace App\Modules\System\Service;
 use App\Core\Exceptions\ApiException;
 use App\Modules\Organization\Model\Employee;
 use App\Modules\System\Model\Department;
+use App\Modules\System\ValueObject\OperationLogEntry;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\DB;
 
 class DepartmentService
 {
+    public function __construct(private readonly OperationLogService $operationLogs) {}
+
     /**
      * @return array<int, array<string, mixed>>
      */
@@ -22,7 +26,19 @@ class DepartmentService
      */
     public function create(array $data): Department
     {
-        return Department::query()->create($data);
+        return DB::transaction(function () use ($data): Department {
+            $department = Department::query()->create($data);
+
+            $this->operationLogs->record(new OperationLogEntry(
+                action: 'system.department.create',
+                actionName: '新增部门',
+                objectType: '部门',
+                objectId: $department->id,
+                objectName: $department->name,
+            ));
+
+            return $department;
+        });
     }
 
     /**
@@ -30,9 +46,22 @@ class DepartmentService
      */
     public function update(Department $department, array $data): Department
     {
-        $department->update($data);
+        return DB::transaction(function () use ($department, $data): Department {
+            $before = $this->snapshot($department);
+            $department->update($data);
 
-        return $department;
+            $this->operationLogs->record(new OperationLogEntry(
+                action: 'system.department.update',
+                actionName: '编辑部门',
+                objectType: '部门',
+                objectId: $department->id,
+                objectName: $department->name,
+                before: $before,
+                after: $this->snapshot($department),
+            ));
+
+            return $department;
+        });
     }
 
     public function delete(Department $department): void
@@ -51,7 +80,33 @@ class DepartmentService
             throw new ApiException('部门下还有员工，不能删除', 403, status: 403);
         }
 
-        $department->delete();
+        DB::transaction(function () use ($department): void {
+            $name = $department->name;
+            $department->delete();
+
+            $this->operationLogs->record(new OperationLogEntry(
+                action: 'system.department.delete',
+                actionName: '删除部门',
+                objectType: '部门',
+                objectId: $department->id,
+                objectName: $name,
+            ));
+        });
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function snapshot(Department $department): array
+    {
+        return [
+            '名称' => $department->name,
+            '编码' => $department->code,
+            '上级部门' => $department->parent_id === null
+                ? null
+                : Department::query()->whereKey($department->parent_id)->value('name'),
+            '排序' => $department->sort,
+        ];
     }
 
     /**

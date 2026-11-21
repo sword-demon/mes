@@ -24,6 +24,7 @@ class UserController extends Controller
             $this->users->paginate(
                 $request->string('keyword')->toString() ?: null,
                 $request->has('status') ? $request->boolean('status') : null,
+                $request->filled('factory_id') ? $request->integer('factory_id') : null,
             ),
             UserResource::class,
         );

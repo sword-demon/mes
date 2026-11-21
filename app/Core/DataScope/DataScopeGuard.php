@@ -76,9 +76,7 @@ class DataScopeGuard
         }
 
         if ($model instanceof HasFactoryScope) {
-            if (! DataScopeQuery::factoryInScope($model->dataScopeFactoryId(), $scope)) {
-                throw new ApiException('该数据不在您的数据范围内', 403, status: 403);
-            }
+            $this->ensureFactory($model->dataScopeFactoryId());
 
             return;
         }
@@ -98,6 +96,16 @@ class DataScopeGuard
     {
         if ($this->isOutsideScope($productionLineId)) {
             throw new ApiException('生产产线不在您的数据范围内', 403, status: 403);
+        }
+    }
+
+    /**
+     * @throws ApiException when the factory is outside the scope
+     */
+    public function ensureFactory(?int $factoryId): void
+    {
+        if (! DataScopeQuery::factoryInScope($factoryId, $this->scope())) {
+            throw new ApiException('该数据不在您的数据范围内', 403, status: 403);
         }
     }
 

@@ -3,6 +3,8 @@
 namespace App\Modules\System\Model;
 
 // use Illuminate\Contracts\Auth\MustVerifyEmail;
+use App\Core\DataScope\DataScope;
+use App\Core\DataScope\HasFactoryScope;
 use App\Modules\Organization\Model\Employee;
 use App\Modules\Organization\Model\Factory as OrganizationFactory;
 use App\Modules\Organization\Model\ProductionLine;
@@ -11,6 +13,7 @@ use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\Hidden;
 use Illuminate\Database\Eloquent\Attributes\Table;
 use Illuminate\Database\Eloquent\Attributes\UseFactory;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
@@ -40,7 +43,7 @@ use Laravel\Sanctum\HasApiTokens;
 #[Hidden(['password', 'remember_token'])]
 #[UseFactory(UserFactory::class)]
 #[Table('sys_users')]
-class User extends Authenticatable
+class User extends Authenticatable implements HasFactoryScope
 {
     /** @use HasFactory<UserFactory> */
     use HasApiTokens, HasFactory, Notifiable;
@@ -114,6 +117,30 @@ class User extends Authenticatable
             'user_id',
             'production_line_id',
         );
+    }
+
+    /**
+     * Users are managed per factory; an account without one is visible to the
+     * `all` scope only.
+     *
+     * @param  Builder<self>  $query
+     */
+    public function scopeInDataScope(Builder $query, DataScope $scope): void
+    {
+        if ($scope->isAll()) {
+            return;
+        }
+
+        $query->when(
+            $scope->factoryId !== null,
+            fn (Builder $query) => $query->where('factory_id', $scope->factoryId),
+            fn (Builder $query) => $query->whereRaw('1 = 0'),
+        );
+    }
+
+    public function dataScopeFactoryId(): ?int
+    {
+        return $this->factory_id === null ? null : (int) $this->factory_id;
     }
 
     /**

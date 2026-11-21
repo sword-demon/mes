@@ -2,6 +2,7 @@
 
 namespace App\Modules\System\Service;
 
+use App\Core\DataScope\DataScopeGuard;
 use App\Core\Exceptions\ApiException;
 use App\Modules\System\Model\User;
 use App\Modules\System\ValueObject\OperationLogEntry;
@@ -13,14 +14,16 @@ class UserService
     public function __construct(
         private readonly AccessControlService $access,
         private readonly OperationLogService $operationLogs,
+        private readonly DataScopeGuard $dataScope,
     ) {}
 
     /**
      * @return LengthAwarePaginator<int, User>
      */
-    public function paginate(?string $keyword = null, ?bool $status = null): LengthAwarePaginator
+    public function paginate(?string $keyword = null, ?bool $status = null, ?int $factoryId = null): LengthAwarePaginator
     {
         return User::query()
+            ->inDataScope($this->dataScope->scope())
             ->with(['roles', 'department', 'employee', 'organizationFactory', 'productionLines'])
             ->when($keyword, function ($query, string $keyword): void {
                 $query->where(fn ($inner) => $inner
@@ -30,6 +33,9 @@ class UserService
             })
             ->when($status !== null, function ($query) use ($status): void {
                 $query->where('status', $status);
+            })
+            ->when($factoryId !== null, function ($query) use ($factoryId): void {
+                $query->where('factory_id', $factoryId);
             })
             ->orderBy('id')
             ->paginate(15);
@@ -43,6 +49,15 @@ class UserService
     {
         $this->access->ensureCanGrantRoles($actor, $roleIds);
         $productionLineIds = $this->pullProductionLineIds($data) ?? [];
+        $scope = $this->dataScope->scope();
+
+        // A scoped actor has no way to name another factory, so an omitted
+        // factory means the account belongs to the actor's own plant.
+        if (! array_key_exists('factory_id', $data) && ! $scope->isAll()) {
+            $data['factory_id'] = $scope->factoryId;
+        }
+
+        $this->ensureFactoryAndLinesInScope($data, $productionLineIds);
 
         return DB::transaction(function () use ($data, $roleIds, $productionLineIds): User {
             $user = User::query()->create($data);
@@ -67,12 +82,14 @@ class UserService
     public function update(User $actor, User $user, array $data): User
     {
         $this->access->ensureCanManageUser($actor, $user);
+        $this->dataScope->ensure($user);
 
         if (array_key_exists('status', $data) && $data['status'] === false && $user->is($actor)) {
             throw new ApiException('不能停用当前登录账号', 403, status: 403);
         }
 
         $productionLineIds = $this->pullProductionLineIds($data);
+        $this->ensureFactoryAndLinesInScope($data, $productionLineIds ?? []);
 
         return DB::transaction(function () use ($user, $data, $productionLineIds): User {
             $user->loadMissing(['roles', 'organizationFactory', 'productionLines']);
@@ -102,6 +119,7 @@ class UserService
     public function resetPassword(User $actor, User $user, string $password): void
     {
         $this->access->ensureCanManageUser($actor, $user);
+        $this->dataScope->ensure($user);
 
         DB::transaction(function () use ($user, $password): void {
             $user->update(['password' => $password]);
@@ -123,6 +141,7 @@ class UserService
     public function assignRoles(User $actor, User $user, array $roleIds): User
     {
         $this->access->ensureCanManageUser($actor, $user);
+        $this->dataScope->ensure($user);
         $this->access->ensureCanGrantRoles($actor, $roleIds);
 
         return DB::transaction(function () use ($user, $roleIds): User {
@@ -181,5 +200,24 @@ class UserService
         unset($data['production_line_ids']);
 
         return array_values(array_unique($ids));
+    }
+
+    /**
+     * A factory-scoped actor may only place accounts in its own factory and
+     * bind lines it can see; otherwise it could provision access to another
+     * factory's data.
+     *
+     * @param  array<string, mixed>  $data
+     * @param  array<int, int>  $productionLineIds
+     */
+    private function ensureFactoryAndLinesInScope(array $data, array $productionLineIds): void
+    {
+        if (array_key_exists('factory_id', $data)) {
+            $this->dataScope->ensureFactory($data['factory_id'] === null ? null : (int) $data['factory_id']);
+        }
+
+        foreach ($productionLineIds as $productionLineId) {
+            $this->dataScope->ensureLine($productionLineId);
+        }
     }
 }
