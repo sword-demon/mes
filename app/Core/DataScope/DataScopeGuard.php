@@ -6,6 +6,7 @@ use App\Core\Exceptions\ApiException;
 use App\Modules\System\Service\AccessControlService;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Log;
 
 /**
  * Rejects writes that target data outside the current user's scope.
@@ -78,7 +79,16 @@ class DataScopeGuard
             if (! DataScopeQuery::factoryInScope($model->dataScopeFactoryId(), $scope)) {
                 throw new ApiException('该数据不在您的数据范围内', 403, status: 403);
             }
+
+            return;
         }
+
+        // Fail closed: a model reaching a scoped service without declaring how
+        // it resolves to a line or factory must not be silently allowed, or a
+        // forgotten interface quietly opens the write to every factory.
+        Log::error('数据范围守卫遇到未声明归属的模型', ['model' => $model::class]);
+
+        throw new ApiException('该数据不在您的数据范围内', 403, status: 403);
     }
 
     /**

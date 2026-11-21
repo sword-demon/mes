@@ -1,8 +1,11 @@
 <?php
 
+use App\Core\Audit\AuditContext;
 use App\Modules\Equipment\Model\Equipment;
+use App\Modules\Equipment\Model\EquipmentAlarm;
 use App\Modules\Equipment\Model\EquipmentData;
 use App\Modules\Equipment\Service\EquipmentMessageService;
+use App\Modules\System\Model\OperationLog;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
@@ -13,6 +16,9 @@ it('rejects a payload larger than the configured MQTT limit', function () {
     $exception = null;
 
     try {
+        // ConsumeMqtt marks the whole consuming process as system (see its handle).
+        app(AuditContext::class)->set(AuditContext::SOURCE_SYSTEM);
+
         app(EquipmentMessageService::class)->consume('mes/F001/EQ-SMT-01/data', json_encode([
             'device_code' => 'EQ-SMT-01',
             'timestamp' => '2026-11-16T04:00:00Z',
@@ -32,13 +38,16 @@ it('rejects a payload larger than the configured MQTT limit', function () {
     $this->assertDatabaseCount('mes_equipment_data', 0);
 });
 
-it('keeps a telemetry message within a bounded query count', function () {
+it('keeps a telemetry message within a bounded query count and logs critical alarms as system', function () {
     config(['mqtt.factory' => 'F001']);
     Equipment::factory()->create(['code' => 'EQ-SMT-01']);
     $queries = 0;
     DB::listen(function () use (&$queries): void {
         $queries++;
     });
+
+    // ConsumeMqtt marks the whole consuming process as system (see its handle).
+    app(AuditContext::class)->set(AuditContext::SOURCE_SYSTEM);
 
     app(EquipmentMessageService::class)->consume('mes/F001/EQ-SMT-01/data', json_encode([
         'device_code' => 'EQ-SMT-01',
@@ -50,7 +59,23 @@ it('keeps a telemetry message within a bounded query count', function () {
         'output' => 120,
     ], JSON_THROW_ON_ERROR));
 
-    expect($queries)->toBeLessThanOrEqual(9);
+    // telemetry write + status refresh + two critical alarms + their audit logs
+    expect($queries)->toBeLessThanOrEqual(13);
+
+    $alarms = EquipmentAlarm::query()->orderBy('id')->get();
+
+    expect($alarms)->toHaveCount(3)
+        ->and($alarms->pluck('level')->unique()->all())->toBe([EquipmentAlarm::LEVEL_CRITICAL]);
+
+    $logs = OperationLog::query()->orderBy('id')->get();
+
+    expect($logs->pluck('action')->all())->toBe([
+        'equipment.alarm.trigger',
+        'equipment.alarm.trigger',
+        'equipment.alarm.trigger',
+    ])
+        ->and($logs->pluck('source')->unique()->all())->toBe(['system'])
+        ->and($logs->pluck('user_name')->unique()->all())->toBe(['系统']);
 });
 
 it('rejects a device clock more than five minutes ahead without blocking the next valid state', function () {

@@ -2,16 +2,24 @@
 
 namespace App\Modules\Equipment\Service;
 
+use App\Core\DataScope\DataScopeGuard;
 use App\Core\Exceptions\ApiException;
 use App\Modules\Equipment\Model\Equipment;
 use App\Modules\Equipment\Model\EquipmentData;
 use App\Modules\Organization\Model\ProductionLine;
+use App\Modules\System\Service\OperationLogService;
+use App\Modules\System\ValueObject\OperationLogEntry;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 
 class EquipmentService
 {
+    public function __construct(
+        private readonly DataScopeGuard $dataScope,
+        private readonly OperationLogService $operationLogs,
+    ) {}
+
     /**
      * Enabled equipment only; disabled records stay out of every dashboard total.
      *
@@ -63,9 +71,20 @@ class EquipmentService
      */
     public function create(array $data): Equipment
     {
+        $this->dataScope->ensureLine((int) $data['production_line_id']);
         $this->ensureLineBelongsToWorkshop((int) $data['workshop_id'], (int) $data['production_line_id']);
 
-        return Equipment::query()->create($data);
+        $equipment = Equipment::query()->create($data);
+
+        $this->operationLogs->record(new OperationLogEntry(
+            action: 'equipment.ledger.create',
+            actionName: '新增设备',
+            objectType: '设备',
+            objectId: $equipment->id,
+            objectName: $equipment->code,
+        ));
+
+        return $equipment;
     }
 
     /**
@@ -75,11 +94,28 @@ class EquipmentService
      */
     public function update(Equipment $equipment, array $data): Equipment
     {
+        $this->dataScope->ensure($equipment);
         $workshopId = (int) ($data['workshop_id'] ?? $equipment->workshop_id);
         $lineId = (int) ($data['production_line_id'] ?? $equipment->production_line_id);
         $this->ensureLineBelongsToWorkshop($workshopId, $lineId);
 
+        if ($lineId !== (int) $equipment->production_line_id) {
+            $this->dataScope->ensureLine($lineId);
+        }
+
+        $before = ['产线' => $equipment->productionLine?->name, '状态' => $equipment->statusLabel()];
         $equipment->update($data);
+        $equipment->load('productionLine');
+
+        $this->operationLogs->record(new OperationLogEntry(
+            action: 'equipment.ledger.update',
+            actionName: '编辑设备',
+            objectType: '设备',
+            objectId: $equipment->id,
+            objectName: $equipment->code,
+            before: $before,
+            after: ['产线' => $equipment->productionLine?->name, '状态' => $equipment->statusLabel()],
+        ));
 
         return $equipment;
     }

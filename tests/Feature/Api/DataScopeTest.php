@@ -1,6 +1,9 @@
 <?php
 
+use App\Core\DataScope\DataScopeGuard;
 use App\Core\Exceptions\ApiException;
+use App\Modules\Equipment\Model\Equipment;
+use App\Modules\Equipment\Model\EquipmentAlarm;
 use App\Modules\Inventory\Model\Inventory;
 use App\Modules\Inventory\Model\StorageLocation;
 use App\Modules\Inventory\Model\Warehouse;
@@ -29,6 +32,7 @@ use App\Modules\Quality\Model\DefectCode;
 use App\Modules\Quality\Model\DefectiveProduct;
 use App\Modules\Quality\Model\InspectionItem;
 use App\Modules\Quality\Model\InspectionTask;
+use App\Modules\System\Model\Department;
 use App\Modules\System\Model\Permission;
 use App\Modules\System\Model\Role;
 use App\Modules\System\Model\User;
@@ -87,6 +91,13 @@ function productionScopeFixture(): array
         'inventory.outbound',
         'inventory.adjust',
         'inventory.options',
+        'equipment.ledger.index',
+        'equipment.ledger.create',
+        'equipment.ledger.update',
+        'equipment.monitor.index',
+        'equipment.history.index',
+        'equipment.alarms.index',
+        'equipment.alarms.confirm',
         'material.requisitions.index',
         'material.requisitions.create',
         'material.requisitions.issue',
@@ -887,4 +898,61 @@ it('rejects issuing and approving outside the scope', function () {
     ])
         ->assertForbidden()
         ->assertJsonPath('message', '该数据不在您的数据范围内');
+});
+
+it('scopes the equipment list, monitor and alarms by line', function () {
+    [, $lineA1, , $lineB, $lineUser] = productionScopeFixture();
+    $equipmentA = Equipment::factory()->create(['production_line_id' => $lineA1->id]);
+    $equipmentB = Equipment::factory()->create(['production_line_id' => $lineB->id]);
+    EquipmentAlarm::factory()->create(['equipment_id' => $equipmentA->id]);
+    EquipmentAlarm::factory()->create(['equipment_id' => $equipmentB->id]);
+
+    $ids = collect(bearer($lineUser)->getJson('/api/v1/equipments')
+        ->assertOk()
+        ->json('data.items'))->pluck('id')->values()->all();
+
+    expect($ids)->toBe([$equipmentA->id]);
+
+    $alarmIds = collect(bearer($lineUser)->getJson('/api/v1/equipments/alarms')
+        ->assertOk()
+        ->json('data.items'))->pluck('equipment_id')->unique()->values()->all();
+
+    expect($alarmIds)->toBe([$equipmentA->id]);
+});
+
+it('rejects ledger edits and alarm handling outside the scope', function () {
+    [, , , $lineB, $lineUser] = productionScopeFixture();
+    $equipmentB = Equipment::factory()->create(['production_line_id' => $lineB->id]);
+    $alarm = EquipmentAlarm::factory()->create(['equipment_id' => $equipmentB->id]);
+
+    bearer($lineUser)->putJson("/api/v1/equipments/{$equipmentB->id}", [
+        'name' => '改名设备',
+    ])
+        ->assertForbidden()
+        ->assertJsonPath('message', '该数据不在您的数据范围内');
+
+    bearer($lineUser)->postJson("/api/v1/equipments/alarms/{$alarm->id}/confirm")
+        ->assertForbidden()
+        ->assertJsonPath('message', '该数据不在您的数据范围内');
+
+    bearer($lineUser)->getJson("/api/v1/equipments/{$equipmentB->id}/history?start_at=2026-11-21 08:00:00&end_at=2026-11-21 18:00:00")
+        ->assertForbidden()
+        ->assertJsonPath('message', '该数据不在您的数据范围内');
+});
+
+it('fails closed when the guard receives a model without a scope declaration', function () {
+    // A model reaching the guard without declaring how it resolves to a line
+    // or factory must error out loudly instead of being silently allowed.
+    // Unreachable through business APIs (every scoped service's models
+    // implement an interface), so the guard's public contract is tested
+    // directly.
+    // Establish the request context first: outside a request the guard
+    // resolves to `all` and the fail-closed path never triggers.
+    bearer(userWithPermissions(['data.scope.line'], 'unscoped_probe'))->getJson('/api/v1/me')->assertOk();
+
+    $guard = app(DataScopeGuard::class);
+    $department = Department::factory()->create();
+
+    expect(fn () => $guard->ensure($department))
+        ->toThrow(ApiException::class, '该数据不在您的数据范围内');
 });

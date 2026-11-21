@@ -2,17 +2,26 @@
 
 namespace App\Modules\Equipment\Service;
 
+use App\Core\DataScope\DataScopeGuard;
 use App\Core\Exceptions\ApiException;
 use App\Modules\Equipment\Model\EquipmentAlarm;
 use App\Modules\Equipment\Model\EquipmentData;
 use App\Modules\System\Model\User;
+use App\Modules\System\Service\OperationLogService;
+use App\Modules\System\ValueObject\OperationLogEntry;
 use Closure;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 
 class EquipmentAlarmService
 {
+    public function __construct(
+        private readonly DataScopeGuard $dataScope,
+        private readonly OperationLogService $operationLogs,
+    ) {}
+
     public function evaluate(EquipmentData $sample): void
     {
         if ($sample->message_type === EquipmentData::TYPE_DATA) {
@@ -37,6 +46,8 @@ class EquipmentAlarmService
                 'confirmed_by_id' => $handler->id,
                 'confirmed_at' => now(),
             ],
+            action: 'equipment.alarm.confirm',
+            actionName: '确认设备告警',
         );
     }
 
@@ -52,6 +63,8 @@ class EquipmentAlarmService
                 'handled_at' => now(),
                 'handling_note' => $note,
             ],
+            action: 'equipment.alarm.process',
+            actionName: '处理设备告警',
         );
     }
 
@@ -68,6 +81,8 @@ class EquipmentAlarmService
                 'handling_note' => $note !== null && $note !== '' ? $note : $locked->handling_note,
                 'closed_at' => now(),
             ],
+            action: 'equipment.alarm.close',
+            actionName: '关闭设备告警',
         );
     }
 
@@ -163,12 +178,14 @@ class EquipmentAlarmService
                     'measured_value' => $measured,
                     'equipment_data_id' => $sample->id,
                 ]);
+
+                $this->logAutomaticCreation($open, $message, $level);
             }
 
             return;
         }
 
-        EquipmentAlarm::query()->create([
+        $alarm = EquipmentAlarm::query()->create([
             'code' => 'ALM-'.Str::ulid(),
             'equipment_id' => $sample->equipment_id,
             'equipment_data_id' => $sample->id,
@@ -181,6 +198,33 @@ class EquipmentAlarmService
             'measured_value' => $measured,
             'triggered_at' => $sample->recorded_at,
         ]);
+
+        $this->logAutomaticCreation($alarm, $message, $level);
+    }
+
+    /**
+     * Automatic alarm creation (and escalation to critical) is logged with
+     * the audit source carried by the consuming process (system for MQTT);
+     * lower-level escalations stay out of the log to keep noise down
+     * (02 §9.3).
+     */
+    private function logAutomaticCreation(EquipmentAlarm $alarm, string $message, string $level): void
+    {
+        if ($level !== EquipmentAlarm::LEVEL_CRITICAL) {
+            return;
+        }
+
+        $this->operationLogs->record(new OperationLogEntry(
+            action: 'equipment.alarm.trigger',
+            actionName: '触发设备告警',
+            objectType: '设备告警',
+            objectId: $alarm->id,
+            objectName: $alarm->code,
+            after: [
+                '级别' => $alarm->levelLabel(),
+                '消息' => $message,
+            ],
+        ));
     }
 
     /**
@@ -207,15 +251,33 @@ class EquipmentAlarmService
         string $requiredStatus,
         string $error,
         Closure $changes,
+        string $action,
+        string $actionName,
     ): EquipmentAlarm {
-        return DB::transaction(function () use ($alarm, $requiredStatus, $error, $changes): EquipmentAlarm {
+        return DB::transaction(function () use ($alarm, $requiredStatus, $error, $changes, $action, $actionName): EquipmentAlarm {
             $locked = EquipmentAlarm::query()->lockForUpdate()->findOrFail($alarm->id);
+            Log::debug('alarm-transition', ['alarm' => $locked->id, 'line' => $locked->dataScopeProductionLineId(), 'user_line' => $this->dataScope->scope()->productionLineIds, 'level' => $this->dataScope->scope()->level]);
+            $this->dataScope->ensure($locked);
+            $before = $locked->statusLabel();
 
             if ($locked->status !== $requiredStatus) {
                 throw new ApiException($error, 422);
             }
 
             $locked->update($changes($locked));
+
+            $this->operationLogs->record(new OperationLogEntry(
+                action: $action,
+                actionName: $actionName,
+                objectType: '设备告警',
+                objectId: $locked->id,
+                objectName: $locked->code,
+                before: ['状态' => $before],
+                after: [
+                    '状态' => $locked->statusLabel(),
+                    ...($locked->handling_note !== null ? ['处理备注' => $locked->handling_note] : []),
+                ],
+            ));
 
             return $this->load($locked);
         });
