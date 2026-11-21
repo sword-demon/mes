@@ -1,7 +1,11 @@
 <?php
 
 use App\Modules\Inventory\Model\Inventory;
+use App\Modules\Inventory\Model\StorageLocation;
+use App\Modules\Inventory\Model\Warehouse;
 use App\Modules\Material\Model\Material;
+use App\Modules\Material\Model\MaterialRequisitionItem;
+use App\Modules\Material\Model\MaterialReturn;
 use App\Modules\Organization\Model\Employee;
 use App\Modules\Organization\Model\ProductionLine;
 use App\Modules\Organization\Model\Team;
@@ -842,4 +846,74 @@ it('records a log for every defect disposition action', function () {
 
     expect($recheck->changes['复检结果'])->toBe(['before' => null, 'after' => '不合格'])
         ->and($recheck->changes['复检备注'])->toBe(['before' => null, 'after' => '复检仍不合格']);
+});
+
+it('records logs across the requisition issue and return lifecycle', function () {
+    $line = ProductionLine::factory()->create();
+    $order = createScopedOrder($line, 'PO-MAT-001', ProductionOrder::RELEASED);
+    $material = Material::factory()->create(['batch_managed' => false]);
+    $warehouse = Warehouse::factory()->create();
+    $location = StorageLocation::factory()->create(['warehouse_id' => $warehouse->id]);
+    $actor = superAdmin();
+
+    $requisitionId = bearer($actor)->postJson('/api/v1/materials/requisitions', [
+        'production_order_id' => $order->id,
+        'items' => [['material_id' => $material->id, 'requested_quantity' => 12]],
+    ])->assertOk()->json('data.id');
+
+    $requisitionItem = MaterialRequisitionItem::query()->where('requisition_id', $requisitionId)->sole();
+
+    // Stock the warehouse first so the issue can draw from it.
+    bearer($actor)->postJson('/api/v1/inventory/inbound', [
+        'material_id' => $material->id,
+        'warehouse_id' => $warehouse->id,
+        'location_id' => $location->id,
+        'quantity' => 12,
+    ])->assertOk();
+
+    bearer($actor)->postJson("/api/v1/materials/requisitions/{$requisitionId}/issue", [
+        'items' => [['id' => $requisitionItem->id, 'warehouse_id' => $warehouse->id, 'location_id' => $location->id, 'quantity' => 12]],
+    ])->assertOk();
+
+    bearer($actor)->postJson('/api/v1/materials/returns', [
+        'requisition_id' => $requisitionId,
+        'items' => [['requisition_item_id' => $requisitionItem->id, 'quantity' => 2]],
+    ])->assertOk();
+    $firstReturnId = MaterialReturn::query()->orderBy('id')->firstOrFail()->id;
+    bearer($actor)->deleteJson("/api/v1/materials/returns/{$firstReturnId}")->assertOk();
+
+    bearer($actor)->postJson('/api/v1/materials/returns', [
+        'requisition_id' => $requisitionId,
+        'items' => [['requisition_item_id' => $requisitionItem->id, 'quantity' => 2]],
+    ])->assertOk();
+    $secondReturn = MaterialReturn::query()->orderByDesc('id')->firstOrFail();
+    $secondReturnItem = $secondReturn->items()->sole();
+
+    bearer($actor)->postJson("/api/v1/materials/returns/{$secondReturn->id}/approve", [
+        'items' => [['id' => $secondReturnItem->id, 'warehouse_id' => $warehouse->id, 'location_id' => $location->id]],
+    ])->assertOk();
+
+    $logs = OperationLog::query()->orderBy('id')->get();
+    $actions = $logs->pluck('action')->all();
+
+    expect($actions)->toContain('material.requisition.create')
+        ->toContain('material.requisition.issue')
+        ->toContain('material.return.create')
+        ->toContain('material.return.cancel')
+        ->toContain('material.return.approve')
+        ->toContain('inventory.outbound')
+        ->toContain('inventory.inbound');
+
+    $issue = $logs->firstWhere('action', 'material.requisition.issue');
+
+    expect($issue->changes['发料明细'])->toBe(['before' => null, 'after' => $material->code.'×12.000'])
+        ->and($issue->changes['发料状态'])->toBe(['before' => null, 'after' => '全部发完']);
+
+    $approve = $logs->firstWhere('action', 'material.return.approve');
+
+    expect($approve->changes['物料明细'])->toBe(['before' => null, 'after' => $material->code.'×2.000']);
+
+    $cancel = $logs->firstWhere('action', 'material.return.cancel');
+
+    expect($cancel->changes['审核状态'])->toBe(['before' => '待审核', 'after' => '已撤销']);
 });

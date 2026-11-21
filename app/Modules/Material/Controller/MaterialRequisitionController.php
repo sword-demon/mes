@@ -2,6 +2,7 @@
 
 namespace App\Modules\Material\Controller;
 
+use App\Core\DataScope\DataScopeGuard;
 use App\Core\Services\BusinessDay;
 use App\Core\Services\EntityService;
 use App\Http\Controllers\Controller;
@@ -19,6 +20,7 @@ use Illuminate\Http\Request;
 class MaterialRequisitionController extends Controller
 {
     public function __construct(
+        private readonly DataScopeGuard $dataScope,
         private readonly MaterialRequisitionService $requisitions,
         private readonly EntityService $entities,
     ) {}
@@ -30,6 +32,7 @@ class MaterialRequisitionController extends Controller
         $dateTo = BusinessDay::resolveDate($request->query('date_to'), 'date_to');
 
         $query = MaterialRequisition::query()
+            ->inDataScope($this->dataScope->scope())
             ->with(['productionOrder', 'items.material'])
             ->orderByDesc('id')
             ->when(is_scalar($materialId), fn (Builder $query) => $query->whereHas(

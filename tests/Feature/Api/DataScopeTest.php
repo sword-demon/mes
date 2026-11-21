@@ -5,6 +5,10 @@ use App\Modules\Inventory\Model\Inventory;
 use App\Modules\Inventory\Model\StorageLocation;
 use App\Modules\Inventory\Model\Warehouse;
 use App\Modules\Material\Model\Material;
+use App\Modules\Material\Model\MaterialRequisition;
+use App\Modules\Material\Model\MaterialRequisitionItem;
+use App\Modules\Material\Model\MaterialReturn;
+use App\Modules\Material\Model\MaterialReturnItem;
 use App\Modules\Organization\Model\Employee;
 use App\Modules\Organization\Model\Factory;
 use App\Modules\Organization\Model\ProductionLine;
@@ -83,6 +87,12 @@ function productionScopeFixture(): array
         'inventory.outbound',
         'inventory.adjust',
         'inventory.options',
+        'material.requisitions.index',
+        'material.requisitions.create',
+        'material.requisitions.issue',
+        'material.returns.index',
+        'material.returns.create',
+        'material.returns.audit',
     ], 'scope_director_a');
     $lineUser->update(['factory_id' => $factoryA->id]);
     $lineUser->productionLines()->sync([$lineA1->id]);
@@ -818,6 +828,62 @@ it('rejects inventory movements across factories', function () {
         'warehouse_id' => $warehouseB->id,
         'location_id' => $locationB->id,
         'current_quantity' => 3,
+    ])
+        ->assertForbidden()
+        ->assertJsonPath('message', '该数据不在您的数据范围内');
+});
+
+it('scopes the requisition and return lists by the order line', function () {
+    [, $lineA1, , $lineB, $lineUser] = productionScopeFixture();
+    $orderA = createScopedOrder($lineA1, 'PO-A-001', ProductionOrder::RELEASED);
+    $orderB = createScopedOrder($lineB, 'PO-B-001', ProductionOrder::RELEASED);
+    $requisitionA = MaterialRequisition::query()->create(['code' => 'MR-A-001', 'production_order_id' => $orderA->id, 'status' => MaterialRequisition::PENDING, 'created_by_id' => 1]);
+    $requisitionB = MaterialRequisition::query()->create(['code' => 'MR-B-001', 'production_order_id' => $orderB->id, 'status' => MaterialRequisition::PENDING, 'created_by_id' => 1]);
+    $returnA = MaterialReturn::query()->create(['code' => 'RT-A-001', 'requisition_id' => $requisitionA->id, 'production_order_id' => $orderA->id, 'status' => MaterialReturn::PENDING, 'created_by_id' => 1]);
+    $returnB = MaterialReturn::query()->create(['code' => 'RT-B-001', 'requisition_id' => $requisitionB->id, 'production_order_id' => $orderB->id, 'status' => MaterialReturn::PENDING, 'created_by_id' => 1]);
+
+    $requisitionIds = collect(bearer($lineUser)->getJson('/api/v1/materials/requisitions')
+        ->assertOk()
+        ->json('data.items'))->pluck('id')->values()->all();
+
+    expect($requisitionIds)->toBe([$requisitionA->id]);
+
+    $returnIds = collect(bearer($lineUser)->getJson('/api/v1/materials/returns')
+        ->assertOk()
+        ->json('data.items'))->pluck('id')->values()->all();
+
+    expect($returnIds)->toBe([$returnA->id]);
+});
+
+it('rejects issuing and approving outside the scope', function () {
+    [, , , $lineB, $lineUser] = productionScopeFixture();
+    $factoryB = $lineB->workshop->factory_id;
+    $orderB = createScopedOrder($lineB, 'PO-B-001', ProductionOrder::RELEASED);
+    $material = Material::factory()->create(['batch_managed' => false]);
+    $requisition = MaterialRequisition::query()->create(['code' => 'MR-B-002', 'production_order_id' => $orderB->id, 'status' => MaterialRequisition::PENDING, 'created_by_id' => 1]);
+    $requisitionItem = MaterialRequisitionItem::query()->create([
+        'requisition_id' => $requisition->id,
+        'material_id' => $material->id,
+        'requested_quantity' => 10,
+        'issued_quantity' => 10,
+    ]);
+    $return = MaterialReturn::query()->create(['code' => 'RT-B-002', 'requisition_id' => $requisition->id, 'production_order_id' => $orderB->id, 'status' => MaterialReturn::PENDING, 'created_by_id' => 1]);
+    $returnItem = MaterialReturnItem::query()->create([
+        'material_return_id' => $return->id,
+        'requisition_item_id' => $requisitionItem->id,
+        'quantity' => 2,
+    ]);
+    $warehouseB = Warehouse::factory()->create(['factory_id' => $factoryB]);
+    $locationB = StorageLocation::factory()->create(['warehouse_id' => $warehouseB->id]);
+
+    bearer($lineUser)->postJson("/api/v1/materials/requisitions/{$requisition->id}/issue", [
+        'items' => [['id' => $requisitionItem->id, 'warehouse_id' => $warehouseB->id, 'location_id' => $locationB->id, 'quantity' => 1]],
+    ])
+        ->assertForbidden()
+        ->assertJsonPath('message', '该数据不在您的数据范围内');
+
+    bearer($lineUser)->postJson("/api/v1/materials/returns/{$return->id}/approve", [
+        'items' => [['id' => $returnItem->id, 'warehouse_id' => $warehouseB->id, 'location_id' => $locationB->id]],
     ])
         ->assertForbidden()
         ->assertJsonPath('message', '该数据不在您的数据范围内');
