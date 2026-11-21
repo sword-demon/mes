@@ -9,6 +9,7 @@ use App\Modules\Organization\Model\Workshop;
 use App\Modules\Process\Model\Process;
 use App\Modules\Process\Model\RouteOperation;
 use App\Modules\Production\Model\ProcessRecord;
+use App\Modules\Production\Model\ProductionBatch;
 use App\Modules\Production\Model\ProductionDispatch;
 use App\Modules\Production\Model\ProductionException;
 use App\Modules\Production\Model\ProductionOrder;
@@ -16,6 +17,8 @@ use App\Modules\Production\Model\ProductionReport;
 use App\Modules\Production\Model\ProductionTask;
 use App\Modules\Production\Model\ProductSn;
 use App\Modules\Production\Service\ProcessRecordService;
+use App\Modules\Quality\Model\DefectCode;
+use App\Modules\Quality\Model\DefectiveProduct;
 use App\Modules\Quality\Model\InspectionItem;
 use App\Modules\Quality\Model\InspectionTask;
 use App\Modules\System\Model\Permission;
@@ -67,6 +70,10 @@ function productionScopeFixture(): array
         'quality.inspections.index',
         'quality.inspections.create',
         'quality.inspections.record',
+        'quality.defects.index',
+        'quality.defects.create',
+        'quality.defects.process',
+        'quality.defects.scrap',
     ], 'scope_director_a');
     $lineUser->update(['factory_id' => $factoryA->id]);
     $lineUser->productionLines()->sync([$lineA1->id]);
@@ -659,6 +666,63 @@ it('rejects recording results and images outside the scope', function () {
 
     bearer($lineUser)->postJson("/api/v1/quality/inspection-tasks/{$inspection->id}/images", [
         'images' => [UploadedFile::fake()->image('shot.jpg')],
+    ])
+        ->assertForbidden()
+        ->assertJsonPath('message', '该数据不在您的数据范围内');
+});
+
+it('scopes the defective product list by the order line', function () {
+    [, $lineA1, , $lineB, $lineUser] = productionScopeFixture();
+    $defectA = DefectiveProduct::factory()->create([
+        'production_order_id' => createScopedOrder($lineA1, 'PO-A-001')->id,
+    ]);
+    DefectiveProduct::factory()->create([
+        'production_order_id' => createScopedOrder($lineB, 'PO-B-001')->id,
+    ]);
+
+    $ids = collect(bearer($lineUser)->getJson('/api/v1/quality/defective-products')
+        ->assertOk()
+        ->json('data.items'))->pluck('id')->values()->all();
+
+    expect($ids)->toBe([$defectA->id]);
+});
+
+it('rejects registering and handling defects outside the scope', function () {
+    [, , , $lineB, $lineUser] = productionScopeFixture();
+    $orderB = createScopedOrder($lineB, 'PO-B-001', ProductionOrder::IN_PROGRESS);
+    $process = Process::factory()->create();
+    $operation = RouteOperation::factory()->create([
+        'route_id' => $orderB->route_id,
+        'process_id' => $process->id,
+        'sequence' => 1,
+    ]);
+    $batch = ProductionBatch::factory()->create(['production_order_id' => $orderB->id, 'quantity' => 10]);
+    $code = DefectCode::factory()->create(['status' => true]);
+    $defect = DefectiveProduct::factory()->create([
+        'production_order_id' => $orderB->id,
+        'route_operation_id' => $operation->id,
+        'production_batch_id' => $batch->id,
+        'defect_code_id' => $code->id,
+        'status' => DefectiveProduct::PROCESSING,
+    ]);
+
+    bearer($lineUser)->postJson('/api/v1/quality/defective-products', [
+        'production_order_id' => $orderB->id,
+        'route_operation_id' => $operation->id,
+        'production_batch_id' => $batch->id,
+        'defect_code_id' => $code->id,
+        'quantity' => 5,
+    ])
+        ->assertForbidden()
+        ->assertJsonPath('message', '该数据不在您的数据范围内');
+
+    bearer($lineUser)->postJson("/api/v1/quality/defective-products/{$defect->id}/start")
+        ->assertForbidden()
+        ->assertJsonPath('message', '该数据不在您的数据范围内');
+
+    bearer($lineUser)->postJson("/api/v1/quality/defective-products/{$defect->id}/scrap", [
+        'reason' => '无法返修',
+        'quantity' => 5,
     ])
         ->assertForbidden()
         ->assertJsonPath('message', '该数据不在您的数据范围内');

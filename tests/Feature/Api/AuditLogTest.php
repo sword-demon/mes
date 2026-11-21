@@ -8,12 +8,14 @@ use App\Modules\Organization\Model\Team;
 use App\Modules\Process\Model\Process;
 use App\Modules\Process\Model\RouteOperation;
 use App\Modules\Production\Model\ProcessRecord;
+use App\Modules\Production\Model\ProductionBatch;
 use App\Modules\Production\Model\ProductionOrder;
 use App\Modules\Production\Model\ProductionReport;
 use App\Modules\Production\Model\ProductionTask;
 use App\Modules\Production\Model\ProductSn;
 use App\Modules\Production\Service\ProcessRecordService;
 use App\Modules\Production\Service\ProductionTaskService;
+use App\Modules\Quality\Model\DefectCode;
 use App\Modules\Quality\Model\InspectionItem;
 use App\Modules\System\Model\LoginLog;
 use App\Modules\System\Model\OperationLog;
@@ -787,4 +789,57 @@ it('records logs for inspection task creation, recording and images', function (
         ->and($logs[3]->changes['不合格项数量'])->toBe(['before' => null, 'after' => 1])
         ->and($logs[3]->changes['检验轮次'])->toBe(['before' => null, 'after' => 0])
         ->and($logs[4]->changes['图片数量'])->toBe(['before' => null, 'after' => 2]);
+});
+
+it('records a log for every defect disposition action', function () {
+    $order = ProductionOrder::factory()->create(['status' => ProductionOrder::IN_PROGRESS]);
+    $operation = RouteOperation::factory()->create([
+        'route_id' => $order->route_id,
+        'process_id' => Process::factory()->create()->id,
+        'sequence' => 1,
+    ]);
+    $batch = ProductionBatch::factory()->create(['production_order_id' => $order->id, 'quantity' => 10]);
+    $code = DefectCode::factory()->create(['status' => true]);
+    $actor = superAdmin();
+
+    $defectId = bearer($actor)->postJson('/api/v1/quality/defective-products', [
+        'production_order_id' => $order->id,
+        'route_operation_id' => $operation->id,
+        'production_batch_id' => $batch->id,
+        'defect_code_id' => $code->id,
+        'quantity' => 4,
+    ])->assertOk()->json('data.id');
+
+    bearer($actor)->postJson("/api/v1/quality/defective-products/{$defectId}/start")->assertOk();
+    bearer($actor)->postJson("/api/v1/quality/defective-products/{$defectId}/rework", [
+        'reason' => '焊接虚焊',
+    ])->assertOk();
+    bearer($actor)->postJson("/api/v1/quality/defective-products/{$defectId}/recheck", [
+        'passed' => false,
+        'remark' => '复检仍不合格',
+    ])->assertOk();
+    bearer($actor)->postJson("/api/v1/quality/defective-products/{$defectId}/scrap", [
+        'reason' => '无法修复',
+        'quantity' => 4,
+    ])->assertOk();
+
+    $actions = OperationLog::query()->orderBy('id')->pluck('action')->all();
+
+    expect($actions)->toBe([
+        'quality.defect.create',
+        'quality.defect.start',
+        'quality.defect.rework',
+        'quality.defect.recheck',
+        'quality.defect.scrap',
+    ]);
+
+    $scrap = OperationLog::query()->where('action', 'quality.defect.scrap')->sole();
+
+    expect($scrap->changes['报废数量'])->toBe(['before' => null, 'after' => '4.000'])
+        ->and($scrap->changes['报废原因'])->toBe(['before' => null, 'after' => '无法修复']);
+
+    $recheck = OperationLog::query()->where('action', 'quality.defect.recheck')->sole();
+
+    expect($recheck->changes['复检结果'])->toBe(['before' => null, 'after' => '不合格'])
+        ->and($recheck->changes['复检备注'])->toBe(['before' => null, 'after' => '复检仍不合格']);
 });
